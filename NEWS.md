@@ -1,0 +1,80 @@
+# QuantFit 0.2.0
+
+First release of QuantFit as a unified package for checking quantitative
+structure in item response data. It brings together three previously separate
+lines of work into one framework with a common, optimised C++ core.
+
+## Three approaches in one package
+
+* **Conjoint cancellation checks** — Bayesian tests of the single, double, and
+  triple cancellation axioms of additive conjoint measurement, extending the
+  `ConjointChecks` package of Domingue (2014). Functions: `ConjointChecks()`,
+  `SingleCancel()`, `DoubleCancel()`, `TripleCancel()`, `HiConjointChecks()`
+  (hierarchical 4x4 test), and `PrepareChecks()` (build the score-by-item
+  count matrices from raw responses).
+
+* **Karabatsos omnibus test** — the Bayesian test of the additive conjoint
+  measurement axioms using synthetic likelihood of Karabatsos (2018), ported
+  to R/C++ and validated against the original MATLAB implementation
+  (`ACMtest.m`) to a cell-level correlation > 0.99. Function: `KaraChecks()`.
+
+* **Latent structure model selection** — the Torres Irribarra & Diakow
+  framework comparing six latent structure models (UN, MON, IIO, DM, LCR, RM)
+  to decide whether data support a classificatory, ordinal, or quantitative
+  interpretation. Fit with `fit_un()`, `fit_mon()`, `fit_iio()`, `fit_dm()`,
+  `fit_lcr()`, `fit_rm()`; compare and select with `compare_models()`,
+  `successive_comparison()`, `select_model_constraint()`, and
+  `select_model_ll()`.
+
+## New in this release
+
+* `select_model_ll()` and `ll_equivalence_test()` — a statistically calibrated
+  model selection procedure. Because UN and the ordinal models (MON/IIO/DM)
+  have identical parameter counts, information criteria cannot distinguish
+  them; these functions instead use a parametric bootstrap of the
+  likelihood-ratio statistic, whose asymptotic null is chi-bar-squared, to
+  test each constrained model against its less-restricted parent. Selection
+  proceeds down the hierarchy UN -> MON/IIO/DM -> LCR -> RM, using BIC only at
+  the final step where parameter counts genuinely differ.
+
+* `compute_se()` — observed-information (Hessian, with delta-method
+  back-transform) and nonparametric bootstrap standard errors for all six
+  models. RM standard errors are taken from `mirt`; parameters sitting on an
+  active monotonicity constraint return `NA` with a warning, since Hessian
+  standard errors are not valid on the boundary.
+
+* An optimised RcppArmadillo core for the latent-class EM (E-step, exact
+  weighted-isotonic and Dykstra constrained M-steps), roughly 5x faster than
+  the reference R implementation, which is retained and selectable via
+  `use_cpp = FALSE` for validation.
+
+## Statistical corrections
+
+Several errors in the earlier latent-class estimation code were found and
+fixed; together they had caused systematic over-selection of the Rasch model
+and near-zero recovery of the ordinal models:
+
+* The pool-adjacent-violators routine double-counted weights and did not solve
+  the intended isotonic regression. It is rewritten as a correct
+  block-merging weighted PAVA.
+
+* The constrained M-steps now perform the exact expected-count-weighted
+  isotonic regression that maximises the EM objective (per-item weighted PAVA
+  for MON, per-class PAVA for IIO, Dykstra alternating projections for DM),
+  replacing an unweighted projection and an optimiser path that could silently
+  stall on active constraints.
+
+* Parameter counts corrected: the Rasch model uses `J + 1` (item intercepts
+  plus the latent variance, from `mirt`), and the latent-class Rasch model
+  uses `2C + J - 2`.
+
+* `g_squared()` now scales expected values by sample size; `lr_test()` returns
+  `NA` with an explanatory note for equal-parameter-count (chi-bar-squared)
+  comparisons rather than a spurious p-value.
+
+## Notes
+
+* Package relicensed GPL (>= 2) to match the absorbed `ConjointChecks` code.
+* The bundled `rasch1000` dataset is a pre-computed `ConjointChecks` result on
+  simulated Rasch data, useful for exploring the `checks` class and its
+  `plot()` / `summary()` methods.

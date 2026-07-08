@@ -1,0 +1,231 @@
+---
+title: "Checking quantitative structure with QuantFit"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Checking quantitative structure with QuantFit}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+set.seed(1)
+```
+
+## The question
+
+Before treating a psychological or educational test score as a *measurement*,
+it is worth asking whether the data actually support a quantitative
+interpretation of the latent variable at all. The differences between people
+might be quantitative (a matter of *how much*), merely ordinal (a matter of
+*rank*), or only classificatory (a matter of *kind*). QuantFit provides three
+complementary, empirically testable answers to that question:
+
+1. **Conjoint cancellation checks** ask whether the response probabilities
+   obey the cancellation axioms of additive conjoint measurement — the
+   order-theoretic conditions that must hold if persons and items sit on a
+   common additive scale.
+
+2. **The Karabatsos omnibus test** poses a closely related question in a
+   Bayesian synthetic-likelihood framework, quantifying departures from
+   additivity cell by cell.
+
+3. **Latent structure model selection** fits a hierarchy of six latent
+   variable models and asks which level of structure — classificatory,
+   ordinal, or quantitative — the data actually warrant.
+
+The three approaches come at the same underlying question from different
+directions; used together they give a much fuller picture than any one alone.
+
+```{r setup}
+library(QuantFit)
+```
+
+We will use a single simulated data set throughout. It follows a Rasch model,
+so all three approaches *should* conclude that the structure is quantitative.
+
+```{r simulate}
+set.seed(1)
+n_persons <- 800
+n_items   <- 12
+theta <- rnorm(n_persons)                       # person abilities
+beta  <- seq(-2, 2, length.out = n_items)       # item difficulties
+prob  <- plogis(outer(theta, beta, "-"))
+responses <- matrix(rbinom(n_persons * n_items, 1, prob),
+                    n_persons, n_items)
+dim(responses)
+```
+
+## 1. Conjoint cancellation checks
+
+The cancellation checks operate on a matrix of counts cross-classifying
+*sum score* against *item*. `PrepareChecks()` builds the required success
+counts `n` and attempt counts `N` from a raw 0/1 response matrix.
+
+```{r prepare}
+prep <- PrepareChecks(responses)
+dim(prep$N)
+```
+
+`ConjointChecks()` then samples submatrices, runs a constrained MCMC sampler
+on each, and reports the proportion of cells whose observed proportion falls
+outside the posterior credibility region implied by the axiom. Low violation
+rates are consistent with additive (quantitative) structure. The sampler is
+the computational bottleneck, so the call below is shown but not evaluated in
+this vignette:
+
+```{r conjoint, eval = FALSE}
+cc <- ConjointChecks(prep$N, prep$n, n.mat = 100, check = "double",
+                     mc.cores = 1)
+cc@means            # unweighted and item-count-weighted violation rates
+#> $unweighted
+#> [1] 0.03
+#>
+#> $weighted
+#> [1] 0.02
+```
+
+`check = "single"`, `"double"`, and `"triple"` test progressively stronger
+cancellation axioms; `HiConjointChecks()` runs the full hierarchical test over
+every 3x3 submatrix embedded in each 4x4 block. The bundled `rasch1000` object
+is a pre-computed result you can explore immediately:
+
+```{r rasch1000}
+data(rasch1000)
+summary(rasch1000)
+```
+
+## 2. The Karabatsos omnibus test
+
+`KaraChecks()` implements Karabatsos (2018): it fits a two-stage isotonic
+model to the observed proportions, simulates synthetic data sets under a
+Beta-Binomial null, and uses a synthetic-likelihood importance sampler to
+obtain a posterior for each cell. Departures from additivity are summarised
+by a Kullback-Leibler divergence per cell (flagged when KL > 0.01) and a
+global KL. This is a Monte Carlo procedure; realistic runs use `S` in the tens
+of thousands, so it too is shown rather than evaluated:
+
+```{r kara, eval = FALSE}
+kc <- KaraChecks(prep$N, prep$n, S = 30000, N_synth = 100, mc.cores = 1,
+                 verbose = FALSE)
+kc$global_KL      # overall departure from additivity
+kc$n_violations   # number of cells with KL > 0.01
+kc$KL             # per-cell KL divergence matrix
+```
+
+For Rasch-generated data the global KL is small and few cells are flagged;
+strongly non-additive data (for example 2PL data with dispersed
+discriminations) produce many more violations. This R/C++ implementation is
+validated against the original MATLAB `ACMtest.m` to a cell-level correlation
+above 0.99.
+
+## 3. Latent structure model selection
+
+The third approach fits six nested-in-structure latent variable models:
+
+| Model | Structure | Interpretation |
+|-------|-----------|----------------|
+| `UN`  | Unconstrained latent classes | Classificatory |
+| `MON` | Class monotonicity | Ordinal |
+| `IIO` | Invariant item ordering | Ordinal |
+| `DM`  | Double monotonicity (MON + IIO) | Ordinal |
+| `LCR` | Latent class Rasch | Quantitative (discrete) |
+| `RM`  | Rasch model | Quantitative (continuous) |
+
+You can fit any single model directly:
+
+```{r fit-un}
+un <- fit_un(responses, n_classes = 3, verbose = FALSE)
+un
+```
+
+### Comparing all six by information criteria
+
+`compare_models()` fits the whole set and ranks them. Note the caveat it is
+built to expose: UN, MON, IIO, and DM all have the *same* number of
+parameters, so BIC (which only rewards parsimony through parameter count)
+cannot separate them — it will tend to pick UN or, for quantitative data, RM.
+
+```{r compare}
+cmp <- compare_models(responses, n_classes = 3, verbose = FALSE)
+cmp
+```
+
+### Calibrated selection with the likelihood-ratio bootstrap
+
+`select_model_ll()` addresses that limitation. It tests each constrained model
+against its parent with a parametric bootstrap of the likelihood-ratio
+statistic — the correct calibration when the models are nested by inequality
+constraints and share a parameter count (the asymptotic null is
+chi-bar-squared, not chi-squared). It walks down the hierarchy and uses BIC
+only for the final RM-versus-LCR step, where the parameter counts really do
+differ. Because it refits models on bootstrap samples it is moderately
+expensive; here we use a small `B` for illustration:
+
+```{r select-ll, eval = FALSE}
+sel <- select_model_ll(responses, n_classes = 3, B = 99, seed = 1)
+sel
+#> Selected model: RM
+#> Interpretation: QUANTITATIVE (continuous: Rasch model)
+#>
+#>   comparison  statistic p_value                 decision
+#>     DM vs UN  204.38      0.01   rejected (p <= alpha)
+#>    IIO vs UN  204.03      0.01   rejected (p <= alpha)
+#>    MON vs UN    0.47      0.37   adequate (p > alpha)
+```
+
+A purely diagnostic alternative, `select_model_constraint()`, inspects whether
+the unconstrained estimates *satisfy* each ordinal constraint (within a
+tolerance) rather than testing them, and is much faster:
+
+```{r select-constraint}
+sc <- select_model_constraint(responses, n_classes = 3, seed = 1)
+sc$selected
+sc$interpretation
+```
+
+### Standard errors
+
+`compute_se()` returns standard errors for a fitted model, either from the
+observed information (default) or by nonparametric bootstrap. For a model
+whose fitted estimates sit on an active monotonicity constraint, the
+Hessian-based standard errors for the affected parameters are returned as `NA`
+with a warning, and the bootstrap method should be used instead.
+
+```{r se}
+se <- compute_se(un, method = "hessian")
+se
+```
+
+## Which approach when?
+
+* The **cancellation checks** and the **Karabatsos test** are axiom-focused:
+  they ask directly whether additive-conjoint structure holds, without
+  committing to a parametric latent variable model. They are the natural tools
+  when the question is specifically about *measurement* in the
+  representational sense.
+
+* **Latent structure model selection** is model-focused and finer-grained: it
+  distinguishes classificatory, ordinal, and quantitative structure and
+  returns a fitted model you can interpret and report. `select_model_ll()` is
+  the recommended selector; `compare_models()` is useful for a quick
+  information-criterion overview, keeping its equal-parameter-count caveat in
+  mind.
+
+Running all three and comparing their conclusions is the most defensible
+strategy: agreement across such different methods is strong evidence about the
+structure of the variable, and disagreement is itself informative.
+
+## References
+
+Domingue, B. (2014). Evaluating the equal-interval hypothesis with test score
+scales. *Psychometrika*, 79(1), 1-19.
+
+Karabatsos, G. (2018). On Bayesian testing of additive conjoint measurement
+axioms using synthetic likelihood. *Psychometrika*, 83(2), 321-332.
+
+Torres Irribarra, D., & Diakow, R. Categorization, Ordering and Quantification:
+Selecting a Latent Variable Model by Comparing Latent Structures.
