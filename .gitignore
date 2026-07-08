@@ -7,3 +7,4 @@
 .RData
 src/*.o
 src/*.so
+tests/testthat/_problems/

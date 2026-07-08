@@ -1,35 +1,52 @@
 Package: QuantFit
-Title: Latent Structure Model Selection Framework
-Version: 0.1.0
-Authors@R:
-    person("QuantFit Authors", email = "quantfit@example.com", role = c("aut", "cre"))
-Description: Implements the model selection framework from Torres Irribarra &
-    Diakow's paper "Categorization, Ordering and Quantification: Selecting a
-    Latent Variable Model by Comparing Latent Structures." Enables researchers
-    to compare six latent structure models (Unconstrained Latent Class, Class
-    Monotonicity, Invariant Item Ordering, Double Monotonicity, Latent Class
-    Rasch, and Rasch Model) to determine whether data supports classificatory,
-    ordinal, or quantitative interpretations of a latent variable.
-License: MIT + file LICENSE
+Title: Checking Quantitative Structure in Item Response Data
+Version: 0.2.0
+Authors@R: c(
+    person("Josh", "McGrane", email = "drjoshmcgrane@gmail.com",
+           role = c("aut", "cre")),
+    person("Ben", "Domingue", email = "ben.domingue@gmail.com",
+           role = "aut", comment = "Author of the original ConjointChecks package"),
+    person("Liam", "Fox", role = "ctb"),
+    person("Vithor", "Franco", role = "ctb"))
+Description: Tools for empirically testing whether psychological and
+    educational item response data support a quantitative interpretation
+    of the latent variable. Implements three complementary approaches:
+    (1) Bayesian checks of the single, double, and triple cancellation
+    axioms of additive conjoint measurement, extending the ConjointChecks
+    package of Domingue (2014) <doi:10.1007/s11336-013-9342-4>;
+    (2) the Bayesian omnibus test of additive conjoint measurement axioms
+    using synthetic likelihood of Karabatsos (2018)
+    <doi:10.1007/s11336-017-9581-x>; and
+    (3) the latent structure model selection framework of Torres Irribarra
+    & Diakow, comparing six latent structure models (Unconstrained Latent
+    Class, Class Monotonicity, Invariant Item Ordering, Double
+    Monotonicity, Latent Class Rasch, and Rasch Model) to determine
+    whether data support classificatory, ordinal, or quantitative
+    interpretations.
+License: GPL (>= 2)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.0
+RoxygenNote: 7.3.3
+Depends: R (>= 4.3)
 Imports:
+    Rcpp,
+    methods,
+    parallel,
     alabama,
     nloptr,
     mirt,
-    Matrix,
     numDeriv,
     stats,
-    utils
+    utils,
+    graphics
+LinkingTo:
+    Rcpp,
+    RcppArmadillo
 Suggests:
     testthat (>= 3.0.0),
-    poLCA,
-    eRm,
     ggplot2,
     knitr,
     rmarkdown
 Config/testthat/edition: 3
+LazyData: true
 VignetteBuilder: knitr
-URL: https://github.com/quantfit/QuantFit
-BugReports: https://github.com/quantfit/QuantFit/issues

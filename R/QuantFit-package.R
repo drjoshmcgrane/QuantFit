@@ -1,13 +1,19 @@
-#' QuantFit: Latent Structure Model Selection Framework
+#' QuantFit: Checking Quantitative Structure in Item Response Data
 #'
 #' @description
-#' Implements the model selection framework from Torres Irribarra & Diakow's paper
-#' "Categorization, Ordering and Quantification: Selecting a Latent Variable Model
-#' by Comparing Latent Structures."
+#' Tools for empirically testing whether psychological and educational item
+#' response data support a quantitative interpretation of the latent variable,
+#' via three complementary approaches:
 #'
-#' The package enables researchers to compare six latent structure models to determine
-#' whether data supports classificatory, ordinal, or quantitative interpretations of
-#' a latent variable.
+#' 1. **Conjoint cancellation checks** (single, double, and triple cancellation
+#'    axioms of additive conjoint measurement), extending Domingue's
+#'    ConjointChecks package: [ConjointChecks()], [HiConjointChecks()],
+#'    [PrepareChecks()].
+#' 2. **The Karabatsos (2018) Bayesian omnibus test** of the additive conjoint
+#'    measurement axioms using synthetic likelihood: [KaraChecks()].
+#' 3. **The Torres Irribarra & Diakow latent structure model selection
+#'    framework**, comparing six latent structure models to determine whether
+#'    data support classificatory, ordinal, or quantitative interpretations.
 #'
 #' @section The Six Models:
 #' \describe{
@@ -58,6 +64,14 @@
 #' Torres Irribarra, D., & Diakow, R. Categorization, Ordering and Quantification:
 #' Selecting a Latent Variable Model by Comparing Latent Structures.
 #'
+#' Domingue, B. (2014). Evaluating the equal-interval hypothesis with test
+#' score scales. \emph{Psychometrika}, 79(1), 1-19.
+#' \doi{10.1007/s11336-013-9342-4}
+#'
+#' Karabatsos, G. (2018). On Bayesian testing of additive conjoint measurement
+#' axioms using synthetic likelihood. \emph{Psychometrika}, 83(2), 321-332.
+#' \doi{10.1007/s11336-017-9581-x}
+#'
 #' @examples
 #' \dontrun{
 #' # Generate example data
@@ -97,16 +111,20 @@
 # Package imports
 #' @import stats
 #' @import utils
+#' @import methods
 #' @importFrom alabama constrOptim.nl
 #' @importFrom nloptr nloptr
-#' @importFrom Matrix Matrix
 #' @importFrom numDeriv hessian
+#' @importFrom graphics mtext text
+#' @importFrom parallel mclapply detectCores
+#' @importFrom Rcpp evalCpp
+#' @useDynLib QuantFit, .registration = TRUE
 NULL
 
 # Package startup message
 .onAttach <- function(libname, pkgname) {
   packageStartupMessage(
-    "QuantFit: Latent Structure Model Selection Framework\n",
-    "For help, type: ?QuantFit or vignette('introduction')"
+    "QuantFit: Checking Quantitative Structure in Item Response Data\n",
+    "For help, type: ?QuantFit"
   )
 }
