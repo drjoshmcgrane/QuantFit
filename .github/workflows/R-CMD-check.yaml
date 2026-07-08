@@ -43,3 +43,8 @@ jobs:
           upload-snapshots: true
           build_args: 'c("--no-manual")'
           error-on: '"warning"'
+
+      - name: Show install log on failure
+        if: failure()
+        shell: bash
+        run: cat check/*.Rcheck/00install.out 2>/dev/null || true

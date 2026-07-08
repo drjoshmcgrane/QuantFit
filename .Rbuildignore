@@ -1,0 +1,6 @@
+^\.github$
+^\.gitignore$
+^.*\.Rproj$
+^\.Rproj\.user$
+^QuantFit\.Rcheck$
+^.*\.tar\.gz$

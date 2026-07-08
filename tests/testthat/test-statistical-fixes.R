@@ -47,7 +47,11 @@ test_that("weighted pava_increasing solves the weighted isotonic QP", {
     )
 
     expect_equal(sum(w * (y_pava - x)^2), res$objective, tolerance = 1e-8)
-    expect_equal(y_pava, res$solution, tolerance = 1e-6)
+    # 1e-3 not 1e-6: SLSQP's solution position converges more loosely than
+    # its objective (flat directions), and testthat's tolerance is relative,
+    # so elements near zero magnify solver noise (seen at ~6e-4 on Linux CI).
+    # PAVA is the exact analytic answer; the QP is only a cross-check.
+    expect_equal(y_pava, res$solution, tolerance = 1e-3)
   }
 })
 
