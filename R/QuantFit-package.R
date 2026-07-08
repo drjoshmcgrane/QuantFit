@@ -115,8 +115,8 @@
 #' @importFrom alabama constrOptim.nl
 #' @importFrom nloptr nloptr
 #' @importFrom numDeriv hessian
-#' @importFrom graphics mtext text axis grid abline lines points legend barplot
-#' @importFrom grDevices rainbow
+#' @importFrom graphics mtext text axis grid abline lines points legend barplot image arrows rect
+#' @importFrom grDevices rainbow colorRampPalette
 #' @importFrom parallel mclapply detectCores
 #' @importFrom Rcpp evalCpp
 #' @useDynLib QuantFit, .registration = TRUE
