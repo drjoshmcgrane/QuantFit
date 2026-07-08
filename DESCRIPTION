@@ -1,0 +1,35 @@
+Package: QuantFit
+Title: Latent Structure Model Selection Framework
+Version: 0.1.0
+Authors@R:
+    person("QuantFit Authors", email = "quantfit@example.com", role = c("aut", "cre"))
+Description: Implements the model selection framework from Torres Irribarra &
+    Diakow's paper "Categorization, Ordering and Quantification: Selecting a
+    Latent Variable Model by Comparing Latent Structures." Enables researchers
+    to compare six latent structure models (Unconstrained Latent Class, Class
+    Monotonicity, Invariant Item Ordering, Double Monotonicity, Latent Class
+    Rasch, and Rasch Model) to determine whether data supports classificatory,
+    ordinal, or quantitative interpretations of a latent variable.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.0
+Imports:
+    alabama,
+    nloptr,
+    mirt,
+    Matrix,
+    numDeriv,
+    stats,
+    utils
+Suggests:
+    testthat (>= 3.0.0),
+    poLCA,
+    eRm,
+    ggplot2,
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://github.com/quantfit/QuantFit
+BugReports: https://github.com/quantfit/QuantFit/issues
