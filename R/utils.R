@@ -390,22 +390,6 @@ multiple_starts <- function(fit_fn, n_starts = 10, seed = NULL, verbose = FALSE,
   best_fit
 }
 
-#' Compute standard errors via numerical Hessian
-#'
-#' @param fit A qlfit object
-#' @param data The original data
-#'
-#' @return Standard errors for parameters
-#' @keywords internal
-compute_se <- function(fit, data) {
-  # This is a placeholder - full implementation would require
-
-# defining the full parameter vector and likelihood function
-# for numerical differentiation
-  warning("Standard error computation not yet implemented")
-  NULL
-}
-
 #' Print progress bar
 #'
 #' @param iteration Current iteration
