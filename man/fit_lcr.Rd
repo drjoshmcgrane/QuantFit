@@ -10,6 +10,7 @@ fit_lcr(
   n_starts = 10,
   max_iter = 500,
   tol = 1e-06,
+  use_cpp = TRUE,
   seed = NULL,
   verbose = FALSE
 )
@@ -25,6 +26,11 @@ and items in columns.}
 \item{max_iter}{Maximum number of EM iterations per start (default 500)}
 
 \item{tol}{Convergence tolerance for log-likelihood (default 1e-6)}
+
+\item{use_cpp}{Use the compiled C++ E-step and M-step objective
+(default TRUE); the BFGS optimization itself always runs via
+\code{stats::optim} in R so both paths follow the identical optimizer
+trajectory. Set to FALSE for the pure-R reference implementation.}
 
 \item{seed}{Random seed for reproducibility (optional)}
 

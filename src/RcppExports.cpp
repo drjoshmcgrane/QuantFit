@@ -101,6 +101,121 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_e_step
+List cpp_e_step(const arma::mat& data, const arma::mat& item_probs, const arma::vec& class_probs);
+RcppExport SEXP _QuantFit_cpp_e_step(SEXP dataSEXP, SEXP item_probsSEXP, SEXP class_probsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type item_probs(item_probsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type class_probs(class_probsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_e_step(data, item_probs, class_probs));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_m_step
+List cpp_m_step(const arma::mat& data, const arma::mat& posteriors);
+RcppExport SEXP _QuantFit_cpp_m_step(SEXP dataSEXP, SEXP posteriorsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type posteriors(posteriorsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_m_step(data, posteriors));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_weighted_pava
+NumericVector cpp_weighted_pava(const arma::vec& x, Nullable<NumericVector> w, bool increasing);
+RcppExport SEXP _QuantFit_cpp_weighted_pava(SEXP xSEXP, SEXP wSEXP, SEXP increasingSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type w(wSEXP);
+    Rcpp::traits::input_parameter< bool >::type increasing(increasingSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_weighted_pava(x, w, increasing));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_dykstra_dm
+arma::mat cpp_dykstra_dm(const arma::mat& item_probs, const IntegerVector& item_order, Nullable<NumericVector> class_weights, double tol, int max_cycles);
+RcppExport SEXP _QuantFit_cpp_dykstra_dm(SEXP item_probsSEXP, SEXP item_orderSEXP, SEXP class_weightsSEXP, SEXP tolSEXP, SEXP max_cyclesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type item_probs(item_probsSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type item_order(item_orderSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type class_weights(class_weightsSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type max_cycles(max_cyclesSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_dykstra_dm(item_probs, item_order, class_weights, tol, max_cycles));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_project_constraints
+arma::mat cpp_project_constraints(const arma::mat& item_probs, bool class_monotonicity, bool item_ordering, const IntegerVector& item_order, Nullable<NumericVector> class_weights);
+RcppExport SEXP _QuantFit_cpp_project_constraints(SEXP item_probsSEXP, SEXP class_monotonicitySEXP, SEXP item_orderingSEXP, SEXP item_orderSEXP, SEXP class_weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type item_probs(item_probsSEXP);
+    Rcpp::traits::input_parameter< bool >::type class_monotonicity(class_monotonicitySEXP);
+    Rcpp::traits::input_parameter< bool >::type item_ordering(item_orderingSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type item_order(item_orderSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type class_weights(class_weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_project_constraints(item_probs, class_monotonicity, item_ordering, item_order, class_weights));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_em_lca
+List cpp_em_lca(const arma::mat& data, const arma::mat& init_probs, const arma::vec& init_class_probs, int max_iter, double tol);
+RcppExport SEXP _QuantFit_cpp_em_lca(SEXP dataSEXP, SEXP init_probsSEXP, SEXP init_class_probsSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type init_probs(init_probsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type init_class_probs(init_class_probsSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_em_lca(data, init_probs, init_class_probs, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_em_constrained
+List cpp_em_constrained(const arma::mat& data, const arma::mat& init_probs, const arma::vec& init_class_probs, bool class_monotonicity, bool item_ordering, const IntegerVector& item_order, int max_iter, double tol);
+RcppExport SEXP _QuantFit_cpp_em_constrained(SEXP dataSEXP, SEXP init_probsSEXP, SEXP init_class_probsSEXP, SEXP class_monotonicitySEXP, SEXP item_orderingSEXP, SEXP item_orderSEXP, SEXP max_iterSEXP, SEXP tolSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type init_probs(init_probsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type init_class_probs(init_class_probsSEXP);
+    Rcpp::traits::input_parameter< bool >::type class_monotonicity(class_monotonicitySEXP);
+    Rcpp::traits::input_parameter< bool >::type item_ordering(item_orderingSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type item_order(item_orderSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_em_constrained(data, init_probs, init_class_probs, class_monotonicity, item_ordering, item_order, max_iter, tol));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_lcr_q
+double cpp_lcr_q(const arma::vec& par, const arma::mat& data, const arma::mat& posteriors, int n_classes);
+RcppExport SEXP _QuantFit_cpp_lcr_q(SEXP parSEXP, SEXP dataSEXP, SEXP posteriorsSEXP, SEXP n_classesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type par(parSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type posteriors(posteriorsSEXP);
+    Rcpp::traits::input_parameter< int >::type n_classes(n_classesSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_lcr_q(par, data, posteriors, n_classes));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_QuantFit_CCIterate", (DL_FUNC) &_QuantFit_CCIterate, 7},
@@ -109,6 +224,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"_QuantFit_CCIterateTriple", (DL_FUNC) &_QuantFit_CCIterateTriple, 6},
     {"_QuantFit_lsqisotonic", (DL_FUNC) &_QuantFit_lsqisotonic, 3},
     {"_QuantFit_ksdensity", (DL_FUNC) &_QuantFit_ksdensity, 2},
+    {"_QuantFit_cpp_e_step", (DL_FUNC) &_QuantFit_cpp_e_step, 3},
+    {"_QuantFit_cpp_m_step", (DL_FUNC) &_QuantFit_cpp_m_step, 2},
+    {"_QuantFit_cpp_weighted_pava", (DL_FUNC) &_QuantFit_cpp_weighted_pava, 3},
+    {"_QuantFit_cpp_dykstra_dm", (DL_FUNC) &_QuantFit_cpp_dykstra_dm, 5},
+    {"_QuantFit_cpp_project_constraints", (DL_FUNC) &_QuantFit_cpp_project_constraints, 5},
+    {"_QuantFit_cpp_em_lca", (DL_FUNC) &_QuantFit_cpp_em_lca, 5},
+    {"_QuantFit_cpp_em_constrained", (DL_FUNC) &_QuantFit_cpp_em_constrained, 8},
+    {"_QuantFit_cpp_lcr_q", (DL_FUNC) &_QuantFit_cpp_lcr_q, 4},
     {NULL, NULL, 0}
 };
 

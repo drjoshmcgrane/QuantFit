@@ -11,6 +11,7 @@ em_lca(
   init_class_probs = NULL,
   max_iter = 1000,
   tol = 1e-06,
+  use_cpp = TRUE,
   verbose = FALSE
 )
 }
@@ -26,6 +27,11 @@ em_lca(
 \item{max_iter}{Maximum number of iterations}
 
 \item{tol}{Convergence tolerance}
+
+\item{use_cpp}{Use the compiled C++ EM engine (default TRUE). The R
+implementation (use_cpp = FALSE) is the validation reference; both paths
+produce numerically equivalent results. Progress printing (verbose) is
+only available on the R path.}
 
 \item{verbose}{Print progress}
 }

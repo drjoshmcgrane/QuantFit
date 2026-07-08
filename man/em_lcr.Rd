@@ -12,6 +12,7 @@ em_lcr(
   init_class_probs = NULL,
   max_iter = 500,
   tol = 1e-06,
+  use_cpp = TRUE,
   verbose = FALSE
 )
 }
@@ -29,6 +30,11 @@ em_lcr(
 \item{max_iter}{Maximum number of iterations}
 
 \item{tol}{Convergence tolerance}
+
+\item{use_cpp}{Use the compiled C++ E-step and M-step objective
+(default TRUE). The BFGS optimization itself stays in R
+(\code{stats::optim}) so both paths follow the identical optimizer
+trajectory; use_cpp = FALSE runs the pure-R reference implementation.}
 
 \item{verbose}{Print progress}
 }

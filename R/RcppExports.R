@@ -25,3 +25,136 @@ ksdensity <- function(data, point) {
     .Call(`_QuantFit_ksdensity`, data, point)
 }
 
+#' C++ E-step for the latent class EM (internal)
+#'
+#' Log-domain Bernoulli mixture posteriors with log-sum-exp stabilization.
+#' Port of \code{e_step()}.
+#'
+#' @param data Binary data matrix (n x I)
+#' @param item_probs Item probability matrix (I x C)
+#' @param class_probs Class probability vector (length C)
+#' @return List with \code{posteriors} (n x C) and \code{loglik}
+#' @noRd
+cpp_e_step <- function(data, item_probs, class_probs) {
+    .Call(`_QuantFit_cpp_e_step`, data, item_probs, class_probs)
+}
+
+#' C++ unconstrained M-step for the latent class EM (internal)
+#'
+#' Closed-form class proportions and weighted item means. Port of
+#' \code{m_step()}.
+#'
+#' @param data Binary data matrix (n x I)
+#' @param posteriors Posterior class membership matrix (n x C)
+#' @return List with \code{item_probs}, \code{class_probs}, \code{degenerate}
+#' @noRd
+cpp_m_step <- function(data, posteriors) {
+    .Call(`_QuantFit_cpp_m_step`, data, posteriors)
+}
+
+#' C++ weighted PAVA (internal)
+#'
+#' Weighted isotonic regression by block merging. Port of
+#' \code{pava_increasing()} / \code{pava_decreasing()}.
+#'
+#' @param x Numeric vector
+#' @param w Optional non-negative weights (same length as x); NULL = unit
+#' @param increasing If TRUE (default) non-decreasing fit, else non-increasing
+#' @return Isotonic (weighted L2) projection of x
+#' @noRd
+cpp_weighted_pava <- function(x, w = NULL, increasing = TRUE) {
+    .Call(`_QuantFit_cpp_weighted_pava`, x, w, increasing)
+}
+
+#' C++ Dykstra projection for double monotonicity (internal)
+#'
+#' Exact weighted L2 projection onto the intersection of the row-monotone
+#' and column-ordered constraint sets. Port of
+#' \code{dykstra_dm_projection()}.
+#'
+#' @param item_probs Item probability matrix (I x C)
+#' @param item_order Item order (1-based, easiest to hardest)
+#' @param class_weights Optional class weights (length C); NULL = unit
+#' @param tol Convergence tolerance on the iterate change
+#' @param max_cycles Maximum number of projection cycles
+#' @return Projected matrix satisfying both constraint sets
+#' @noRd
+cpp_dykstra_dm <- function(item_probs, item_order, class_weights = NULL, tol = 1e-10, max_cycles = 500L) {
+    .Call(`_QuantFit_cpp_dykstra_dm`, item_probs, item_order, class_weights, tol, max_cycles)
+}
+
+#' C++ weighted projection onto the constraint space (internal)
+#'
+#' Port of \code{project_constraints_weighted()}: weighted PAVA per item for
+#' class monotonicity, plain PAVA per class for item ordering, Dykstra for
+#' double monotonicity, followed by probability bounding.
+#'
+#' @param item_probs Item probability matrix (I x C)
+#' @param class_monotonicity Enforce class monotonicity?
+#' @param item_ordering Enforce invariant item ordering?
+#' @param item_order Item order (1-based); required if item_ordering
+#' @param class_weights Optional class weights (length C); NULL = unit
+#' @return Projected item probability matrix
+#' @noRd
+cpp_project_constraints <- function(item_probs, class_monotonicity, item_ordering, item_order, class_weights = NULL) {
+    .Call(`_QuantFit_cpp_project_constraints`, item_probs, class_monotonicity, item_ordering, item_order, class_weights)
+}
+
+#' C++ EM driver for unconstrained LCA (internal)
+#'
+#' Full EM loop of \code{em_lca()} given explicit initial values. Convergence
+#' semantics match the R implementation exactly (including the final E-step
+#' when max_iter is reached without convergence). GEM-decrease and
+#' degenerate-class warnings are emitted by the R wrapper.
+#'
+#' @param data Binary data matrix (n x I)
+#' @param init_probs Initial item probabilities (I x C)
+#' @param init_class_probs Initial class probabilities (length C)
+#' @param max_iter Maximum number of iterations
+#' @param tol Convergence tolerance
+#' @return List mirroring \code{em_lca()} output
+#' @noRd
+cpp_em_lca <- function(data, init_probs, init_class_probs, max_iter, tol) {
+    .Call(`_QuantFit_cpp_em_lca`, data, init_probs, init_class_probs, max_iter, tol)
+}
+
+#' C++ EM driver for constrained LCA with the exact PAVA M-step (internal)
+#'
+#' Full EM loop of \code{em_constrained(method = "pava")} given explicit
+#' initial values: E-step, unconstrained M-step, then exact weighted
+#' projection onto the constraint space (weighted PAVA / Dykstra) with the
+#' expected class counts as weights, exactly as \code{m_step_exact()}.
+#'
+#' @param data Binary data matrix (n x I)
+#' @param init_probs Initial item probabilities (I x C)
+#' @param init_class_probs Initial class probabilities (length C)
+#' @param class_monotonicity Enforce class monotonicity?
+#' @param item_ordering Enforce invariant item ordering?
+#' @param item_order Item order (1-based); required if item_ordering
+#' @param max_iter Maximum number of iterations
+#' @param tol Convergence tolerance
+#' @return List mirroring \code{em_constrained()} output
+#' @noRd
+cpp_em_constrained <- function(data, init_probs, init_class_probs, class_monotonicity, item_ordering, item_order, max_iter, tol) {
+    .Call(`_QuantFit_cpp_em_constrained`, data, init_probs, init_class_probs, class_monotonicity, item_ordering, item_order, max_iter, tol)
+}
+
+#' C++ objective for the Latent Class Rasch M-step (internal)
+#'
+#' Negative expected complete-data log-likelihood as a function of the free
+#' parameter vector \code{par = c(theta, delta[-1])} with the mean(delta) = 0
+#' identification constraint (delta[1] = -sum(delta[-1])). Exact port of the
+#' objective closure inside \code{m_step_rasch()}; the surrounding BFGS
+#' optimization (\code{stats::optim}, finite-difference gradients) stays in R
+#' so the optimizer trajectory is identical to the pure-R path.
+#'
+#' @param par Parameter vector c(theta, delta[-1]) of length C + I - 1
+#' @param data Binary data matrix (n x I)
+#' @param posteriors Posterior class membership matrix (n x C)
+#' @param n_classes Number of latent classes
+#' @return Negative expected complete-data log-likelihood (scalar)
+#' @noRd
+cpp_lcr_q <- function(par, data, posteriors, n_classes) {
+    .Call(`_QuantFit_cpp_lcr_q`, par, data, posteriors, n_classes)
+}
+

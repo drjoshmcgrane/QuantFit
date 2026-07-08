@@ -17,6 +17,7 @@ em_constrained(
   tol = 1e-06,
   method = c("pava", "optimizer"),
   optimizer = c("alabama", "nloptr"),
+  use_cpp = TRUE,
   verbose = FALSE
 )
 }
@@ -47,6 +48,12 @@ regression M-step) or "optimizer" (general constrained optimizer)}
 
 \item{optimizer}{Which optimizer to use when method = "optimizer":
 "alabama" or "nloptr"}
+
+\item{use_cpp}{Use the compiled C++ EM engine (default TRUE). Only applies
+to method = "pava"; the "optimizer" method always runs the R path. The R
+implementation (use_cpp = FALSE) is the validation reference; both paths
+produce numerically equivalent results. Progress printing (verbose) is
+only available on the R path.}
 
 \item{verbose}{Print progress}
 }

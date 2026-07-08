@@ -17,6 +17,9 @@ NULL
 #' @param n_starts Number of random starting values to try (default 10)
 #' @param max_iter Maximum number of EM iterations per start (default 500)
 #' @param tol Convergence tolerance for log-likelihood (default 1e-6)
+#' @param use_cpp Use the compiled C++ EM engine (default TRUE). Set to FALSE
+#'   to run the pure-R reference implementation; both paths produce
+#'   numerically equivalent results.
 #' @param seed Random seed for reproducibility (optional)
 #' @param verbose Print progress messages (default FALSE)
 #'
@@ -88,6 +91,7 @@ fit_dm <- function(data, n_classes,
                    n_starts = 10,
                    max_iter = 500,
                    tol = 1e-6,
+                   use_cpp = TRUE,
                    seed = NULL,
                    verbose = FALSE) {
 
@@ -153,6 +157,7 @@ fit_dm <- function(data, n_classes,
         max_iter = max_iter,
         tol = tol,
         method = "pava",
+        use_cpp = use_cpp,
         verbose = FALSE
       )
     }, error = function(e) {

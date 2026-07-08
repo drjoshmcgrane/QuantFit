@@ -12,6 +12,7 @@ fit_mon(
   tol = 1e-06,
   method = c("pava", "optimizer"),
   optimizer = c("alabama", "nloptr"),
+  use_cpp = TRUE,
   seed = NULL,
   verbose = FALSE
 )
@@ -34,6 +35,10 @@ as weights); "optimizer" uses a general constrained optimizer}
 
 \item{optimizer}{Optimizer for the constrained M-step when
 method = "optimizer": "alabama" (default) or "nloptr"}
+
+\item{use_cpp}{Use the compiled C++ EM engine (default TRUE); only applies
+to method = "pava". Set to FALSE to run the pure-R reference
+implementation; both paths produce numerically equivalent results.}
 
 \item{seed}{Random seed for reproducibility (optional)}
 

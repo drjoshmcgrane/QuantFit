@@ -11,6 +11,7 @@ fit_un_single(
   init_class_probs,
   max_iter = 1000,
   tol = 1e-06,
+  use_cpp = TRUE,
   verbose = FALSE
 )
 }
@@ -26,6 +27,8 @@ fit_un_single(
 \item{max_iter}{Maximum iterations}
 
 \item{tol}{Convergence tolerance}
+
+\item{use_cpp}{Use the compiled C++ EM engine (default TRUE)}
 
 \item{verbose}{Print progress}
 }

@@ -11,6 +11,7 @@ fit_dm(
   n_starts = 10,
   max_iter = 500,
   tol = 1e-06,
+  use_cpp = TRUE,
   seed = NULL,
   verbose = FALSE
 )
@@ -30,6 +31,10 @@ overall item proportions.}
 \item{max_iter}{Maximum number of EM iterations per start (default 500)}
 
 \item{tol}{Convergence tolerance for log-likelihood (default 1e-6)}
+
+\item{use_cpp}{Use the compiled C++ EM engine (default TRUE). Set to FALSE
+to run the pure-R reference implementation; both paths produce
+numerically equivalent results.}
 
 \item{seed}{Random seed for reproducibility (optional)}
 

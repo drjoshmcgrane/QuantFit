@@ -14,6 +14,10 @@ NULL
 #' @param n_starts Number of random starting values to try (default 10)
 #' @param max_iter Maximum number of EM iterations per start (default 500)
 #' @param tol Convergence tolerance for log-likelihood (default 1e-6)
+#' @param use_cpp Use the compiled C++ E-step and M-step objective
+#'   (default TRUE); the BFGS optimization itself always runs via
+#'   \code{stats::optim} in R so both paths follow the identical optimizer
+#'   trajectory. Set to FALSE for the pure-R reference implementation.
 #' @param seed Random seed for reproducibility (optional)
 #' @param verbose Print progress messages (default FALSE)
 #'
@@ -91,6 +95,7 @@ fit_lcr <- function(data, n_classes,
                     n_starts = 10,
                     max_iter = 500,
                     tol = 1e-6,
+                    use_cpp = TRUE,
                     seed = NULL,
                     verbose = FALSE) {
 
@@ -134,6 +139,7 @@ fit_lcr <- function(data, n_classes,
         init_class_probs = init_result$class_probs,
         max_iter = max_iter,
         tol = tol,
+        use_cpp = use_cpp,
         verbose = FALSE
       )
     }, error = function(e) {

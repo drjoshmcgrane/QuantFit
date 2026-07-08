@@ -12,6 +12,10 @@ NULL
 #' @param init_class_probs Initial class probabilities (vector of length C)
 #' @param max_iter Maximum number of iterations
 #' @param tol Convergence tolerance
+#' @param use_cpp Use the compiled C++ EM engine (default TRUE). The R
+#'   implementation (use_cpp = FALSE) is the validation reference; both paths
+#'   produce numerically equivalent results. Progress printing (verbose) is
+#'   only available on the R path.
 #' @param verbose Print progress
 #'
 #' @return List with estimated parameters and diagnostics
@@ -21,6 +25,7 @@ em_lca <- function(data, n_classes,
                    init_class_probs = NULL,
                    max_iter = 1000,
                    tol = 1e-6,
+                   use_cpp = TRUE,
                    verbose = FALSE) {
 
   n_obs <- nrow(data)
@@ -37,6 +42,14 @@ em_lca <- function(data, n_classes,
     class_probs <- init_class_probs(n_classes, "uniform")
   } else {
     class_probs <- init_class_probs
+  }
+
+  # Compiled EM engine (initial values above are always produced in R so the
+  # RNG stream is identical on both paths)
+  if (use_cpp) {
+    res <- cpp_em_lca(data, item_probs, class_probs,
+                      as.integer(max_iter), tol)
+    return(finalize_cpp_em(res, tol))
   }
 
   # EM iterations
@@ -92,6 +105,53 @@ em_lca <- function(data, n_classes,
     converged = converged,
     iterations = iter,
     degenerate = degenerate
+  )
+}
+
+#' Finalize a C++ EM result: replicate the R-side warnings
+#'
+#' Re-scans the log-likelihood history for generalized-EM decreases (the same
+#' rule as \code{check_convergence}: only iterations that went through the
+#' convergence check, i.e. history entries 3..iterations, can warn) and emits
+#' the degenerate-class warning, exactly as the pure-R EM drivers do.
+#'
+#' @param res List returned by \code{cpp_em_lca} or \code{cpp_em_constrained}
+#' @param tol Convergence tolerance used in the EM run
+#'
+#' @return List with the same structure as the R EM drivers
+#' @keywords internal
+#' @noRd
+finalize_cpp_em <- function(res, tol) {
+  ll_history <- as.numeric(res$ll_history)
+  n_checked <- res$iterations
+
+  if (n_checked >= 3) {
+    for (k in 3:n_checked) {
+      change <- ll_history[k] - ll_history[k - 1]
+      rel_change <- change / abs(ll_history[k - 1])
+      if (rel_change < -tol) {
+        warning("Log-likelihood decreased by ", format(-change),
+                " between EM iterations (generalized EM ascent property ",
+                "violated); not declaring convergence.", call. = FALSE)
+      }
+    }
+  }
+
+  if (isTRUE(res$degenerate)) {
+    warning("One or more latent classes collapsed (expected class count < 1). ",
+            "The effective number of classes is smaller than requested.",
+            call. = FALSE)
+  }
+
+  list(
+    item_probs = res$item_probs,
+    class_probs = as.numeric(res$class_probs),
+    posteriors = res$posteriors,
+    loglik = ll_history[length(ll_history)],
+    ll_history = ll_history,
+    converged = res$converged,
+    iterations = res$iterations,
+    degenerate = res$degenerate
   )
 }
 
@@ -227,6 +287,11 @@ m_step_exact <- function(data, posteriors, constraints_spec, item_order = NULL) 
 #'   regression M-step) or "optimizer" (general constrained optimizer)
 #' @param optimizer Which optimizer to use when method = "optimizer":
 #'   "alabama" or "nloptr"
+#' @param use_cpp Use the compiled C++ EM engine (default TRUE). Only applies
+#'   to method = "pava"; the "optimizer" method always runs the R path. The R
+#'   implementation (use_cpp = FALSE) is the validation reference; both paths
+#'   produce numerically equivalent results. Progress printing (verbose) is
+#'   only available on the R path.
 #' @param verbose Print progress
 #'
 #' @return List with estimated parameters and diagnostics
@@ -242,6 +307,7 @@ em_constrained <- function(data, n_classes,
                            tol = 1e-6,
                            method = c("pava", "optimizer"),
                            optimizer = c("alabama", "nloptr"),
+                           use_cpp = TRUE,
                            verbose = FALSE) {
 
   method <- match.arg(method)
@@ -266,6 +332,25 @@ em_constrained <- function(data, n_classes,
     class_probs <- init_class_probs(n_classes, "uniform")
   } else {
     class_probs <- init_class_probs
+  }
+
+  # Compiled EM engine for the exact PAVA M-step path (initial values above
+  # are always produced in R so the RNG stream is identical on both paths)
+  if (use_cpp && method == "pava") {
+    class_mono <- isTRUE(constraints_spec$class_monotonicity)
+    item_ord <- isTRUE(constraints_spec$item_ordering)
+    if (class_mono && item_ord && is.null(item_order)) {
+      stop("item_order must be specified for item ordering constraints")
+    }
+    # Mirror project_constraints_weighted(): the item ordering constraint is
+    # only applied when an item order is actually available
+    item_ord_eff <- item_ord && !is.null(item_order)
+    ord <- if (item_ord_eff) as.integer(item_order) else integer(0)
+
+    res <- cpp_em_constrained(data, item_probs, class_probs,
+                              class_mono, item_ord_eff, ord,
+                              as.integer(max_iter), tol)
+    return(finalize_cpp_em(res, tol))
   }
 
   # EM iterations
@@ -500,6 +585,10 @@ m_step_constrained <- function(data, posteriors, current_probs, current_class_pr
 #' @param init_class_probs Initial class probabilities (vector of length C)
 #' @param max_iter Maximum number of iterations
 #' @param tol Convergence tolerance
+#' @param use_cpp Use the compiled C++ E-step and M-step objective
+#'   (default TRUE). The BFGS optimization itself stays in R
+#'   (\code{stats::optim}) so both paths follow the identical optimizer
+#'   trajectory; use_cpp = FALSE runs the pure-R reference implementation.
 #' @param verbose Print progress
 #'
 #' @return List with estimated parameters and diagnostics
@@ -510,6 +599,7 @@ em_lcr <- function(data, n_classes,
                    init_class_probs = NULL,
                    max_iter = 500,
                    tol = 1e-6,
+                   use_cpp = TRUE,
                    verbose = FALSE) {
 
   n_obs <- nrow(data)
@@ -550,7 +640,11 @@ em_lcr <- function(data, n_classes,
     item_probs <- compute_rasch_probs(theta, delta)
 
     # E-step
-    e_result <- e_step(data, item_probs, class_probs)
+    e_result <- if (use_cpp) {
+      cpp_e_step(data, item_probs, class_probs)
+    } else {
+      e_step(data, item_probs, class_probs)
+    }
     posteriors <- e_result$posteriors
     ll_history[iter] <- e_result$loglik
 
@@ -565,7 +659,8 @@ em_lcr <- function(data, n_classes,
     }
 
     # M-step: Update theta, delta, and class_probs
-    m_result <- m_step_rasch(data, posteriors, theta, delta, class_probs)
+    m_result <- m_step_rasch(data, posteriors, theta, delta, class_probs,
+                             use_cpp = use_cpp)
     theta <- m_result$theta
     delta <- m_result$delta
     class_probs <- m_result$class_probs
@@ -580,7 +675,11 @@ em_lcr <- function(data, n_classes,
   # If we exited on max_iter, the parameters were updated after the last
   # E-step; run a final E-step so loglik/posteriors match returned parameters
   if (!converged) {
-    e_result <- e_step(data, item_probs, class_probs)
+    e_result <- if (use_cpp) {
+      cpp_e_step(data, item_probs, class_probs)
+    } else {
+      e_step(data, item_probs, class_probs)
+    }
     posteriors <- e_result$posteriors
     ll_history <- c(ll_history, e_result$loglik)
   }
@@ -632,10 +731,13 @@ compute_rasch_probs <- function(theta, delta) {
 #' @param theta Current theta values
 #' @param delta Current delta values
 #' @param class_probs Current class probabilities
+#' @param use_cpp Evaluate the expected complete-data log-likelihood in C++
+#'   (\code{cpp_lcr_q}); the BFGS optimization itself stays in R either way
 #'
 #' @return List with updated parameters
 #' @keywords internal
-m_step_rasch <- function(data, posteriors, theta, delta, class_probs) {
+m_step_rasch <- function(data, posteriors, theta, delta, class_probs,
+                         use_cpp = FALSE) {
   n_obs <- nrow(data)
   n_items <- ncol(data)
   n_classes <- ncol(posteriors)
@@ -651,7 +753,9 @@ m_step_rasch <- function(data, posteriors, theta, delta, class_probs) {
   par_init <- c(theta, delta[-1])
 
   # Objective: negative expected complete data log-likelihood
-  objective <- function(par) {
+  objective <- if (use_cpp) {
+    function(par) cpp_lcr_q(par, data, posteriors, n_classes)
+  } else function(par) {
     theta_new <- par[1:n_classes]
     delta_free <- par[(n_classes + 1):length(par)]
     delta_new <- c(-sum(delta_free), delta_free)  # mean(delta) = 0 implied

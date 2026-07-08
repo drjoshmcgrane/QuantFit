@@ -11,6 +11,7 @@ fit_un(
   max_iter = 1000,
   tol = 1e-06,
   init_method = c("quantiles", "kmeans", "random"),
+  use_cpp = TRUE,
   seed = NULL,
   verbose = FALSE
 )
@@ -28,6 +29,10 @@ and items in columns.}
 \item{tol}{Convergence tolerance for log-likelihood (default 1e-6)}
 
 \item{init_method}{Initialization method: "quantiles" (default), "kmeans", or "random"}
+
+\item{use_cpp}{Use the compiled C++ EM engine (default TRUE). Set to FALSE
+to run the pure-R reference implementation; both paths produce
+numerically equivalent results.}
 
 \item{seed}{Random seed for reproducibility (optional)}
 

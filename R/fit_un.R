@@ -15,6 +15,9 @@ NULL
 #' @param max_iter Maximum number of EM iterations per start (default 1000)
 #' @param tol Convergence tolerance for log-likelihood (default 1e-6)
 #' @param init_method Initialization method: "quantiles" (default), "kmeans", or "random"
+#' @param use_cpp Use the compiled C++ EM engine (default TRUE). Set to FALSE
+#'   to run the pure-R reference implementation; both paths produce
+#'   numerically equivalent results.
 #' @param seed Random seed for reproducibility (optional)
 #' @param verbose Print progress messages (default FALSE)
 #'
@@ -63,6 +66,7 @@ fit_un <- function(data, n_classes,
                    max_iter = 1000,
                    tol = 1e-6,
                    init_method = c("quantiles", "kmeans", "random"),
+                   use_cpp = TRUE,
                    seed = NULL,
                    verbose = FALSE) {
 
@@ -116,6 +120,7 @@ fit_un <- function(data, n_classes,
         init_class_probs = init_class_probs,
         max_iter = max_iter,
         tol = tol,
+        use_cpp = use_cpp,
         verbose = FALSE
       )
     }, error = function(e) {
@@ -182,6 +187,7 @@ fit_un <- function(data, n_classes,
 #' @param init_class_probs Starting class probabilities
 #' @param max_iter Maximum iterations
 #' @param tol Convergence tolerance
+#' @param use_cpp Use the compiled C++ EM engine (default TRUE)
 #' @param verbose Print progress
 #'
 #' @return qlfit object
@@ -191,6 +197,7 @@ fit_un_single <- function(data, n_classes,
                           init_class_probs,
                           max_iter = 1000,
                           tol = 1e-6,
+                          use_cpp = TRUE,
                           verbose = FALSE) {
 
   data <- validate_data(data)
@@ -205,6 +212,7 @@ fit_un_single <- function(data, n_classes,
     init_class_probs = init_class_probs,
     max_iter = max_iter,
     tol = tol,
+    use_cpp = use_cpp,
     verbose = verbose
   )
 

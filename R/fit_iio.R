@@ -22,6 +22,9 @@ NULL
 #'   constrained optimizer
 #' @param optimizer Optimizer for the constrained M-step when
 #'   method = "optimizer": "alabama" (default) or "nloptr"
+#' @param use_cpp Use the compiled C++ EM engine (default TRUE); only applies
+#'   to method = "pava". Set to FALSE to run the pure-R reference
+#'   implementation; both paths produce numerically equivalent results.
 #' @param seed Random seed for reproducibility (optional)
 #' @param verbose Print progress messages (default FALSE)
 #'
@@ -79,6 +82,7 @@ fit_iio <- function(data, n_classes,
                     tol = 1e-6,
                     method = c("pava", "optimizer"),
                     optimizer = c("alabama", "nloptr"),
+                    use_cpp = TRUE,
                     seed = NULL,
                     verbose = FALSE) {
 
@@ -149,6 +153,7 @@ fit_iio <- function(data, n_classes,
         tol = tol,
         method = method,
         optimizer = optimizer,
+        use_cpp = use_cpp,
         verbose = FALSE
       )
     }, error = function(e) {

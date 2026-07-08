@@ -4,7 +4,7 @@
 \alias{m_step_rasch}
 \title{M-step for Latent Class Rasch model}
 \usage{
-m_step_rasch(data, posteriors, theta, delta, class_probs)
+m_step_rasch(data, posteriors, theta, delta, class_probs, use_cpp = FALSE)
 }
 \arguments{
 \item{data}{Binary data matrix}
@@ -16,6 +16,9 @@ m_step_rasch(data, posteriors, theta, delta, class_probs)
 \item{delta}{Current delta values}
 
 \item{class_probs}{Current class probabilities}
+
+\item{use_cpp}{Evaluate the expected complete-data log-likelihood in C++
+(\code{cpp_lcr_q}); the BFGS optimization itself stays in R either way}
 }
 \value{
 List with updated parameters
