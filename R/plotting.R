@@ -427,7 +427,7 @@ plot_model_comparison <- function(object, criterion = c("BIC", "AIC", "SABIC"), 
 
   # Add delta labels
   delta <- ic_values - min(ic_values)
-  mtext(paste0("Δ=", round(delta, 1)),
+  mtext(paste0("\u0394=", round(delta, 1)),
         side = 1, line = 3, at = seq(0.7, by = 1.2, length.out = n_models),
         cex = 0.7)
 

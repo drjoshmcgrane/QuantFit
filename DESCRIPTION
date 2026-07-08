@@ -38,7 +38,8 @@ Imports:
     numDeriv,
     stats,
     utils,
-    graphics
+    graphics,
+    grDevices
 LinkingTo:
     Rcpp,
     RcppArmadillo

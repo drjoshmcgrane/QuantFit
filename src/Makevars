@@ -1,8 +1,0 @@
-# em_lca.cpp must be compiled without floating-point contraction (no FMA
-# fusing of a*b + c) so that the C++ EM core reproduces the reference R
-# implementations in R/em_algorithm.R and R/constraints.R bit-for-bit:
-# R always rounds each product before accumulating, and fused multiply-adds
-# would otherwise differ in the last bits and let EM trajectories diverge.
-# The flag is scoped to em_lca.o (GNU make target-specific variable) so the
-# pre-existing conjoint-sampler sources keep their original flags.
-em_lca.o: PKG_CXXFLAGS += -ffp-contract=off

@@ -653,13 +653,13 @@ List cpp_em_constrained(const arma::mat& data, const arma::mat& init_probs,
 //' C++ objective for the Latent Class Rasch M-step (internal)
 //'
 //' Negative expected complete-data log-likelihood as a function of the free
-//' parameter vector \code{par = c(theta, delta[-1])} with the mean(delta) = 0
-//' identification constraint (delta[1] = -sum(delta[-1])). Exact port of the
+//' parameter vector \code{par = c(theta, delta\[-1\])} with the mean(delta) = 0
+//' identification constraint (delta\[1\] = -sum(delta\[-1\])). Exact port of the
 //' objective closure inside \code{m_step_rasch()}; the surrounding BFGS
 //' optimization (\code{stats::optim}, finite-difference gradients) stays in R
 //' so the optimizer trajectory is identical to the pure-R path.
 //'
-//' @param par Parameter vector c(theta, delta[-1]) of length C + I - 1
+//' @param par Parameter vector c(theta, delta\[-1\]) of length C + I - 1
 //' @param data Binary data matrix (n x I)
 //' @param posteriors Posterior class membership matrix (n x C)
 //' @param n_classes Number of latent classes

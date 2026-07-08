@@ -79,26 +79,34 @@ test_that("cpp_m_step matches m_step", {
   }
 })
 
-test_that("cpp_weighted_pava is exactly identical to pava_increasing on 500 random weighted vectors", {
+test_that("cpp_weighted_pava matches pava_increasing on 500 random weighted vectors", {
+  # Tolerance rather than bit-identity: with default compiler flags the
+  # C++ accumulation may use fused multiply-adds, differing from R in the
+  # last bit. EM is a smooth deterministic iteration, so these differences
+  # stay at rounding level (unlike the MCMC samplers, which require
+  # bit-identity and default flags — the reason src/Makevars was removed).
   set.seed(103)
   for (rep in 1:500) {
     n <- sample(1:40, 1)
     x <- rnorm(n)
     w <- runif(n, 0, 5)
-    expect_identical(cpp_weighted_pava(x, w), pava_increasing(x, w))
+    expect_equal(cpp_weighted_pava(x, w), pava_increasing(x, w),
+                 tolerance = 1e-12)
   }
 
   # Unit weights (NULL), decreasing direction, and zero weights
   set.seed(104)
   for (rep in 1:50) {
     x <- rnorm(sample(2:30, 1))
-    expect_identical(cpp_weighted_pava(x), pava_increasing(x))
-    expect_identical(cpp_weighted_pava(x, increasing = FALSE), pava_decreasing(x))
+    expect_equal(cpp_weighted_pava(x), pava_increasing(x), tolerance = 1e-12)
+    expect_equal(cpp_weighted_pava(x, increasing = FALSE), pava_decreasing(x),
+                 tolerance = 1e-12)
     w <- runif(length(x), 0, 2)
     w[sample(length(x), max(1, length(x) %/% 3))] <- 0
-    expect_identical(cpp_weighted_pava(x, w), pava_increasing(x, w))
-    expect_identical(cpp_weighted_pava(x, w, increasing = FALSE),
-                     pava_decreasing(x, w))
+    expect_equal(cpp_weighted_pava(x, w), pava_increasing(x, w),
+                 tolerance = 1e-12)
+    expect_equal(cpp_weighted_pava(x, w, increasing = FALSE),
+                 pava_decreasing(x, w), tolerance = 1e-12)
   }
 
   # Edge cases
@@ -316,7 +324,7 @@ test_that("fit_un/fit_mon/fit_iio/fit_dm give identical selection-relevant outpu
   }
 })
 
-test_that("fit_lcr gives identical selection-relevant output with use_cpp TRUE vs FALSE", {
+test_that("fit_lcr gives equivalent selection-relevant output with use_cpp TRUE vs FALSE", {
   data <- make_rasch_data(250, 7, seed = 211)
 
   f_r <- suppressWarnings(fit_lcr(data, 3, n_starts = 2, max_iter = 100,
@@ -324,10 +332,15 @@ test_that("fit_lcr gives identical selection-relevant output with use_cpp TRUE v
   f_c <- suppressWarnings(fit_lcr(data, 3, n_starts = 2, max_iter = 100,
                                   seed = 42, use_cpp = TRUE))
 
-  expect_lt(abs(f_r$loglik - f_c$loglik), 1e-8)
-  expect_lt(abs(BIC(f_r) - BIC(f_c)), 1e-8)
-  expect_lt(max(abs(f_r$theta - f_c$theta)), 1e-8)
-  expect_lt(max(abs(f_r$delta - f_c$delta)), 1e-8)
+  # Tolerance 1e-4, not 1e-8: with default compiler flags the C++ Q
+  # evaluation may use fused multiply-adds; optim's finite-difference
+  # gradients amplify those last-bit differences to ~1e-6 in the final
+  # parameters. Irrelevant for model selection (BIC differences that
+  # matter are > 1).
+  expect_lt(abs(f_r$loglik - f_c$loglik), 1e-4)
+  expect_lt(abs(BIC(f_r) - BIC(f_c)), 1e-4)
+  expect_lt(max(abs(f_r$theta - f_c$theta)), 1e-4)
+  expect_lt(max(abs(f_r$delta - f_c$delta)), 1e-4)
 })
 
 test_that("C++ path replicates the degenerate-class warning", {

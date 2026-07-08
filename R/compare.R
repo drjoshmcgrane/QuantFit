@@ -519,7 +519,7 @@ plot_comparison <- function(x, criterion = c("BIC", "AIC", "both"), ...) {
     delta_values <- values - min(values)
     text(seq(0.7, by = 1.2, length.out = nrow(tbl)),
          values + diff(range(values)) * 0.05,
-         labels = paste0("Δ=", round(delta_values, 1)),
+         labels = paste0("\u0394=", round(delta_values, 1)),
          cex = 0.8)
   }
 
