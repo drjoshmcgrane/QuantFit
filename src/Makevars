@@ -1,0 +1,4 @@
+# Standard RcppArmadillo link line: em_lca.cpp calls BLAS (dgemv/dgemm)
+# directly. On Windows these symbols live in Rblas.dll and must be linked
+# explicitly; macOS/Linux resolve them transitively through libR.
+PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
