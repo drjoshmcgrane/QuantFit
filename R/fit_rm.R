@@ -23,7 +23,8 @@ NULL
 #'   \item{delta}{Vector of item difficulty parameters}
 #'   \item{posteriors}{Not directly available (set to NULL)}
 #'   \item{loglik}{Maximized log-likelihood}
-#'   \item{n_par}{Number of estimated parameters (I-1 difficulties)}
+#'   \item{n_par}{Number of estimated parameters (I item intercepts plus the
+#'     latent variance, as counted by \code{mirt::extract.mirt(fit, "nest")})}
 #'   \item{convergence}{Logical indicating successful convergence}
 #'   \item{mirt_object}{The underlying mirt object for additional methods}
 #' }
@@ -112,8 +113,9 @@ fit_rm <- function(data, method = c("EM", "MHRM", "QMCEM"),
   delta <- -coefs$items[, "d"]  # mirt uses d = -delta convention
   names(delta) <- rownames(coefs$items)
 
-  # Center delta (mean = 0 for identification)
-  delta <- delta - mean(delta)
+  # Note: delta is NOT re-centered. mirt's scale (latent mean fixed at 0)
+  # is already identified, and re-centering would make delta inconsistent
+  # with rm_scores() thetas and item_probs.
 
   # Extract log-likelihood
   loglik <- mirt::extract.mirt(mirt_fit, "logLik")
@@ -130,9 +132,12 @@ fit_rm <- function(data, method = c("EM", "MHRM", "QMCEM"),
     item_probs[, t] <- inv_logit(theta_grid[t] - delta)
   }
 
-  # Number of parameters: I-1 difficulties (one fixed for identification)
-  # Note: mirt may count this differently depending on parameterization
-  n_par <- n_items - 1
+  # Number of parameters: mirt's Rasch estimates I item intercepts plus the
+  # latent variance (latent mean fixed at 0) = I + 1. Use mirt's own count.
+  n_par <- tryCatch(
+    as.integer(mirt::extract.mirt(mirt_fit, "nest")),
+    error = function(e) n_items + 1L
+  )
 
   # Create qlfit object
   result <- new_qlfit(

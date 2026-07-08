@@ -17,7 +17,6 @@ NULL
 #' @param n_starts Number of random starting values to try (default 10)
 #' @param max_iter Maximum number of EM iterations per start (default 500)
 #' @param tol Convergence tolerance for log-likelihood (default 1e-6)
-#' @param optimizer Optimizer for constrained M-step: "alabama" (default) or "nloptr"
 #' @param seed Random seed for reproducibility (optional)
 #' @param verbose Print progress messages (default FALSE)
 #'
@@ -51,6 +50,12 @@ NULL
 #' and when it fits well, provides stronger evidence for an ordinal interpretation
 #' of the latent variable.
 #'
+#' Estimation uses a projected EM algorithm whose M-step is exact: the
+#' constrained maximizer of the expected complete-data log-likelihood equals
+#' the 2D weighted isotonic regression of the unconstrained M-step means
+#' (with expected class counts as weights), computed via Dykstra's
+#' alternating-projections algorithm.
+#'
 #' @examples
 #' \dontrun{
 #' # Generate data with double monotonicity structure
@@ -83,7 +88,6 @@ fit_dm <- function(data, n_classes,
                    n_starts = 10,
                    max_iter = 500,
                    tol = 1e-6,
-                   method = c("projection", "optimizer"),
                    seed = NULL,
                    verbose = FALSE) {
 
@@ -92,7 +96,6 @@ fit_dm <- function(data, n_classes,
 
   # Validate inputs
   data <- validate_data(data)
-  method <- match.arg(method)
 
   n_obs <- nrow(data)
   n_items <- ncol(data)
@@ -126,7 +129,7 @@ fit_dm <- function(data, n_classes,
     item_order = item_order
   )
 
-  # Use projection-based EM (more stable for double constraints)
+  # Projected EM with the exact Dykstra M-step
   best_fit <- NULL
   best_ll <- -Inf
 
@@ -139,52 +142,49 @@ fit_dm <- function(data, n_classes,
     init_probs <- init_item_probs_dm(data, n_classes, item_order, start_seed)
     init_class_probs <- init_class_probs(n_classes, "random", start_seed)
 
-    # EM with projection after each M-step
-    item_probs <- init_probs
-    class_probs <- init_class_probs
+    fit <- tryCatch({
+      em_constrained(
+        data = data,
+        n_classes = n_classes,
+        constraints_spec = constraints_spec,
+        item_order = item_order,
+        init_probs = init_probs,
+        init_class_probs = init_class_probs,
+        max_iter = max_iter,
+        tol = tol,
+        method = "pava",
+        verbose = FALSE
+      )
+    }, error = function(e) {
+      if (verbose) cat("failed: ", e$message, "\n")
+      NULL
+    })
 
-    ll_history <- numeric(max_iter)
-    converged <- FALSE
-
-    for (iter in 1:max_iter) {
-      # E-step
-      e_result <- e_step(data, item_probs, class_probs)
-      posteriors <- e_result$posteriors
-      ll_history[iter] <- e_result$loglik
-
-      # Check convergence
-      if (iter > 1 && check_convergence(ll_history[1:iter], tol)) {
-        converged <- TRUE
-        break
+    if (!is.null(fit)) {
+      # Project only if infeasible (numerical tolerance), using the weighted
+      # projection with the final E-step weights; recompute LL afterwards
+      feas <- check_constraints(fit$item_probs, constraints_spec, item_order)
+      if (!feas$satisfied) {
+        class_counts <- colSums(fit$posteriors)
+        fit$item_probs <- project_constraints_weighted(
+          fit$item_probs, constraints_spec, item_order,
+          class_weights = class_counts
+        )
+        e_final <- e_step(data, fit$item_probs, fit$class_probs)
+        fit$posteriors <- e_final$posteriors
+        fit$loglik <- e_final$loglik
       }
 
-      # M-step (unconstrained)
-      m_result <- m_step(data, posteriors)
+      if (verbose) {
+        cat("LL =", round(fit$loglik, 2))
+        if (fit$loglik > best_ll) cat(" (new best)")
+        cat("\n")
+      }
 
-      # Project onto double monotonicity constraint space
-      item_probs <- project_dm_constraints(m_result$item_probs, item_order)
-      class_probs <- m_result$class_probs
-    }
-
-    ll_history <- ll_history[1:iter]
-    final_ll <- ll_history[iter]
-
-    if (verbose) {
-      cat("LL =", round(final_ll, 2))
-      if (final_ll > best_ll) cat(" (new best)")
-      cat("\n")
-    }
-
-    if (final_ll > best_ll) {
-      best_fit <- list(
-        item_probs = item_probs,
-        class_probs = class_probs,
-        posteriors = posteriors,
-        loglik = final_ll,
-        converged = converged,
-        iterations = iter
-      )
-      best_ll <- final_ll
+      if (fit$loglik > best_ll) {
+        best_fit <- fit
+        best_ll <- fit$loglik
+      }
     }
   }
 
@@ -222,6 +222,9 @@ fit_dm <- function(data, n_classes,
     constraints = constraints_spec,
     se = NULL
   )
+
+  # Flag collapsed classes so users know the effective number of classes
+  result$degenerate <- isTRUE(best_fit$degenerate)
 
   result
 }
@@ -277,46 +280,27 @@ init_item_probs_dm <- function(data, n_classes, item_order, seed = NULL) {
 
 #' Project onto double monotonicity constraint space
 #'
-#' Uses iterative projection algorithm to satisfy both MON and IIO constraints
+#' Exact (weighted) L2 projection onto the intersection of the class
+#' monotonicity and item ordering constraint sets, computed via Dykstra's
+#' alternating-projections algorithm (see
+#' \code{\link{dykstra_dm_projection}}).
 #'
 #' @param item_probs Item probability matrix (I x C)
 #' @param item_order Item order vector
-#' @param max_iter Maximum projection iterations
+#' @param class_weights Optional class weights (e.g. expected class counts);
+#'   NULL means unit weights
+#' @param max_iter Maximum projection cycles
 #' @param tol Convergence tolerance
 #'
 #' @return Projected item probability matrix
 #' @keywords internal
-project_dm_constraints <- function(item_probs, item_order, max_iter = 100, tol = 1e-8) {
-  n_items <- nrow(item_probs)
-  n_classes <- ncol(item_probs)
-
-  probs <- item_probs
-
-  for (iter in 1:max_iter) {
-    old_probs <- probs
-
-    # Project class monotonicity (rows non-decreasing)
-    for (i in 1:n_items) {
-      probs[i, ] <- pava_increasing(probs[i, ])
-    }
-
-    # Project item ordering (within each class, ordered items have decreasing probs)
-    for (c in 1:n_classes) {
-      ordered_probs <- probs[item_order, c]
-      ordered_probs <- pava_decreasing(ordered_probs)
-      probs[item_order, c] <- ordered_probs
-    }
-
-    # Check convergence
-    if (max(abs(probs - old_probs)) < tol) {
-      break
-    }
-  }
-
-  # Ensure bounded
-  probs <- bound_probs(probs)
-
-  probs
+project_dm_constraints <- function(item_probs, item_order,
+                                   class_weights = NULL,
+                                   max_iter = 500, tol = 1e-10) {
+  probs <- dykstra_dm_projection(item_probs, item_order,
+                                 class_weights = class_weights,
+                                 tol = tol, max_cycles = max_iter)
+  bound_probs(probs)
 }
 
 #' Fit DM model using projection method
@@ -387,16 +371,22 @@ fit_dm_projection <- function(data, n_classes,
         break
       }
 
-      # M-step (unconstrained)
-      m_result <- m_step(data, posteriors)
-
-      # Project onto both constraint spaces
-      item_probs <- project_dm_constraints(m_result$item_probs, item_order)
+      # Exact constrained M-step (Dykstra with expected class counts)
+      m_result <- m_step_exact(data, posteriors, constraints_spec, item_order)
+      item_probs <- m_result$item_probs
       class_probs <- m_result$class_probs
     }
 
     ll_history <- ll_history[1:iter]
-    final_ll <- ll_history[iter]
+
+    # Consistency on max_iter exit: recompute E-step for final parameters
+    if (!converged) {
+      e_result <- e_step(data, item_probs, class_probs)
+      posteriors <- e_result$posteriors
+      ll_history <- c(ll_history, e_result$loglik)
+    }
+
+    final_ll <- ll_history[length(ll_history)]
 
     if (verbose) {
       cat("LL =", round(final_ll, 2))

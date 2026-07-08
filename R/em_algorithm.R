@@ -68,14 +68,30 @@ em_lca <- function(data, n_classes,
   # Trim history
   ll_history <- ll_history[1:iter]
 
+  # If we exited on max_iter, the parameters were updated after the last
+  # E-step; run a final E-step so loglik/posteriors match returned parameters
+  if (!converged) {
+    e_result <- e_step(data, item_probs, class_probs)
+    posteriors <- e_result$posteriors
+    ll_history <- c(ll_history, e_result$loglik)
+  }
+
+  degenerate <- any(colSums(posteriors) < 1)
+  if (degenerate) {
+    warning("One or more latent classes collapsed (expected class count < 1). ",
+            "The effective number of classes is smaller than requested.",
+            call. = FALSE)
+  }
+
   list(
     item_probs = item_probs,
     class_probs = class_probs,
     posteriors = posteriors,
-    loglik = ll_history[iter],
+    loglik = ll_history[length(ll_history)],
     ll_history = ll_history,
     converged = converged,
-    iterations = iter
+    iterations = iter,
+    degenerate = degenerate
   )
 }
 
@@ -135,6 +151,10 @@ m_step <- function(data, posteriors) {
 
   # Update item probabilities
   item_probs <- matrix(0, nrow = n_items, ncol = n_classes)
+  # Flag classes whose expected count has collapsed below ~1 observation:
+  # their item probabilities are essentially unidentified and the effective
+  # number of classes is smaller than requested.
+  degenerate <- any(colSums(posteriors) < 1)
   for (c in 1:n_classes) {
     # Weighted mean of data
     weights <- posteriors[, c]
@@ -150,7 +170,43 @@ m_step <- function(data, posteriors) {
 
   list(
     item_probs = item_probs,
-    class_probs = class_probs
+    class_probs = class_probs,
+    degenerate = degenerate
+  )
+}
+
+#' Exact constrained M-step via weighted isotonic regression
+#'
+#' The constrained M-step maximizes
+#' \eqn{Q(p) = \sum_c N_c [\bar{p}_{ic} \log p_{ic} +
+#' (1-\bar{p}_{ic}) \log(1-p_{ic})]} where \eqn{N_c} are the expected class
+#' counts and \eqn{\bar{p}_{ic}} the unconstrained weighted means. By the
+#' exponential-family isotonic MLE theorem (Robertson, Wright & Dykstra),
+#' the constrained maximizer equals the weighted L2 isotonic regression of
+#' \eqn{\bar{p}} with weights \eqn{N_c}, computed by
+#' \code{\link{project_constraints_weighted}}. This M-step is exact, so the
+#' EM retains its monotone ascent property.
+#'
+#' @param data Binary data matrix
+#' @param posteriors Posterior class memberships (n x C)
+#' @param constraints_spec A ql_constraints object
+#' @param item_order Item order vector (needed for item ordering constraints)
+#'
+#' @return List with updated item_probs, class_probs, degenerate flag
+#' @keywords internal
+m_step_exact <- function(data, posteriors, constraints_spec, item_order = NULL) {
+  m_result <- m_step(data, posteriors)
+  class_counts <- colSums(posteriors)
+
+  item_probs <- project_constraints_weighted(
+    m_result$item_probs, constraints_spec, item_order,
+    class_weights = class_counts
+  )
+
+  list(
+    item_probs = item_probs,
+    class_probs = m_result$class_probs,
+    degenerate = m_result$degenerate
   )
 }
 
@@ -158,31 +214,46 @@ m_step <- function(data, posteriors) {
 #'
 #' @param data Binary data matrix (n x I)
 #' @param n_classes Number of latent classes
-#' @param constraint_fn Function that returns inequality constraints (should be >= 0)
+#' @param constraints_spec A ql_constraints object describing the constraints
+#' @param item_order Item order vector (needed for item ordering constraints)
+#' @param constraint_fn Function that returns inequality constraints
+#'   (should be >= 0); only needed for method = "optimizer"
 #' @param constraint_grad Gradient of constraint function (optional)
 #' @param init_probs Initial item probabilities (I x C matrix)
 #' @param init_class_probs Initial class probabilities (vector of length C)
 #' @param max_iter Maximum number of EM iterations
 #' @param tol Convergence tolerance
-#' @param optimizer Which optimizer to use: "alabama" or "nloptr"
+#' @param method M-step method: "pava" (default; exact weighted isotonic
+#'   regression M-step) or "optimizer" (general constrained optimizer)
+#' @param optimizer Which optimizer to use when method = "optimizer":
+#'   "alabama" or "nloptr"
 #' @param verbose Print progress
 #'
 #' @return List with estimated parameters and diagnostics
 #' @keywords internal
 em_constrained <- function(data, n_classes,
-                           constraint_fn,
+                           constraints_spec,
+                           item_order = NULL,
+                           constraint_fn = NULL,
                            constraint_grad = NULL,
                            init_probs = NULL,
                            init_class_probs = NULL,
                            max_iter = 500,
                            tol = 1e-6,
+                           method = c("pava", "optimizer"),
                            optimizer = c("alabama", "nloptr"),
                            verbose = FALSE) {
 
+  method <- match.arg(method)
   optimizer <- match.arg(optimizer)
 
   n_obs <- nrow(data)
   n_items <- ncol(data)
+
+  if (method == "optimizer" && is.null(constraint_fn)) {
+    constraint_fn <- build_constraint_fn(constraints_spec, n_items, n_classes,
+                                         item_order)
+  }
 
   # Initialize parameters
   if (is.null(init_probs)) {
@@ -200,6 +271,7 @@ em_constrained <- function(data, n_classes,
   # EM iterations
   ll_history <- numeric(max_iter)
   converged <- FALSE
+  optimizer_warned <- FALSE
 
   for (iter in 1:max_iter) {
     # E-step: Compute posteriors (same as unconstrained)
@@ -217,11 +289,23 @@ em_constrained <- function(data, n_classes,
       break
     }
 
-    # M-step: Constrained optimization
-    m_result <- m_step_constrained(
-      data, posteriors, item_probs, class_probs,
-      constraint_fn, constraint_grad, optimizer
-    )
+    # M-step
+    if (method == "pava") {
+      # Exact constrained M-step via weighted isotonic regression
+      m_result <- m_step_exact(data, posteriors, constraints_spec, item_order)
+    } else {
+      m_result <- m_step_constrained(
+        data, posteriors, item_probs, class_probs,
+        constraint_fn, constraint_grad, optimizer,
+        constraints_spec = constraints_spec, item_order = item_order
+      )
+      if (isTRUE(m_result$optimizer_failed) && !optimizer_warned) {
+        warning("Constrained optimizer failed in the M-step; ",
+                "falling back to the exact weighted-PAVA M-step.",
+                call. = FALSE)
+        optimizer_warned <- TRUE
+      }
+    }
     item_probs <- m_result$item_probs
     class_probs <- m_result$class_probs
   }
@@ -229,14 +313,30 @@ em_constrained <- function(data, n_classes,
   # Trim history
   ll_history <- ll_history[1:iter]
 
+  # If we exited on max_iter, the parameters were updated after the last
+  # E-step; run a final E-step so loglik/posteriors match returned parameters
+  if (!converged) {
+    e_result <- e_step(data, item_probs, class_probs)
+    posteriors <- e_result$posteriors
+    ll_history <- c(ll_history, e_result$loglik)
+  }
+
+  degenerate <- any(colSums(posteriors) < 1)
+  if (degenerate) {
+    warning("One or more latent classes collapsed (expected class count < 1). ",
+            "The effective number of classes is smaller than requested.",
+            call. = FALSE)
+  }
+
   list(
     item_probs = item_probs,
     class_probs = class_probs,
     posteriors = posteriors,
-    loglik = ll_history[iter],
+    loglik = ll_history[length(ll_history)],
     ll_history = ll_history,
     converged = converged,
-    iterations = iter
+    iterations = iter,
+    degenerate = degenerate
   )
 }
 
@@ -249,11 +349,15 @@ em_constrained <- function(data, n_classes,
 #' @param constraint_fn Constraint function
 #' @param constraint_grad Gradient of constraints
 #' @param optimizer Optimizer choice
+#' @param constraints_spec ql_constraints object used for the exact
+#'   weighted-PAVA fallback if the optimizer fails
+#' @param item_order Item order vector for the fallback (if needed)
 #'
-#' @return List with updated parameters
+#' @return List with updated parameters and an optimizer_failed flag
 #' @keywords internal
 m_step_constrained <- function(data, posteriors, current_probs, current_class_probs,
-                               constraint_fn, constraint_grad, optimizer) {
+                               constraint_fn, constraint_grad, optimizer,
+                               constraints_spec = NULL, item_order = NULL) {
 
   n_items <- ncol(data)
   n_classes <- ncol(posteriors)
@@ -316,6 +420,8 @@ m_step_constrained <- function(data, posteriors, current_probs, current_class_pr
   upper <- rep(1 - eps, length(par_init))
 
   # Run constrained optimization
+  optimizer_failed <- FALSE
+
   if (optimizer == "alabama") {
     result <- tryCatch({
       alabama::constrOptim.nl(
@@ -326,12 +432,13 @@ m_step_constrained <- function(data, posteriors, current_probs, current_class_pr
         control.outer = list(trace = FALSE, eps = 1e-6),
         control.optim = list(maxit = 100)
       )
-    }, error = function(e) {
-      # Fall back to unconstrained with projection
-      list(par = par_init, convergence = 1)
-    })
+    }, error = function(e) NULL)
 
-    new_par <- result$par
+    if (is.null(result)) {
+      optimizer_failed <- TRUE
+    } else {
+      new_par <- result$par
+    }
 
   } else if (optimizer == "nloptr") {
     result <- tryCatch({
@@ -349,11 +456,28 @@ m_step_constrained <- function(data, posteriors, current_probs, current_class_pr
           print_level = 0
         )
       )
-    }, error = function(e) {
-      list(solution = par_init, status = -1)
-    })
+    }, error = function(e) NULL)
 
-    new_par <- result$solution
+    if (is.null(result) || result$status < 0) {
+      optimizer_failed <- TRUE
+    } else {
+      new_par <- result$solution
+    }
+  }
+
+  if (optimizer_failed) {
+    # Fall back to the exact weighted-PAVA/Dykstra M-step rather than
+    # silently returning the unchanged parameters (which stalled the EM)
+    if (!is.null(constraints_spec)) {
+      m_exact <- m_step_exact(data, posteriors, constraints_spec, item_order)
+      return(list(
+        item_probs = m_exact$item_probs,
+        class_probs = class_probs,
+        optimizer_failed = TRUE
+      ))
+    }
+    # No constraint specification available: keep current values but signal
+    new_par <- par_init
   }
 
   # Convert back to matrix
@@ -362,7 +486,8 @@ m_step_constrained <- function(data, posteriors, current_probs, current_class_pr
 
   list(
     item_probs = item_probs,
-    class_probs = class_probs
+    class_probs = class_probs,
+    optimizer_failed = optimizer_failed
   )
 }
 
@@ -452,16 +577,32 @@ em_lcr <- function(data, n_classes,
   # Trim history
   ll_history <- ll_history[1:iter]
 
+  # If we exited on max_iter, the parameters were updated after the last
+  # E-step; run a final E-step so loglik/posteriors match returned parameters
+  if (!converged) {
+    e_result <- e_step(data, item_probs, class_probs)
+    posteriors <- e_result$posteriors
+    ll_history <- c(ll_history, e_result$loglik)
+  }
+
+  degenerate <- any(colSums(posteriors) < 1)
+  if (degenerate) {
+    warning("One or more latent classes collapsed (expected class count < 1). ",
+            "The effective number of classes is smaller than requested.",
+            call. = FALSE)
+  }
+
   list(
     theta = theta,
     delta = delta,
     item_probs = item_probs,
     class_probs = class_probs,
     posteriors = posteriors,
-    loglik = ll_history[iter],
+    loglik = ll_history[length(ll_history)],
     ll_history = ll_history,
     converged = converged,
-    iterations = iter
+    iterations = iter,
+    degenerate = degenerate
   )
 }
 
@@ -502,17 +643,18 @@ m_step_rasch <- function(data, posteriors, theta, delta, class_probs) {
   # Update class probabilities
   class_probs <- colSums(posteriors) / n_obs
 
-  # Pack parameters for optimization
-  # par = c(theta[-1], delta[-1])  # Fix theta[1] = 0 and delta[1] = 0 for identification
-  # Actually, let's fix mean(delta) = 0
-
-  par_init <- c(theta, delta[-1])  # Fix delta[1]
+  # Free parameters: theta (all C) and delta_2..delta_J, with
+  # delta_1 = -sum(delta_2..delta_J) implied by the mean(delta) = 0
+  # identification constraint. Because the current delta already satisfies
+  # mean(delta) = 0, the objective evaluates exactly the current Q at
+  # par_init, preserving the generalized-EM ascent property.
+  par_init <- c(theta, delta[-1])
 
   # Objective: negative expected complete data log-likelihood
   objective <- function(par) {
     theta_new <- par[1:n_classes]
-    delta_new <- c(0, par[(n_classes + 1):length(par)])  # delta[1] = 0
-    delta_new <- delta_new - mean(delta_new)  # Re-center
+    delta_free <- par[(n_classes + 1):length(par)]
+    delta_new <- c(-sum(delta_free), delta_free)  # mean(delta) = 0 implied
 
     item_probs <- compute_rasch_probs(theta_new, delta_new)
     item_probs <- bound_probs(item_probs)
@@ -536,10 +678,13 @@ m_step_rasch <- function(data, posteriors, theta, delta, class_probs) {
     control = list(maxit = 50)
   )
 
-  # Unpack parameters
-  theta <- result$par[1:n_classes]
-  delta <- c(0, result$par[(n_classes + 1):length(result$par)])
-  delta <- delta - mean(delta)  # Identification: mean(delta) = 0
+  # Guard the generalized-EM ascent property: only accept the update if it
+  # does not worsen the expected complete-data log-likelihood
+  if (result$value <= objective(par_init) + 1e-10) {
+    theta <- result$par[1:n_classes]
+    delta_free <- result$par[(n_classes + 1):length(result$par)]
+    delta <- c(-sum(delta_free), delta_free)
+  }
 
   list(
     theta = theta,

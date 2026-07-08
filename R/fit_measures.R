@@ -41,11 +41,21 @@ fit_measures.qlfit <- function(object, ...) {
 #' Compute G-squared (likelihood ratio chi-square)
 #'
 #' G² = 2 * sum(O * log(O/E)) where O is observed and E is expected frequency
+#' (E = n * P(pattern) under the fitted model; patterns with O = 0 contribute
+#' zero to the sum).
 #'
 #' @param object A qlfit object
 #' @param data Original data matrix (needed for computation)
 #'
 #' @return G-squared value with degrees of freedom
+#'
+#' @details
+#' Degrees of freedom are computed against the full multinomial over all
+#' \eqn{2^I} response patterns: \eqn{df = 2^I - 1 - n_{par}}. Note that when
+#' many cells are empty (sparse tables, common for larger I), the chi-square
+#' reference distribution is questionable and the p-value should be treated
+#' with caution.
+#'
 #' @export
 g_squared <- function(object, data) {
   UseMethod("g_squared")
@@ -61,28 +71,29 @@ g_squared.qlfit <- function(object, data) {
   # Get observed pattern frequencies
   patterns <- pattern_frequencies(data)
 
-  # Compute expected frequencies under the model
+  # Compute expected frequencies under the model: E = n * P(pattern)
   n_obs <- nrow(data)
-  expected <- compute_expected_frequencies(
+  n_items <- ncol(data)
+  expected_probs <- compute_expected_frequencies(
     object$item_probs,
     object$class_probs,
     patterns$pattern
   )
+  expected <- expected_probs * n_obs
 
-  # Compute G-squared
+  # Compute G-squared (patterns with O = 0 contribute 0)
   observed <- patterns$frequency
-  # Avoid log(0) issues
   valid <- observed > 0 & expected > 0
   g2 <- 2 * sum(observed[valid] * log(observed[valid] / expected[valid]))
 
-  # Degrees of freedom: number of patterns - 1 - number of parameters
-  n_patterns <- nrow(patterns)
-  df <- n_patterns - 1 - object$n_par
+  # Degrees of freedom against the full multinomial over 2^I patterns.
+  # Caveat: with many empty cells the chi-square approximation is poor.
+  df <- 2^n_items - 1 - object$n_par
 
   result <- list(
     statistic = g2,
     df = df,
-    p_value = pchisq(g2, df, lower.tail = FALSE)
+    p_value = if (df > 0) pchisq(g2, df, lower.tail = FALSE) else NA_real_
   )
   class(result) <- "g_squared"
 
@@ -120,13 +131,7 @@ compute_expected_frequencies <- function(item_probs, class_probs, patterns) {
     expected[p] <- prob
   }
 
-  # Scale by sample size (extract from patterns via sum)
-  total_observed <- sum(sapply(patterns, function(p) {
-    # This needs the frequency info which we don't have here
-    # So the caller should handle scaling
-    1
-  }))
-
+  # Returns pattern probabilities; the caller scales by sample size
   expected
 }
 
@@ -162,19 +167,24 @@ pearson_chisq.qlfit <- function(object, data) {
   )
   expected <- expected_probs * n_obs
 
-  # Compute chi-square
+  # Compute chi-square over observed patterns, plus the contribution of the
+  # unobserved patterns: for O = 0 the term (O - E)^2 / E equals E, and the
+  # expected frequencies over all 2^I patterns sum to n, so the unobserved
+  # contribution is n - sum(E over observed patterns).
   observed <- patterns$frequency
   valid <- expected > 0
-  x2 <- sum((observed[valid] - expected[valid])^2 / expected[valid])
+  x2 <- sum((observed[valid] - expected[valid])^2 / expected[valid]) +
+    max(0, n_obs - sum(expected[valid]))
 
-  # Degrees of freedom
-  n_patterns <- nrow(patterns)
-  df <- n_patterns - 1 - object$n_par
+  # Degrees of freedom against the full multinomial over 2^I patterns
+  # (same sparseness caveat as g_squared)
+  n_items <- ncol(data)
+  df <- 2^n_items - 1 - object$n_par
 
   result <- list(
     statistic = x2,
     df = df,
-    p_value = pchisq(x2, df, lower.tail = FALSE)
+    p_value = if (df > 0) pchisq(x2, df, lower.tail = FALSE) else NA_real_
   )
   class(result) <- "pearson_chisq"
 
@@ -191,7 +201,15 @@ pearson_chisq.qlfit <- function(object, data) {
 #' @details
 #' This test is appropriate when model0 is nested within model1.
 #' For QuantFit models, this applies when comparing RM to LCR (with many classes)
-#' but NOT when comparing UN to constrained models (same parameters, different constraints).
+#' but NOT when comparing UN to constrained models (MON, IIO, DM): those share
+#' the same parameter count and differ only by inequality constraints, so the
+#' LR statistic follows a chi-bar-squared (mixture of chi-squares)
+#' distribution, not a chi-square with 0 df. In that case the p-value is
+#' returned as NA with an explanatory message.
+#'
+#' When comparing LCR or RM to other models, note that parameters may lie on
+#' the boundary of the parameter space, in which case the chi-square
+#' approximation is conservative.
 #'
 #' @export
 lr_test <- function(model0, model1) {
@@ -212,19 +230,37 @@ lr_test <- function(model0, model1) {
   lr_stat <- -2 * (model0$loglik - model1$loglik)
   df <- model1$n_par - model0$n_par
 
-  if (df <= 0) {
-    warning("Degrees of freedom <= 0. Models may not be nested.")
-    df <- abs(df)
+  note <- NULL
+  if (df == 0) {
+    # Same parameter count: models differ by inequality constraints only
+    # (e.g. UN vs MON/IIO/DM). The LR statistic follows a chi-bar-squared
+    # mixture, not chi-square with 0 df, so no standard p-value exists.
+    note <- paste(
+      "The models have the same number of parameters and differ only by",
+      "inequality constraints. The LR statistic follows a chi-bar-squared",
+      "(mixture of chi-squares) distribution; the standard chi-square test",
+      "does not apply. Returning NA p-value. Consider information criteria",
+      "or a parametric bootstrap instead."
+    )
+    warning(note, call. = FALSE)
+    p_value <- NA_real_
+  } else {
+    # Boundary-condition caveat for LCR/RM comparisons
+    if (any(c(model0$model_type, model1$model_type) %in% c("LCR", "RM"))) {
+      warning("Comparison involves LCR/RM: parameters may lie on the ",
+              "boundary of the parameter space, so the chi-square p-value ",
+              "may be conservative.", call. = FALSE)
+    }
+    p_value <- pchisq(lr_stat, df, lower.tail = FALSE)
   }
-
-  p_value <- pchisq(lr_stat, df, lower.tail = FALSE)
 
   result <- list(
     statistic = lr_stat,
     df = df,
     p_value = p_value,
     model0 = model0$model_type,
-    model1 = model1$model_type
+    model1 = model1$model_type,
+    note = note
   )
   class(result) <- "lr_test"
 
@@ -244,7 +280,12 @@ print.lr_test <- function(x, ...) {
   cat("Full model:", x$model1, "\n")
   cat("\nLR statistic:", round(x$statistic, 4), "\n")
   cat("Degrees of freedom:", x$df, "\n")
-  cat("P-value:", format.pval(x$p_value), "\n")
+  if (is.na(x$p_value)) {
+    cat("P-value: NA\n")
+    if (!is.null(x$note)) cat("Note:", x$note, "\n")
+  } else {
+    cat("P-value:", format.pval(x$p_value), "\n")
+  }
 
   invisible(x)
 }
@@ -343,38 +384,50 @@ relative_fit.qlfit <- function(object, data) {
   # Get G-squared for the model
   g2_model <- g_squared(object, data)
 
-  if (is.na(g2_model$statistic)) {
+  if (length(g2_model) == 1 && is.na(g2_model)) {
     return(list(CFI = NA, TLI = NA, RMSEA = NA))
   }
 
-  # Baseline model: independence (each item has single probability)
   n_items <- ncol(data)
   n_obs <- nrow(data)
 
-  # Fit independence model (1-class LCA)
-  # Log-likelihood under independence
-  item_means <- colMeans(data)
-  ll_indep <- sum(apply(data, 1, function(x) {
-    sum(x * log(bound_probs(item_means)) +
-        (1 - x) * log(bound_probs(1 - item_means)))
-  }))
+  # Baseline: a genuine 1-class (independence) model. Its MLE is the vector
+  # of item means; compute its G-squared directly against the observed
+  # pattern frequencies.
+  item_means <- bound_probs(colMeans(data))
+  patterns <- pattern_frequencies(data)
+  null_probs <- compute_expected_frequencies(
+    matrix(item_means, ncol = 1),  # I x 1 item probability matrix
+    1,                              # single class with probability 1
+    patterns$pattern
+  )
+  expected_null <- null_probs * n_obs
+  observed <- patterns$frequency
+  valid <- observed > 0 & expected_null > 0
+  g2_null <- 2 * sum(observed[valid] * log(observed[valid] / expected_null[valid]))
+  df_null <- 2^n_items - 1 - n_items
 
-  # G-squared for independence model
-  g2_null <- -2 * (ll_indep - object$loglik) +
-             2 * (object$n_par - n_items)  # Approximate
+  df_m <- g2_model$df
+  num <- max(g2_model$statistic - df_m, 0)
+  den <- max(g2_model$statistic - df_m, g2_null - df_null, 0)
 
   # CFI
-  cfi <- max(0, 1 - (g2_model$statistic / g2_model$df) /
-               (g2_null / max(1, g2_model$df + object$n_par - n_items)))
+  cfi <- if (den > 0) 1 - num / den else 1
 
   # TLI
-  tli <- max(0, ((g2_null / (g2_model$df + object$n_par - n_items)) -
-                 (g2_model$statistic / g2_model$df)) /
-               ((g2_null / (g2_model$df + object$n_par - n_items)) - 1))
+  tli <- if (df_null > 0 && df_m > 0 && (g2_null / df_null) != 1) {
+    ((g2_null / df_null) - (g2_model$statistic / df_m)) /
+      ((g2_null / df_null) - 1)
+  } else {
+    NA_real_
+  }
 
   # RMSEA
-  rmsea <- sqrt(max(0, (g2_model$statistic - g2_model$df) /
-                       (g2_model$df * (n_obs - 1))))
+  rmsea <- if (df_m > 0) {
+    sqrt(max(0, (g2_model$statistic - df_m) / (df_m * (n_obs - 1))))
+  } else {
+    NA_real_
+  }
 
   list(
     CFI = cfi,
@@ -382,7 +435,9 @@ relative_fit.qlfit <- function(object, data) {
     RMSEA = rmsea,
     G2 = g2_model$statistic,
     df = g2_model$df,
-    p_value = g2_model$p_value
+    p_value = g2_model$p_value,
+    G2_null = g2_null,
+    df_null = df_null
   )
 }
 

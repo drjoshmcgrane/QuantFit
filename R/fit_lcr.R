@@ -43,11 +43,13 @@ NULL
 #'
 #' This parameterization is more restrictive than the general LCA models (UN, MON, IIO, DM)
 #' because item probabilities are determined by the difference between class ability
-#' and item difficulty. The model has fewer free parameters:
+#' and item difficulty. The model has fewer free parameters
+#' (\eqn{2C + I - 2} in total):
 #' \itemize{
 #'   \item \eqn{C-1} class proportion parameters
-#'   \item \eqn{C-1} class location parameters (one \eqn{\theta} fixed for identification)
-#'   \item \eqn{I-1} item difficulty parameters (one \eqn{\delta} or the mean fixed)
+#'   \item \eqn{C} class location parameters (all \eqn{\theta_c} free)
+#'   \item \eqn{I-1} item difficulty parameters (the single identification
+#'     constraint is \eqn{\sum_j \delta_j = 0})
 #' }
 #'
 #' The LCR model implies interval-level measurement when it fits well, as the
@@ -165,9 +167,9 @@ fit_lcr <- function(data, n_classes,
   best_fit$posteriors <- best_fit$posteriors[, class_order, drop = FALSE]
 
   # Count parameters:
-  # (C-1) class probs + (C-1) theta (one fixed) + (I-1) delta (mean = 0)
-  n_par <- (n_classes - 1) + (n_classes - 1) + (n_items - 1)
-  # Simplify: n_par = 2*(C-1) + (I-1) = 2C + I - 3
+  # (C-1) class probs + C theta (all free) + (I-1) delta (mean(delta) = 0
+  # is the single identification constraint) = 2C + I - 2
+  n_par <- count_parameters("LCR", n_items, n_classes)
 
   # Create qlfit object
   result <- new_qlfit(
@@ -189,6 +191,9 @@ fit_lcr <- function(data, n_classes,
     constraints = NULL,
     se = NULL
   )
+
+  # Flag collapsed classes so users know the effective number of classes
+  result$degenerate <- isTRUE(best_fit$degenerate)
 
   result
 }
@@ -383,7 +388,7 @@ fit_lcr_mle <- function(data, n_classes,
     stop("All random starts failed.")
   }
 
-  n_par <- (n_classes - 1) + (n_classes - 1) + (n_items - 1)
+  n_par <- count_parameters("LCR", n_items, n_classes)
 
   new_qlfit(
     model_type = "LCR",

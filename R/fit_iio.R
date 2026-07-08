@@ -17,7 +17,11 @@ NULL
 #' @param n_starts Number of random starting values to try (default 10)
 #' @param max_iter Maximum number of EM iterations per start (default 500)
 #' @param tol Convergence tolerance for log-likelihood (default 1e-6)
-#' @param optimizer Optimizer for constrained M-step: "alabama" (default) or "nloptr"
+#' @param method M-step method: "pava" (default) uses the exact constrained
+#'   M-step via isotonic regression per class; "optimizer" uses a general
+#'   constrained optimizer
+#' @param optimizer Optimizer for the constrained M-step when
+#'   method = "optimizer": "alabama" (default) or "nloptr"
 #' @param seed Random seed for reproducibility (optional)
 #' @param verbose Print progress messages (default FALSE)
 #'
@@ -73,6 +77,7 @@ fit_iio <- function(data, n_classes,
                     n_starts = 10,
                     max_iter = 500,
                     tol = 1e-6,
+                    method = c("pava", "optimizer"),
                     optimizer = c("alabama", "nloptr"),
                     seed = NULL,
                     verbose = FALSE) {
@@ -82,6 +87,7 @@ fit_iio <- function(data, n_classes,
 
   # Validate inputs
   data <- validate_data(data)
+  method <- match.arg(method)
   optimizer <- match.arg(optimizer)
 
   n_obs <- nrow(data)
@@ -134,11 +140,14 @@ fit_iio <- function(data, n_classes,
       em_constrained(
         data = data,
         n_classes = n_classes,
+        constraints_spec = constraints_spec,
+        item_order = item_order,
         constraint_fn = constraint_fn,
         init_probs = init_probs,
         init_class_probs = init_class_probs,
         max_iter = max_iter,
         tol = tol,
+        method = method,
         optimizer = optimizer,
         verbose = FALSE
       )
@@ -147,12 +156,21 @@ fit_iio <- function(data, n_classes,
       NULL
     })
 
-    # Project onto constraint space if needed
+    # Project onto the constraint space only if the solution is infeasible
+    # (within numerical tolerance), using the weighted projection with the
+    # final E-step weights; then recompute the log-likelihood
     if (!is.null(fit)) {
-      fit$item_probs <- project_constraints(fit$item_probs, constraints_spec, item_order)
-
-      # Recompute log-likelihood with projected parameters
-      fit$loglik <- compute_loglik(data, fit$item_probs, fit$class_probs)
+      feas <- check_constraints(fit$item_probs, constraints_spec, item_order)
+      if (!feas$satisfied) {
+        class_counts <- colSums(fit$posteriors)
+        fit$item_probs <- project_constraints_weighted(
+          fit$item_probs, constraints_spec, item_order,
+          class_weights = class_counts
+        )
+        e_final <- e_step(data, fit$item_probs, fit$class_probs)
+        fit$posteriors <- e_final$posteriors
+        fit$loglik <- e_final$loglik
+      }
 
       if (verbose) {
         cat("LL =", round(fit$loglik, 2))
@@ -201,6 +219,9 @@ fit_iio <- function(data, n_classes,
     constraints = constraints_spec,
     se = NULL
   )
+
+  # Flag collapsed classes so users know the effective number of classes
+  result$degenerate <- isTRUE(best_fit$degenerate)
 
   result
 }
@@ -304,16 +325,22 @@ fit_iio_projection <- function(data, n_classes,
         break
       }
 
-      # M-step (unconstrained)
-      m_result <- m_step(data, posteriors)
-
-      # Project onto constraint space
-      item_probs <- project_constraints(m_result$item_probs, constraints_spec, item_order)
+      # Exact constrained M-step (isotonic regression per class)
+      m_result <- m_step_exact(data, posteriors, constraints_spec, item_order)
+      item_probs <- m_result$item_probs
       class_probs <- m_result$class_probs
     }
 
     ll_history <- ll_history[1:iter]
-    final_ll <- ll_history[iter]
+
+    # Consistency on max_iter exit: recompute E-step for final parameters
+    if (!converged) {
+      e_result <- e_step(data, item_probs, class_probs)
+      posteriors <- e_result$posteriors
+      ll_history <- c(ll_history, e_result$loglik)
+    }
+
+    final_ll <- ll_history[length(ll_history)]
 
     if (verbose) {
       cat("LL =", round(final_ll, 2))

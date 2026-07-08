@@ -140,13 +140,17 @@ test_that("fit_un S3 methods work", {
 test_that("fit_un handles edge cases", {
   set.seed(606)
 
-  # Minimum viable data
+  # Minimum viable data with more classes than the data can support:
+  # warns ("Number of classes is large relative to sample size" and/or
+  # collapsed-class warnings) and returns a degenerate fit rather than
+  # erroring out
   data <- matrix(c(0, 0, 1, 1, 0, 1, 1, 0), nrow = 4)
-  expect_error(fit_un(data, n_classes = 5))  # Too many classes
+  fit_small <- suppressWarnings(fit_un(data, n_classes = 5))
+  expect_s3_class(fit_small, "qlfit")
 
   # All same responses
   data_same <- matrix(1, nrow = 20, ncol = 3)
   # This should still run, though results may be degenerate
-  fit_same <- fit_un(data_same, n_classes = 2, n_starts = 2)
+  fit_same <- suppressWarnings(fit_un(data_same, n_classes = 2, n_starts = 2))
   expect_s3_class(fit_same, "qlfit")
 })

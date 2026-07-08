@@ -52,8 +52,9 @@ test_that("fit_lcr has correct number of parameters", {
 
   fit <- fit_lcr(data, n_classes = n_classes, n_starts = 3)
 
-  # n_par = (C-1) + (C-1) + (I-1) = 3 + 3 + 5 = 11
-  expected_npar <- (n_classes - 1) + (n_classes - 1) + (n_items - 1)
+  # All C thetas are free; mean(delta) = 0 is the single identification
+  # constraint: n_par = (C-1) + C + (I-1) = 2C + I - 2 = 8 + 6 - 2 = 12
+  expected_npar <- 2 * n_classes + n_items - 2
   expect_equal(fit$n_par, expected_npar)
 })
 
@@ -140,7 +141,7 @@ test_that("fit_lcr has fewer parameters than UN with same n_classes", {
 
   # LCR should have fewer parameters
   # UN: (C-1) + I*C = 3 + 32 = 35
-  # LCR: (C-1) + (C-1) + (I-1) = 3 + 3 + 7 = 13
+  # LCR: 2C + I - 2 = 8 + 8 - 2 = 14
   expect_true(fit_lcr_result$n_par < fit_un_result$n_par)
 })
 

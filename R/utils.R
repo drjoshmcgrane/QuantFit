@@ -136,6 +136,11 @@ init_item_probs <- function(data, n_classes,
       }
     }
 
+    # Add jitter so multiple random starts actually differ (the quantile
+    # split itself is deterministic given the data)
+    probs <- probs + matrix(runif(n_items * n_classes, -0.05, 0.05),
+                            nrow = n_items, ncol = n_classes)
+
     # Ensure probabilities are bounded
     probs <- pmax(pmin(probs, 0.99), 0.01)
   }
@@ -274,10 +279,20 @@ check_convergence <- function(ll_history, tol = 1e-6, min_iter = 3) {
   n <- length(ll_history)
   if (n < min_iter) return(FALSE)
 
-  # Check relative change in log-likelihood
-  rel_change <- abs((ll_history[n] - ll_history[n - 1]) / ll_history[n - 1])
+  # Relative change in log-likelihood
+  change <- ll_history[n] - ll_history[n - 1]
+  rel_change <- change / abs(ll_history[n - 1])
 
-  rel_change < tol
+  # Monotonicity guard: a meaningful decrease violates the (generalized)
+  # EM ascent property and must not be declared convergence
+  if (rel_change < -tol) {
+    warning("Log-likelihood decreased by ", format(-change),
+            " between EM iterations (generalized EM ascent property ",
+            "violated); not declaring convergence.", call. = FALSE)
+    return(FALSE)
+  }
+
+  abs(rel_change) < tol
 }
 
 #' Estimate item ordering from data
@@ -319,14 +334,15 @@ count_parameters <- function(model_type, n_items, n_classes) {
       (n_classes - 1) + n_items * n_classes
     },
     LCR = {
-      # Class probs: (C-1) + Theta: (C-1) for identification + Delta: (I-1)
-      # Total: (C-1) + (C-1) + (I-1) = 2C + I - 3
-      # Or alternatively: (C-1) class probs + I difficulties + C locations - 2 for identification
-      (n_classes - 1) + n_items + n_classes - 2
+      # The implementation leaves all C thetas free and uses mean(delta) = 0
+      # as the single identification constraint:
+      # (C-1) class probs + C theta + (I-1) delta = 2C + I - 2
+      (n_classes - 1) + n_classes + (n_items - 1)
     },
     RM = {
-      # Item difficulties: (I-1) with one fixed for identification
-      n_items - 1
+      # mirt Rasch parameterization: I item intercepts + latent variance
+      # (latent mean fixed at 0) = I + 1 estimated parameters
+      n_items + 1
     },
     stop("Unknown model type: ", model_type)
   )

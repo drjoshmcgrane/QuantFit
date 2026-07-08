@@ -114,11 +114,12 @@ test_that("count_parameters is correct for each model", {
   expect_equal(count_parameters("IIO", n_items, n_classes), 2 + 15)
   expect_equal(count_parameters("DM", n_items, n_classes), 2 + 15)
 
-  # LCR: (C-1) + (C-1) + (I-1) = 2 + 2 + 4 = 8
-  expect_equal(count_parameters("LCR", n_items, n_classes), 8)
+  # LCR: (C-1) class probs + C theta (all free) + (I-1) delta (mean = 0)
+  # = 2C + I - 2 = 6 + 5 - 2 = 9
+  expect_equal(count_parameters("LCR", n_items, n_classes), 9)
 
-  # RM: I-1 = 4
-  expect_equal(count_parameters("RM", n_items, n_classes), 4)
+  # RM (mirt Rasch): I intercepts + latent variance = I + 1 = 6
+  expect_equal(count_parameters("RM", n_items, n_classes), 6)
 })
 
 test_that("pava_increasing produces monotonic sequence", {
