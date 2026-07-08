@@ -36,8 +36,10 @@
 #' Quantification: Selecting a Latent Variable Model by Comparing Latent
 #' Structures.
 #'
-#' @seealso [compare_models()], [successive_comparison()] for the
-#'   information-criterion-based procedures.
+#' @seealso [select_model_ll()] for the statistically calibrated
+#'   bootstrap likelihood-ratio selection procedure, [compare_models()],
+#'   [successive_comparison()] for the information-criterion-based
+#'   procedures.
 #'
 #' @examples
 #' \dontrun{
