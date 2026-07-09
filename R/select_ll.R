@@ -274,6 +274,14 @@ print.qleqtest <- function(x, ...) {
 #'   (default 5).
 #' @param boot_n_starts Number of random starts for each bootstrap refit
 #'   (default 3).
+#' @param method How the ordinal layer is tested. `"lattice"` (default)
+#'   tests each constraint edge separately and accepts the deepest model
+#'   reachable by non-rejected edges (MON vs UN, IIO vs UN, then the DM
+#'   increments DM vs IIO / DM vs MON). `"joint"` tests the doubly-monotone
+#'   model directly against UN and only falls back to the single-constraint
+#'   models on rejection. The lattice method gives each constraint family its
+#'   own targeted test and more reliably distinguishes IIO/MON data from DM;
+#'   the joint method reproduces the original behaviour.
 #' @param seed Optional integer seed; makes the whole procedure
 #'   deterministic.
 #' @param use_cpp Use the compiled C++ EM engine (default TRUE).
@@ -299,17 +307,33 @@ print.qleqtest <- function(x, ...) {
 #' LCR -> RM in three steps:
 #'
 #' \enumerate{
-#'   \item \strong{Ordinal structure.} DM (double monotonicity, the most
-#'     constrained ordinal model) is tested against UN with
-#'     [ll_equivalence_test()]. If DM is adequate (p > `alpha`), it becomes
+#'   \item \strong{Ordinal structure.} The way this layer is tested depends
+#'     on `method`.
+#'
+#'     With `method = "lattice"` (the default) each edge of the constraint
+#'     lattice is tested with [ll_equivalence_test()]: MON vs UN and IIO vs
+#'     UN establish whether each single constraint holds, and DM is reached
+#'     only when one of them holds \emph{and} the corresponding increment
+#'     edge is not rejected - DM vs IIO tests the added monotonicity given
+#'     invariant ordering, DM vs MON tests the added ordering given
+#'     monotonicity. The deepest model reachable by a path of non-rejected
+#'     edges is selected. Because each constraint family gets its own
+#'     targeted test, data generated under IIO (whose monotonicity violation
+#'     is real) are correctly kept at IIO rather than being over-fitted to
+#'     DM. If both single constraints hold but the DM increment is rejected
+#'     from either parent, the better-fitting single ordinal model is kept;
+#'     if neither holds the interpretation is CLASSIFICATORY (UN).
+#'
+#'     With `method = "joint"`, DM (the most constrained ordinal model) is
+#'     tested against UN directly. If DM is adequate (p > `alpha`) it becomes
 #'     the ordinal candidate and the procedure continues to step 2.
-#'     Otherwise IIO and MON are each tested against UN; among those that
-#'     are adequate, the one with the \emph{higher log-likelihood} is
-#'     selected (IIO and MON are not nested in each other, so they cannot
-#'     be tested against one another; with equal parameter counts the
-#'     higher log-likelihood is the natural tie-break). If neither is
-#'     adequate the unconstrained model is selected and the interpretation
-#'     is CLASSIFICATORY.
+#'     Otherwise IIO and MON are each tested against UN; among those that are
+#'     adequate, the one with the \emph{higher log-likelihood} is selected
+#'     (IIO and MON are not nested in each other; with equal parameter counts
+#'     the higher log-likelihood is the natural tie-break). If neither is
+#'     adequate the unconstrained model is selected (CLASSIFICATORY). This
+#'     joint test spreads its power across both constraint families at once
+#'     and can therefore over-select DM on single-constraint data.
 #'   \item \strong{Discrete quantitative structure} (reached only when DM
 #'     was adequate). LCR is tested against DM the same way: LCR is nested
 #'     in DM with strictly fewer parameters (the Rasch structure imposes
@@ -364,9 +388,11 @@ print.qleqtest <- function(x, ...) {
 #' }
 #' @export
 select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
-                            n_starts = 5, boot_n_starts = 3, seed = NULL,
+                            n_starts = 5, boot_n_starts = 3,
+                            method = c("lattice", "joint"), seed = NULL,
                             use_cpp = TRUE, verbose = FALSE, ...) {
 
+  method <- match.arg(method)
   data <- validate_data(data)
 
   fit_safe <- function(label, expr) {
@@ -420,59 +446,111 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
   selected <- NULL
   interpretation <- NULL
 
-  # -- Step 1: ordinal structure (DM vs UN, else IIO/MON vs UN) -------------
-  dm_adequate <- FALSE
-  if (!is.null(fits$DM)) {
-    if (verbose) cat("Step 1: testing DM vs UN...\n")
-    t_dm <- run_test(fits$DM, fits$UN, 1000L)
-    dm_adequate <- t_dm$p_value > alpha
-    tests <- add_test(tests, "DM vs UN", t_dm, dm_adequate)
+  # Run one edge test, record it, and return whether the constrained model
+  # is adequate (p > alpha). NULL fits yield NA (no test performed).
+  test_adequate <- function(fit_c, fit_g, label, seed_offset) {
+    if (is.null(fit_c) || is.null(fit_g)) return(NA)
+    t <- run_test(fit_c, fit_g, seed_offset)
+    ok <- t$p_value > alpha
+    tests <<- add_test(tests, label, t, ok)
+    ok
   }
 
-  if (!dm_adequate) {
-    candidates <- list()
-    if (!is.null(fits$IIO)) {
-      if (verbose) cat("Step 1: testing IIO vs UN...\n")
-      t_iio <- run_test(fits$IIO, fits$UN, 2000L)
-      iio_ok <- t_iio$p_value > alpha
-      tests <- add_test(tests, "IIO vs UN", t_iio, iio_ok)
-      if (iio_ok) candidates$IIO <- fits$IIO
+  # -- Step 1: ordinal structure -------------------------------------------
+  # Sets proceed_to_lcr = TRUE when the doubly-monotone model is supported;
+  # otherwise it terminates the selection in the ordinal/classificatory layer
+  # by setting `selected` and `interpretation`.
+  proceed_to_lcr <- FALSE
+
+  if (method == "joint") {
+    # Test the most constrained ordinal model (DM) directly against UN;
+    # on rejection fall back to the single-constraint models.
+    if (verbose) cat("Step 1 (joint): testing DM vs UN...\n")
+    dm_adequate <- isTRUE(test_adequate(fits$DM, fits$UN, "DM vs UN", 1000L))
+
+    if (dm_adequate) {
+      proceed_to_lcr <- TRUE
+    } else {
+      candidates <- list()
+      if (verbose) cat("Step 1 (joint): testing IIO vs UN and MON vs UN...\n")
+      if (isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L))) {
+        candidates$IIO <- fits$IIO
+      }
+      if (isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L))) {
+        candidates$MON <- fits$MON
+      }
+      if (length(candidates) == 0L) {
+        selected <- "UN"
+        interpretation <- "CLASSIFICATORY (no ordinal structure supported)"
+      } else {
+        lls <- vapply(candidates, function(f) f$loglik, numeric(1))
+        selected <- names(candidates)[which.max(lls)]
+        interpretation <- if (selected == "IIO") {
+          "ORDINAL (invariant item ordering)"
+        } else {
+          "ORDINAL (class monotonicity)"
+        }
+      }
     }
-    if (!is.null(fits$MON)) {
-      if (verbose) cat("Step 1: testing MON vs UN...\n")
-      t_mon <- run_test(fits$MON, fits$UN, 3000L)
-      mon_ok <- t_mon$p_value > alpha
-      tests <- add_test(tests, "MON vs UN", t_mon, mon_ok)
-      if (mon_ok) candidates$MON <- fits$MON
+  } else {
+    # Lattice: test each constraint edge and accept the deepest model
+    # reachable by a path of non-rejected edges. The single-constraint
+    # edges (MON vs UN, IIO vs UN) are tested first; DM is reached only when
+    # one of them holds AND the corresponding increment edge (DM vs IIO for
+    # the added monotonicity, or DM vs MON for the added item ordering) is
+    # also not rejected. This gives each constraint family its own targeted
+    # test instead of diluting the signal across a joint DM-vs-UN test.
+    if (verbose) cat("Step 1 (lattice): testing constraint edges...\n")
+    mon_ok <- isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L))
+    iio_ok <- isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L))
+
+    reach_dm <- FALSE
+    if (!is.null(fits$DM)) {
+      if (iio_ok) {
+        # MON increment given IIO
+        reach_dm <- isTRUE(test_adequate(fits$DM, fits$IIO, "DM vs IIO", 5000L))
+      }
+      if (!reach_dm && mon_ok) {
+        # IIO increment given MON
+        reach_dm <- isTRUE(test_adequate(fits$DM, fits$MON, "DM vs MON", 6000L))
+      }
     }
 
-    if (length(candidates) == 0L) {
-      selected <- "UN"
-      interpretation <- "CLASSIFICATORY (no ordinal structure supported)"
-    } else {
-      lls <- vapply(candidates, function(f) f$loglik, numeric(1))
-      selected <- names(candidates)[which.max(lls)]
+    if (reach_dm) {
+      proceed_to_lcr <- TRUE
+    } else if (iio_ok && mon_ok) {
+      # Both single constraints hold individually but the doubly-monotone
+      # increment is rejected from either parent: keep the better-fitting
+      # single ordinal model.
+      selected <- if (fits$IIO$loglik >= fits$MON$loglik) "IIO" else "MON"
       interpretation <- if (selected == "IIO") {
         "ORDINAL (invariant item ordering)"
       } else {
         "ORDINAL (class monotonicity)"
       }
+    } else if (iio_ok) {
+      selected <- "IIO"
+      interpretation <- "ORDINAL (invariant item ordering)"
+    } else if (mon_ok) {
+      selected <- "MON"
+      interpretation <- "ORDINAL (class monotonicity)"
+    } else {
+      selected <- "UN"
+      interpretation <- "CLASSIFICATORY (no ordinal structure supported)"
     }
-  } else {
-    # -- Step 2: discrete quantitative structure (LCR vs DM) ---------------
-    lcr_adequate <- FALSE
-    if (!is.null(fits$LCR)) {
-      if (verbose) cat("Step 2: testing LCR vs DM...\n")
-      t_lcr <- run_test(fits$LCR, fits$DM, 4000L)
-      lcr_adequate <- t_lcr$p_value > alpha
-      tests <- add_test(tests, "LCR vs DM", t_lcr, lcr_adequate)
-    }
+  }
+
+  # -- Steps 2-3: quantitative structure (only when DM is supported) --------
+  if (proceed_to_lcr) {
+    # Step 2: discrete quantitative structure (LCR vs DM)
+    if (verbose) cat("Step 2: testing LCR vs DM...\n")
+    lcr_adequate <- isTRUE(test_adequate(fits$LCR, fits$DM, "LCR vs DM", 4000L))
 
     if (!lcr_adequate) {
       selected <- "DM"
       interpretation <- "ORDINAL (double monotonicity)"
     } else {
-      # -- Step 3: continuous quantitative structure (RM vs LCR by BIC) ----
+      # Step 3: continuous quantitative structure (RM vs LCR by BIC)
       bics["LCR"] <- BIC(fits$LCR)
       if (!is.null(fits$RM)) bics["RM"] <- BIC(fits$RM)
       if (!is.na(bics["RM"]) && bics["RM"] < bics["LCR"]) {
@@ -493,7 +571,8 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
       bics = bics,
       fits = fits,
       alpha = alpha,
-      B = B
+      B = B,
+      method = method
     ),
     class = "qlselect_ll"
   )
@@ -510,7 +589,8 @@ print.qlselect_ll <- function(x, ...) {
   cat("---------------------------------------------------\n")
   cat("Selected model :", x$selected, "\n")
   cat("Interpretation :", x$interpretation, "\n")
-  cat("Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n\n")
+  cat("Method =", if (is.null(x$method)) "joint" else x$method,
+      "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n\n")
 
   if (nrow(x$tests) > 0) {
     cat("Decision path (bootstrap LR tests):\n")

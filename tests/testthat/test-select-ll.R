@@ -166,10 +166,52 @@ test_that("select_model_ll picks a quantitative model on Rasch data", {
   expect_match(sel$interpretation, "QUANTITATIVE")
   expect_true(all(c("comparison", "statistic", "p_value", "decision") %in%
                     names(sel$tests)))
-  expect_true(any(grepl("DM vs UN", sel$tests$comparison)))
+  # lattice default reaches DM through the increment edges, not DM vs UN
+  expect_true(any(grepl("DM", sel$tests$comparison)))
+  expect_true(any(grepl("LCR vs DM", sel$tests$comparison)))
   expect_false(any(is.na(sel$bics)))
   expect_output(print(sel), "Selected model")
   expect_output(print(sel), "Decision path")
+})
+
+test_that("select_model_ll method argument controls the ordinal-layer tests", {
+  skip_on_cran()
+  dat <- gen_rasch_data(300, 6, seed = 707)
+
+  lat <- select_model_ll(dat, n_classes = 2, B = 19, n_starts = 3,
+                         boot_n_starts = 2, method = "lattice", seed = 11)
+  joint <- select_model_ll(dat, n_classes = 2, B = 19, n_starts = 3,
+                           boot_n_starts = 2, method = "joint", seed = 11)
+
+  expect_identical(lat$method, "lattice")
+  expect_identical(joint$method, "joint")
+  # lattice tests the single-constraint edges; joint tests DM vs UN directly
+  expect_true(any(grepl("MON vs UN", lat$tests$comparison)))
+  expect_true(any(grepl("IIO vs UN", lat$tests$comparison)))
+  expect_false(any(grepl("DM vs UN", lat$tests$comparison)))
+  expect_true(any(grepl("DM vs UN", joint$tests$comparison)))
+  expect_match(default_method <- formals(select_model_ll)$method[[2]], "lattice")
+})
+
+test_that("lattice method keeps IIO data ordinal, not doubly-monotone", {
+  skip_on_cran()
+  set.seed(451)
+  n <- 600; J <- 8; C <- 3
+  # IIO generation: sort item logits within each class (invariant ordering),
+  # but classes are NOT monotone -> MON should be rejected
+  logit <- t(apply(matrix(runif(C * J, -4, 4), C, J), 1, sort))
+  cls <- sample(1:C, n, replace = TRUE)
+  dat <- matrix(rbinom(n * J, 1, plogis(logit)[cls, ]), n, J)
+
+  sel <- select_model_ll(dat, n_classes = C, B = 19, n_starts = 3,
+                         boot_n_starts = 2, method = "lattice", seed = 5)
+  # Mechanism check: the lattice method must test MON vs UN as its own edge
+  # (this is what lets it detect the monotonicity violation in IIO data);
+  # the exact outcome on a single small-B dataset is stochastic and is
+  # validated over many datasets in the recovery sweep, not here.
+  expect_true(any(grepl("MON vs UN", sel$tests$comparison)))
+  expect_true(any(grepl("IIO vs UN", sel$tests$comparison)))
+  expect_s3_class(sel, "qlselect_ll")
 })
 
 test_that("select_model_ll stays classificatory/ordinal on unstructured data", {

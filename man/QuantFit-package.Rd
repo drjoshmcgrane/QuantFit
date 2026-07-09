@@ -118,6 +118,14 @@ Karabatsos, G. (2018). On Bayesian testing of additive conjoint measurement
 axioms using synthetic likelihood. \emph{Psychometrika}, 83(2), 321-332.
 \doi{10.1007/s11336-017-9581-x}
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/drjoshmcgrane/QuantFit}
+  \item Report bugs at \url{https://github.com/drjoshmcgrane/QuantFit/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Josh McGrane \email{drjoshmcgrane@gmail.com}
 

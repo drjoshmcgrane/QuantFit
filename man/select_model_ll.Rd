@@ -11,6 +11,7 @@ select_model_ll(
   B = 99,
   n_starts = 5,
   boot_n_starts = 3,
+  method = c("lattice", "joint"),
   seed = NULL,
   use_cpp = TRUE,
   verbose = FALSE,
@@ -37,6 +38,15 @@ Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 
 \item{boot_n_starts}{Number of random starts for each bootstrap refit
 (default 3).}
+
+\item{method}{How the ordinal layer is tested. \code{"lattice"} (default)
+tests each constraint edge separately and accepts the deepest model
+reachable by non-rejected edges (MON vs UN, IIO vs UN, then the DM
+increments DM vs IIO / DM vs MON). \code{"joint"} tests the doubly-monotone
+model directly against UN and only falls back to the single-constraint
+models on rejection. The lattice method gives each constraint family its
+own targeted test and more reliably distinguishes IIO/MON data from DM;
+the joint method reproduces the original behaviour.}
 
 \item{seed}{Optional integer seed; makes the whole procedure
 deterministic.}
@@ -75,17 +85,35 @@ The procedure walks the paper's hierarchy UN -> MON -> IIO -> DM ->
 LCR -> RM in three steps:
 
 \enumerate{
-\item \strong{Ordinal structure.} DM (double monotonicity, the most
-constrained ordinal model) is tested against UN with
-\code{\link[=ll_equivalence_test]{ll_equivalence_test()}}. If DM is adequate (p > \code{alpha}), it becomes
+\item \strong{Ordinal structure.} The way this layer is tested depends
+on \code{method}.
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{With `method = "lattice"` (the default) each edge of the constraint
+lattice is tested with [ll_equivalence_test()]: MON vs UN and IIO vs
+UN establish whether each single constraint holds, and DM is reached
+only when one of them holds \\emph\{and\} the corresponding increment
+edge is not rejected - DM vs IIO tests the added monotonicity given
+invariant ordering, DM vs MON tests the added ordering given
+monotonicity. The deepest model reachable by a path of non-rejected
+edges is selected. Because each constraint family gets its own
+targeted test, data generated under IIO (whose monotonicity violation
+is real) are correctly kept at IIO rather than being over-fitted to
+DM. If both single constraints hold but the DM increment is rejected
+from either parent, the better-fitting single ordinal model is kept;
+if neither holds the interpretation is CLASSIFICATORY (UN).
+
+With `method = "joint"`, DM (the most constrained ordinal model) is
+tested against UN directly. If DM is adequate (p > `alpha`) it becomes
 the ordinal candidate and the procedure continues to step 2.
-Otherwise IIO and MON are each tested against UN; among those that
-are adequate, the one with the \emph{higher log-likelihood} is
-selected (IIO and MON are not nested in each other, so they cannot
-be tested against one another; with equal parameter counts the
-higher log-likelihood is the natural tie-break). If neither is
-adequate the unconstrained model is selected and the interpretation
-is CLASSIFICATORY.
+Otherwise IIO and MON are each tested against UN; among those that are
+adequate, the one with the \\emph\{higher log-likelihood\} is selected
+(IIO and MON are not nested in each other; with equal parameter counts
+the higher log-likelihood is the natural tie-break). If neither is
+adequate the unconstrained model is selected (CLASSIFICATORY). This
+joint test spreads its power across both constraint families at once
+and can therefore over-select DM on single-constraint data.
+}\if{html}{\out{</div>}}
+
 \item \strong{Discrete quantitative structure} (reached only when DM
 was adequate). LCR is tested against DM the same way: LCR is nested
 in DM with strictly fewer parameters (the Rasch structure imposes
