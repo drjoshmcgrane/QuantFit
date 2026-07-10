@@ -274,14 +274,19 @@ print.qleqtest <- function(x, ...) {
 #'   (default 5).
 #' @param boot_n_starts Number of random starts for each bootstrap refit
 #'   (default 3).
-#' @param method How the ordinal layer is tested. `"lattice"` (default)
-#'   tests each constraint edge separately and accepts the deepest model
-#'   reachable by non-rejected edges (MON vs UN, IIO vs UN, then the DM
-#'   increments DM vs IIO / DM vs MON). `"joint"` tests the doubly-monotone
-#'   model directly against UN and only falls back to the single-constraint
-#'   models on rejection. The lattice method gives each constraint family its
-#'   own targeted test and more reliably distinguishes IIO/MON data from DM;
-#'   the joint method reproduces the original behaviour.
+#' @param method How the ordinal layer is tested. `"joint"` (default) tests
+#'   the doubly-monotone model directly against UN and only falls back to the
+#'   single-constraint models on rejection. `"lattice"` instead tests each
+#'   constraint edge separately and accepts the deepest model reachable by
+#'   non-rejected edges (MON vs UN, IIO vs UN, then the DM increments
+#'   DM vs IIO / DM vs MON). The lattice method is more principled - it gives
+#'   each constraint family its own targeted test - but in a paired
+#'   simulation study (n = 1000, J = 10, C = 3, 30 replicates per generating
+#'   model) the two methods were statistically indistinguishable on both
+#'   overall recovery and the rate of scale-type errors, while lattice costs
+#'   roughly twice the computation (up to five bootstrap tests per data set
+#'   rather than one to three). `"joint"` is therefore the default;
+#'   `"lattice"` is available for users who prefer the edge-wise procedure.
 #' @param seed Optional integer seed; makes the whole procedure
 #'   deterministic.
 #' @param use_cpp Use the compiled C++ EM engine (default TRUE).
@@ -310,30 +315,28 @@ print.qleqtest <- function(x, ...) {
 #'   \item \strong{Ordinal structure.} The way this layer is tested depends
 #'     on `method`.
 #'
-#'     With `method = "lattice"` (the default) each edge of the constraint
-#'     lattice is tested with [ll_equivalence_test()]: MON vs UN and IIO vs
-#'     UN establish whether each single constraint holds, and DM is reached
-#'     only when one of them holds \emph{and} the corresponding increment
-#'     edge is not rejected - DM vs IIO tests the added monotonicity given
-#'     invariant ordering, DM vs MON tests the added ordering given
-#'     monotonicity. The deepest model reachable by a path of non-rejected
-#'     edges is selected. Because each constraint family gets its own
-#'     targeted test, data generated under IIO (whose monotonicity violation
-#'     is real) are correctly kept at IIO rather than being over-fitted to
-#'     DM. If both single constraints hold but the DM increment is rejected
-#'     from either parent, the better-fitting single ordinal model is kept;
-#'     if neither holds the interpretation is CLASSIFICATORY (UN).
-#'
-#'     With `method = "joint"`, DM (the most constrained ordinal model) is
-#'     tested against UN directly. If DM is adequate (p > `alpha`) it becomes
+#'     With `method = "joint"` (the default), DM (the most constrained
+#'     ordinal model) is tested against UN directly with
+#'     [ll_equivalence_test()]. If DM is adequate (p > `alpha`) it becomes
 #'     the ordinal candidate and the procedure continues to step 2.
 #'     Otherwise IIO and MON are each tested against UN; among those that are
 #'     adequate, the one with the \emph{higher log-likelihood} is selected
 #'     (IIO and MON are not nested in each other; with equal parameter counts
 #'     the higher log-likelihood is the natural tie-break). If neither is
-#'     adequate the unconstrained model is selected (CLASSIFICATORY). This
-#'     joint test spreads its power across both constraint families at once
-#'     and can therefore over-select DM on single-constraint data.
+#'     adequate the unconstrained model is selected (CLASSIFICATORY).
+#'
+#'     With `method = "lattice"`, each edge of the constraint lattice is
+#'     tested instead: MON vs UN and IIO vs UN establish whether each single
+#'     constraint holds, and DM is reached only when one of them holds
+#'     \emph{and} the corresponding increment edge is not rejected - DM vs
+#'     IIO tests the added monotonicity given invariant ordering, DM vs MON
+#'     tests the added ordering given monotonicity. The deepest model
+#'     reachable by a path of non-rejected edges is selected; if both single
+#'     constraints hold but the DM increment is rejected from either parent,
+#'     the better-fitting single ordinal model is kept. This gives each
+#'     constraint family its own targeted test at roughly twice the
+#'     computational cost, with recovery performance that matched the joint
+#'     method in simulation.
 #'   \item \strong{Discrete quantitative structure} (reached only when DM
 #'     was adequate). LCR is tested against DM the same way: LCR is nested
 #'     in DM with strictly fewer parameters (the Rasch structure imposes
@@ -389,7 +392,7 @@ print.qleqtest <- function(x, ...) {
 #' @export
 select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
                             n_starts = 5, boot_n_starts = 3,
-                            method = c("lattice", "joint"), seed = NULL,
+                            method = c("joint", "lattice"), seed = NULL,
                             use_cpp = TRUE, verbose = FALSE, ...) {
 
   method <- match.arg(method)

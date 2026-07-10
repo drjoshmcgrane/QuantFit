@@ -35,7 +35,12 @@ lines of work into one framework with a common, optimised C++ core.
   likelihood-ratio statistic, whose asymptotic null is chi-bar-squared, to
   test each constrained model against its less-restricted parent. Selection
   proceeds down the hierarchy UN -> MON/IIO/DM -> LCR -> RM, using BIC only at
-  the final step where parameter counts genuinely differ.
+  the final step where parameter counts genuinely differ. A `method` argument
+  offers two ways to test the ordinal layer: `"joint"` (default) tests the
+  doubly-monotone model against UN directly, while `"lattice"` tests each
+  constraint edge separately; a paired simulation study found them
+  statistically indistinguishable in recovery, so the cheaper joint procedure
+  is the default.
 
 * `compute_se()` — observed-information (Hessian, with delta-method
   back-transform) and nonparametric bootstrap standard errors for all six

@@ -190,7 +190,8 @@ test_that("select_model_ll method argument controls the ordinal-layer tests", {
   expect_true(any(grepl("IIO vs UN", lat$tests$comparison)))
   expect_false(any(grepl("DM vs UN", lat$tests$comparison)))
   expect_true(any(grepl("DM vs UN", joint$tests$comparison)))
-  expect_match(default_method <- formals(select_model_ll)$method[[2]], "lattice")
+  # joint is the shipped default (matched accuracy at lower cost)
+  expect_identical(formals(select_model_ll)$method[[2]], "joint")
 })
 
 test_that("lattice method keeps IIO data ordinal, not doubly-monotone", {
