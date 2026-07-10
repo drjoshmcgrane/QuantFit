@@ -200,6 +200,38 @@ se <- compute_se(un, method = "hessian")
 se
 ```
 
+### How much structure can be recovered?
+
+Not every distinction is equally easy to make, and it is worth knowing where
+the method is strong and where it is inherently limited. In a simulation study
+(1000 respondents, three latent classes, 30 replicates per generating model),
+recovery of the correct model was near-perfect for UN, DM, and RM, and strong
+for MON. Two distinctions were harder, for instructive reasons:
+
+* **Discrete versus continuous quantitative structure (LCR versus RM)
+  depends on test length.** With 10 items the two are nearly interchangeable
+  and LCR-generated data are often misread as RM; doubling the test to 20
+  items raised LCR recovery from roughly 40% to over 70%. If the discrete /
+  continuous distinction matters for your application, use a longer test
+  (20 or more items) so the latent class Rasch structure can be resolved from
+  the continuous Rasch model. Reassuringly, this confusion is *within* the
+  quantitative interpretation, so the broad classificatory / ordinal /
+  quantitative verdict is unaffected by it.
+
+* **Invariant item ordering versus double monotonicity (IIO versus DM) is
+  limited by the class structure, not the test length.** Whether an item's
+  response probability increases monotonically across the ordered classes is a
+  property of how many classes there are and how well separated they are; with
+  only a few classes, IIO-generated data are frequently monotone by chance and
+  are legitimately consistent with DM. Adding items does not resolve this - it
+  requires more, or better-separated, latent classes. Both are ordinal
+  interpretations, so again the scale-type conclusion is unaffected.
+
+The practical message is that the coarse question this package is built to
+answer - is the structure classificatory, ordinal, or quantitative? - is
+recovered very reliably, while the finer within-family distinctions benefit
+from longer tests (for LCR vs RM) or richer class structure (for IIO vs DM).
+
 ## Which approach when?
 
 * The **cancellation checks** and the **Karabatsos test** are axiom-focused:
