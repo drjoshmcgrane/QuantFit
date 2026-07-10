@@ -32,6 +32,26 @@ simulate_from_qlfit <- function(fit, n_obs) {
          nrow = n_obs, ncol = ncol(prob))
 }
 
+#' Apply a function over a list, optionally in parallel
+#'
+#' Uses [parallel::mclapply()] when `mc.cores > 1` on a non-Windows platform
+#' (forking is unavailable on Windows), otherwise falls back to [lapply()].
+#' Callers that seed each element independently get identical results in
+#' serial and parallel.
+#'
+#' @param X Vector or list to iterate over.
+#' @param FUN Function applied to each element.
+#' @param mc.cores Number of cores.
+#' @return A list of results.
+#' @keywords internal
+par_lapply <- function(X, FUN, mc.cores = 1L) {
+  if (mc.cores > 1L && .Platform$OS.type != "windows") {
+    parallel::mclapply(X, FUN, mc.cores = mc.cores)
+  } else {
+    lapply(X, FUN)
+  }
+}
+
 #' Refit a latent class model of a given type
 #'
 #' @param model_type One of "UN", "MON", "IIO", "DM", "LCR".
@@ -79,7 +99,12 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #'   including all bootstrap refits, is deterministic.
 #' @param use_cpp Use the compiled C++ EM engine for the refits
 #'   (default TRUE).
-#' @param verbose Print progress every 10 replicates (default FALSE).
+#' @param mc.cores Number of cores for the bootstrap refits (default 1).
+#'   Values above 1 use [parallel::mclapply()] on non-Windows platforms;
+#'   because each replicate is seeded independently, results are identical
+#'   to the serial run regardless of `mc.cores`.
+#' @param verbose Print progress every 10 replicates (default FALSE; ignored
+#'   when `mc.cores > 1`).
 #'
 #' @return An object of class `qleqtest`: a list with elements
 #'   \describe{
@@ -118,9 +143,9 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #' correctly calibrated null distribution.
 #'
 #' Replicates on which either refit fails are dropped; a warning is issued
-#' if more than 10 percent are lost. Computation is sequential (`lapply`);
-#' users needing parallelism can split `B` across seeds and pool the
-#' resulting `null_distribution` vectors.
+#' if more than 10 percent are lost. The bootstrap is parallelised over
+#' replicates when `mc.cores > 1` (see that argument); each replicate is
+#' seeded independently, so the parallel and serial results are identical.
 #'
 #' @seealso [select_model_ll()] for the full ordered selection procedure,
 #'   [select_model_constraint()] for the heuristic diagnostic selector.
@@ -139,7 +164,8 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #' @export
 ll_equivalence_test <- function(data, fit_constrained, fit_un,
                                 B = 99, n_starts = 3, seed = NULL,
-                                use_cpp = TRUE, verbose = FALSE) {
+                                use_cpp = TRUE, mc.cores = 1L,
+                                verbose = FALSE) {
 
   if (!inherits(fit_constrained, "qlfit") || !inherits(fit_un, "qlfit")) {
     stop("fit_constrained and fit_un must be qlfit objects")
@@ -189,7 +215,7 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
         refit_model_type(type_g, boot_data, n_classes, n_starts, use_cpp)),
       error = function(e) NULL)
 
-    if (verbose && b %% 10 == 0) {
+    if (verbose && mc.cores == 1L && b %% 10 == 0) {
       cat("  bootstrap replicate", b, "of", B, "\n")
     }
 
@@ -197,7 +223,11 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
     max(0, 2 * (fit_g_star$loglik - fit_c_star$loglik))
   }
 
-  lr_star <- unlist(lapply(seq_len(B), boot_one))
+  raw <- par_lapply(seq_len(B), boot_one, mc.cores)
+  # coerce any parallel worker failures (try-error, wrong length) to NA
+  lr_star <- vapply(raw, function(z) {
+    if (is.numeric(z) && length(z) == 1L) z else NA_real_
+  }, numeric(1))
   n_failed <- sum(is.na(lr_star))
   lr_star <- lr_star[!is.na(lr_star)]
   b_eff <- length(lr_star)
@@ -261,7 +291,11 @@ print.qleqtest <- function(x, ...) {
 #' parameter counts genuinely differ.
 #'
 #' @param data Binary response matrix (persons x items).
-#' @param n_classes Number of latent classes for the discrete models.
+#' @param n_classes Number of latent classes for the discrete models. May be
+#'   a single integer, or a vector (e.g. `1:6`), in which case the class count
+#'   is selected first by BIC with [select_n_classes()] and the structural
+#'   comparison is run at the chosen count (the enumeration table is returned
+#'   as `n_classes_table`).
 #' @param alpha Significance level for the bootstrap tests (default 0.05).
 #'   A constrained model is deemed *adequate* when its bootstrap p-value
 #'   exceeds `alpha`, i.e. the constraints are rejected when
@@ -290,6 +324,9 @@ print.qleqtest <- function(x, ...) {
 #' @param seed Optional integer seed; makes the whole procedure
 #'   deterministic.
 #' @param use_cpp Use the compiled C++ EM engine (default TRUE).
+#' @param mc.cores Number of cores for the bootstrap refits within each test
+#'   (default 1, passed to [ll_equivalence_test()]). Because replicates are
+#'   seeded independently the result is identical to the serial run.
 #' @param verbose Print progress messages (default FALSE).
 #' @param ... Further arguments passed to the latent class fitting functions
 #'   ([fit_un()], [fit_mon()], [fit_iio()], [fit_dm()], [fit_lcr()]).
@@ -393,10 +430,37 @@ print.qleqtest <- function(x, ...) {
 select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
                             n_starts = 5, boot_n_starts = 3,
                             method = c("joint", "lattice"), seed = NULL,
-                            use_cpp = TRUE, verbose = FALSE, ...) {
+                            use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
+                            ...) {
 
   method <- match.arg(method)
   data <- validate_data(data)
+
+  # Optional first stage: if a range of class counts is supplied, select the
+  # number of classes by BIC before the structural comparison. The structural
+  # models require C >= 2, so the comparison uses the best fittable C >= 2;
+  # a globally preferred C = 1 is surfaced as a warning.
+  n_classes_table <- NULL
+  if (length(n_classes) > 1L) {
+    if (verbose) cat("Selecting the number of classes over C =",
+                     paste(range(n_classes), collapse = "-"), "...\n")
+    nc <- select_n_classes(data, C_range = n_classes, n_starts = n_starts,
+                           use_cpp = use_cpp, mc.cores = mc.cores,
+                           seed = seed, verbose = verbose, ...)
+    n_classes_table <- nc$table
+    cand <- nc$table[nc$table$C >= 2L & !is.na(nc$table$BIC), ]
+    if (nrow(cand) == 0L) {
+      stop("No fittable class count C >= 2 in the requested range")
+    }
+    n_classes <- cand$C[which.min(cand$BIC)]
+    if (!is.na(nc$best_C) && nc$best_C == 1L) {
+      warning("A single-class model (C = 1) had the lowest BIC; the latent ",
+              "structure comparison is conditional on C = ", n_classes,
+              ", but the data show little evidence of multiple classes.")
+    }
+    if (verbose) cat("Using n_classes =", n_classes,
+                     "for the structural comparison\n")
+  }
 
   fit_safe <- function(label, expr) {
     fit <- tryCatch(suppressWarnings(expr), error = function(e) {
@@ -442,7 +506,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
     ll_equivalence_test(
       data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
       seed = if (!is.null(seed)) seed + seed_offset else NULL,
-      use_cpp = use_cpp, verbose = verbose)
+      use_cpp = use_cpp, mc.cores = mc.cores, verbose = verbose)
   }
 
   bics <- c(LCR = NA_real_, RM = NA_real_)
@@ -575,7 +639,9 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
       fits = fits,
       alpha = alpha,
       B = B,
-      method = method
+      method = method,
+      n_classes = n_classes,
+      n_classes_table = n_classes_table
     ),
     class = "qlselect_ll"
   )
@@ -592,6 +658,10 @@ print.qlselect_ll <- function(x, ...) {
   cat("---------------------------------------------------\n")
   cat("Selected model :", x$selected, "\n")
   cat("Interpretation :", x$interpretation, "\n")
+  if (!is.null(x$n_classes)) {
+    cat("Latent classes :", x$n_classes,
+        if (!is.null(x$n_classes_table)) "(selected by BIC)" else "", "\n")
+  }
   cat("Method =", if (is.null(x$method)) "joint" else x$method,
       "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n\n")
 

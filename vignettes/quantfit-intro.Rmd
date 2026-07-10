@@ -142,6 +142,29 @@ un <- fit_un(responses, n_classes = 3, verbose = FALSE)
 un
 ```
 
+### Choosing the number of classes
+
+Every discrete model conditions on a number of latent classes, and that
+choice is a modelling decision in its own right — not something to fix
+arbitrarily. `select_n_classes()` makes it explicit: it fits the
+unconstrained model across a range of class counts (including the
+single-class baseline) and reports the enumeration so you can pick a count by
+BIC before comparing structure.
+
+```{r n-classes}
+nc <- select_n_classes(responses, C_range = 1:6, seed = 1)
+nc
+```
+
+The recommended two-stage workflow is therefore: choose the class count here,
+then run the structural comparison at that count. `select_model_ll()` will do
+both in one call if you pass a range to `n_classes` (it selects the count by
+BIC internally and reports the enumeration as `n_classes_table`). Fitting many
+class counts and bootstrapping is the expensive part of the analysis, so these
+functions take an `mc.cores` argument that spreads the work across cores;
+because every fit is seeded independently the parallel result is identical to
+the serial one.
+
 ### Comparing all six by information criteria
 
 `compare_models()` fits the whole set and ranks them. Note the caveat it is

@@ -12,6 +12,7 @@ ll_equivalence_test(
   n_starts = 3,
   seed = NULL,
   use_cpp = TRUE,
+  mc.cores = 1L,
   verbose = FALSE
 )
 }
@@ -38,7 +39,13 @@ including all bootstrap refits, is deterministic.}
 \item{use_cpp}{Use the compiled C++ EM engine for the refits
 (default TRUE).}
 
-\item{verbose}{Print progress every 10 replicates (default FALSE).}
+\item{mc.cores}{Number of cores for the bootstrap refits (default 1).
+Values above 1 use \code{\link[parallel:mclapply]{parallel::mclapply()}} on non-Windows platforms;
+because each replicate is seeded independently, results are identical
+to the serial run regardless of \code{mc.cores}.}
+
+\item{verbose}{Print progress every 10 replicates (default FALSE; ignored
+when \code{mc.cores > 1}).}
 }
 \value{
 An object of class \code{qleqtest}: a list with elements
@@ -84,9 +91,9 @@ the ordering inequalities); simulating from the fitted LCR again gives a
 correctly calibrated null distribution.
 
 Replicates on which either refit fails are dropped; a warning is issued
-if more than 10 percent are lost. Computation is sequential (\code{lapply});
-users needing parallelism can split \code{B} across seeds and pool the
-resulting \code{null_distribution} vectors.
+if more than 10 percent are lost. The bootstrap is parallelised over
+replicates when \code{mc.cores > 1} (see that argument); each replicate is
+seeded independently, so the parallel and serial results are identical.
 }
 \examples{
 \dontrun{

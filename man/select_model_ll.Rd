@@ -14,6 +14,7 @@ select_model_ll(
   method = c("joint", "lattice"),
   seed = NULL,
   use_cpp = TRUE,
+  mc.cores = 1L,
   verbose = FALSE,
   ...
 )
@@ -21,7 +22,11 @@ select_model_ll(
 \arguments{
 \item{data}{Binary response matrix (persons x items).}
 
-\item{n_classes}{Number of latent classes for the discrete models.}
+\item{n_classes}{Number of latent classes for the discrete models. May be
+a single integer, or a vector (e.g. \code{1:6}), in which case the class count
+is selected first by BIC with \code{\link[=select_n_classes]{select_n_classes()}} and the structural
+comparison is run at the chosen count (the enumeration table is returned
+as \code{n_classes_table}).}
 
 \item{alpha}{Significance level for the bootstrap tests (default 0.05).
 A constrained model is deemed \emph{adequate} when its bootstrap p-value
@@ -57,6 +62,10 @@ rather than one to three). \code{"joint"} is therefore the default;
 deterministic.}
 
 \item{use_cpp}{Use the compiled C++ EM engine (default TRUE).}
+
+\item{mc.cores}{Number of cores for the bootstrap refits within each test
+(default 1, passed to \code{\link[=ll_equivalence_test]{ll_equivalence_test()}}). Because replicates are
+seeded independently the result is identical to the serial run.}
 
 \item{verbose}{Print progress messages (default FALSE).}
 

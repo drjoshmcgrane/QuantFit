@@ -48,6 +48,22 @@ lines of work into one framework with a common, optimised C++ core.
   active monotonicity constraint return `NA` with a warning, since Hessian
   standard errors are not valid on the boundary.
 
+* `select_n_classes()` — chooses the number of latent classes by information
+  criterion, fitting the unconstrained model across a range (default `C = 1`
+  to `6`, where `C = 1` is the single-class independence baseline) and
+  returning an enumeration table plus the BIC- or AIC-preferred count. This
+  is the recommended first stage: decide how many classes the data support,
+  then compare structure at that count. `select_model_ll()` now also accepts
+  a vector for `n_classes` (e.g. `1:6`) and performs this selection
+  internally, returning the enumeration as `n_classes_table`.
+
+* Parallelisation. `ll_equivalence_test()`, `select_model_ll()`, and
+  `select_n_classes()` gain an `mc.cores` argument that spreads the bootstrap
+  refits (or the class-count fits) across cores with `parallel::mclapply()`
+  on non-Windows platforms. Because every replicate and every fit is seeded
+  independently, parallel runs are bit-identical to serial ones; a full
+  `select_model_ll()` call runs about 5x faster on six cores.
+
 * An optimised RcppArmadillo core for the latent-class EM (E-step, exact
   weighted-isotonic and Dykstra constrained M-steps), roughly 5x faster than
   the reference R implementation, which is retained and selectable via
