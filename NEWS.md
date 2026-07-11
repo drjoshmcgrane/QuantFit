@@ -28,6 +28,22 @@ lines of work into one framework with a common, optimised C++ core.
 
 ## New in this release
 
+* `assess_quantitative()` - a single triangulated judgement on whether data
+  support a quantitative (interval / additive) interpretation, combining all
+  three of the package's routes: latent-structure model selection
+  ([select_model_ll()]) on the raw data, plus the Bayesian cancellation
+  checks ([ConjointChecks()], double and triple) and the Karabatsos
+  synthetic-likelihood test ([KaraChecks()]) on an ability-banded score
+  matrix. The banding is deliberate: the axiom checks read genuinely additive
+  (Rasch) data as non-additive when applied to raw sum-score groups (a
+  sum-score-to-ability nonlinearity plus sparse extreme groups), whereas a
+  small number of ability bands with a real ability metric is well calibrated
+  - simulated Rasch data pass and data with dispersed item slopes are flagged.
+  The verdict names the supporting routes and reports each raw statistic; only
+  the model route is strictly calibrated, and the (unidimensional) banding can
+  miss multidimensional departures, both of which the output states.
+
+
 * `select_model_ll()` and `ll_equivalence_test()` — a statistically calibrated
   model selection procedure. Because UN and the ordinal models (MON/IIO/DM)
   have identical parameter counts, information criteria cannot distinguish
