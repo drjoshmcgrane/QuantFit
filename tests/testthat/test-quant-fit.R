@@ -5,7 +5,7 @@ test_that("assess_quantitative returns a well-formed triangulated verdict", {
   dat <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n),
                        seq(-1.8, 1.8, length.out = J), "-"))), n, J)
 
-  v <- assess_quantitative(dat, n_bands = 5, cc_B = 10, kara_B = 8,
+  v <- quant_fit(dat, n_bands = 5, cc_B = 10, kara_B = 8,
                            kara_S = 1500, kara_N_synth = 15, cc_n_mat = 8,
                            B = 19, mc.cores = 2, seed = 1, verbose = FALSE)
 
@@ -33,7 +33,7 @@ test_that("assess_quantitative respects triple = FALSE", {
   n <- 400; J <- 8
   dat <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n),
                        seq(-1.5, 1.5, length.out = J), "-"))), n, J)
-  v <- assess_quantitative(dat, n_bands = 5, triple = FALSE, cc_B = 8,
+  v <- quant_fit(dat, n_bands = 5, triple = FALSE, cc_B = 8,
                            kara_B = 6, kara_S = 1200, kara_N_synth = 12,
                            cc_n_mat = 8, B = 19, mc.cores = 2, seed = 2,
                            verbose = FALSE)

@@ -28,6 +28,10 @@ lines of work into one framework with a common, optimised C++ core.
 
 ## New in this release
 
+* The triangulated verdict function is now `quant_fit()` - the package's
+  namesake flagship function. `assess_quantitative()` is kept as a deprecated
+  alias.
+
 * `kara_bootstrap_null()` - applies the same Rasch bootstrap-null calibration
   to Karabatsos's global KL statistic that `cc_bootstrap_null()` applies to the
   cancellation-check violation rate, giving a per-dataset percentile p-value in

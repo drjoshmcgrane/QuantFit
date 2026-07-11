@@ -83,5 +83,5 @@ cancellation axioms for interval scaling in limited samples.
 \emph{Behavior Research Methods}, 57, 305.
 }
 \seealso{
-\code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}, \code{\link[=KaraChecks]{KaraChecks()}}, \code{\link[=assess_quantitative]{assess_quantitative()}}.
+\code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}, \code{\link[=KaraChecks]{KaraChecks()}}, \code{\link[=quant_fit]{quant_fit()}}.
 }

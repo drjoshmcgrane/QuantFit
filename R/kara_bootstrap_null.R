@@ -83,7 +83,7 @@ band_by_ability <- function(data, n_bands, theta = NULL) {
 #' cancellation axioms for interval scaling in limited samples.
 #' \emph{Behavior Research Methods}, 57, 305.
 #'
-#' @seealso [cc_bootstrap_null()], [KaraChecks()], [assess_quantitative()].
+#' @seealso [cc_bootstrap_null()], [KaraChecks()], [quant_fit()].
 #'
 #' @examples
 #' \dontrun{

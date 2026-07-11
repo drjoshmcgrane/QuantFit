@@ -65,7 +65,7 @@
 #' Domingue, B. (2014). Evaluating the equal-interval hypothesis with test
 #' score scales. \emph{Psychometrika}, 79(1), 1-19.
 #'
-#' @seealso [ConjointChecks()], [assess_quantitative()].
+#' @seealso [ConjointChecks()], [quant_fit()].
 #'
 #' @examples
 #' \dontrun{

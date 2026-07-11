@@ -1,4 +1,4 @@
-#' Overall judgement on quantitative structure from three methods
+#' Assess whether item response data support a quantitative interpretation
 #'
 #' Combines the three routes QuantFit offers to the question *do these data
 #' support a quantitative (interval / additive) interpretation?* into a single
@@ -109,7 +109,7 @@
 #' v
 #' }
 #' @export
-assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
+quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
                                 cc_n_mat = 50, triple = TRUE, cc_B = 100,
                                 cc_cutoff = 0.95,
                                 kara_S = 10000, kara_N_synth = 100,
@@ -259,4 +259,12 @@ print.quantverdict <- function(x, ...) {
   cat("\nAxiom banding (Kara) is unidimensional, so it can miss multidimensional",
       "\ndepartures - read a low violation rate as within-scale additivity.\n")
   invisible(x)
+}
+
+#' @rdname quant_fit
+#' @details `assess_quantitative()` is a deprecated alias for `quant_fit()`.
+#' @export
+assess_quantitative <- function(...) {
+  .Deprecated("quant_fit")
+  quant_fit(...)
 }
