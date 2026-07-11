@@ -28,14 +28,24 @@
 #' with a real ability metric is well calibrated (simulated Rasch data pass;
 #' data with dispersed item slopes are flagged).
 #'
+#' The Kara route is genuinely inferential in its own right: Karabatsos's
+#' method performs approximate Bayesian inference (synthetic-likelihood
+#' importance sampling) and rejects additivity when the per-cell
+#' Kullback-Leibler divergence exceeds 0.01, a criterion he validated by
+#' simulation. The verdict therefore reports his inferential quantities - the
+#' global KL and the per-cell KL distribution - not just a flag. (Karabatsos
+#' considered and rejected standardized-residual and credible-interval
+#' statistics as, respectively, too liberal and too conservative, so the KL is
+#' used here as he intended.)
+#'
 #' Two limitations are worth stating. First, banding on a unidimensional
 #' ability estimate can wash out \emph{multidimensional} departures from
 #' additivity, so a low Kara/CC violation rate is evidence about within-scale
-#' additivity, not a guarantee of unidimensionality. Second, only the LC route
-#' is calibrated in the strict sense (its bootstrap gives a chi-bar-squared
-#' p-value); the CC and Kara routes use the fixed thresholds below, which are
-#' heuristic - the verdict reports each route's raw statistic so the judgement
-#' can be inspected, not just the flag.
+#' additivity, not a guarantee of unidimensionality. Second, the LC route is
+#' calibrated by bootstrap (a chi-bar-squared p-value) and the Kara route by
+#' Karabatsos's simulation-validated KL criterion; the CC threshold and the
+#' aggregation of Kara's per-cell rule into a single verdict remain heuristic,
+#' so the verdict reports each route's raw statistics for inspection.
 #'
 #' A quantitative reading is best supported when the model route selects
 #' LCR/RM \emph{and} both axiom routes are additivity-consistent.
@@ -51,8 +61,16 @@
 #' @param kara_S,kara_N_synth Iterations and synthetic datasets for
 #'   [KaraChecks()] (defaults 20000, 100).
 #' @param B Bootstrap replicates for the LC route (default 99).
-#' @param kara_max_viol Maximum proportion of Kara cells that may violate
-#'   (KL > 0.01) to judge the data additivity-consistent (default 0.15).
+#' @param kara_max_viol Maximum proportion of Kara cells that may exceed
+#'   Karabatsos's KL > 0.01 rejection criterion for the data to be judged
+#'   additivity-consistent (default 0.15). The KL > 0.01 cutoff is
+#'   Karabatsos's own, established by his simulation study (Rasch KL converges
+#'   to 0, non-additive 2PL KL exceeds 0.01); the aggregation into a single
+#'   proportion-of-cells tolerance is this package's, since his stated rule
+#'   rejects additivity when one or more cells exceed the cutoff. The verdict
+#'   also reports the global KL and the per-cell KL distribution
+#'   (median, Q3, 90th percentile, max), which are his headline inferential
+#'   summaries.
 #' @param cc_max_viol Maximum ConjointChecks weighted violation rate to judge
 #'   the data additivity-consistent (default 0.10).
 #' @param mc.cores Cores for the parallelisable steps (default 1).
@@ -155,9 +173,14 @@ assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
     kc <- KaraChecks(as.vector(band$N), as.vector(band$n), S = kara_S,
                      N_synth = kara_N_synth, mc.cores = mc.cores, verbose = FALSE,
                      testscore = rep(band$ability, nc), item = rep(1:nc, each = nr))
+    # Karabatsos's inferential summaries: the global KL and the distribution
+    # of per-cell KL, with his KL > 0.01 rejection criterion.
+    kl <- as.vector(kc$KL)
+    qs <- stats::quantile(kl, c(0.5, 0.75, 0.90, 1), names = FALSE)
     prop <- kc$n_violations / (nr * nc)
     list(available = TRUE, global_KL = kc$global_KL, n_violations = kc$n_violations,
          n_cells = nr * nc, prop_violations = prop,
+         kl_median = qs[1], kl_q3 = qs[2], kl_p90 = qs[3], kl_max = qs[4],
          supports_quant = prop <= kara_max_viol)
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
@@ -225,16 +248,19 @@ print.quantverdict <- function(x, ...) {
                 yn(x$cc$supports_quant)))
   } else cat("       unavailable:", x$cc$msg, "\n")
 
-  cat("[Kara] Synthetic-likelihood additivity test (banded)\n")
+  cat("[Kara] Karabatsos synthetic-likelihood additivity test (banded)\n")
   if (isTRUE(x$kara$available)) {
-    cat(sprintf("       global KL %.2f; %d/%d cells violate (%.0f%%)   [%s]\n",
-                x$kara$global_KL, x$kara$n_violations, x$kara$n_cells,
+    cat(sprintf("       global KL %.2f; per-cell KL median %.3f, Q3 %.3f, 90%% %.3f, max %.3f\n",
+                x$kara$global_KL, x$kara$kl_median, x$kara$kl_q3,
+                x$kara$kl_p90, x$kara$kl_max))
+    cat(sprintf("       %d/%d cells exceed KL > 0.01 (%.0f%%)   [%s]\n",
+                x$kara$n_violations, x$kara$n_cells,
                 100 * x$kara$prop_violations, yn(x$kara$supports_quant)))
   } else cat("       unavailable:", x$kara$msg, "\n")
 
-  cat("\nLC is bootstrap-calibrated; axiom thresholds are heuristic (Kara <=",
-      sprintf("%.0f%% cells,", 100 * x$thresholds["kara_max_viol"]),
-      "CC <=", sprintf("%.0f%%).", 100 * x$thresholds["cc_max_viol"]),
+  cat("\nLC calibrated by bootstrap; Kara uses Karabatsos's KL > 0.01 criterion",
+      sprintf("(flag if\n> %.0f%% of cells exceed it);", 100 * x$thresholds["kara_max_viol"]),
+      sprintf("CC flag if weighted violation > %.0f%%.", 100 * x$thresholds["cc_max_viol"]),
       "\nBanding is unidimensional, so the axiom routes can miss multidimensional\ndepartures - read a low violation rate as within-scale additivity.\n")
   invisible(x)
 }

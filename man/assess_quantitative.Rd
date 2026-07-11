@@ -40,8 +40,16 @@ double (default TRUE). Requires \code{n_bands >= 4}.}
 
 \item{B}{Bootstrap replicates for the LC route (default 99).}
 
-\item{kara_max_viol}{Maximum proportion of Kara cells that may violate
-(KL > 0.01) to judge the data additivity-consistent (default 0.15).}
+\item{kara_max_viol}{Maximum proportion of Kara cells that may exceed
+Karabatsos's KL > 0.01 rejection criterion for the data to be judged
+additivity-consistent (default 0.15). The KL > 0.01 cutoff is
+Karabatsos's own, established by his simulation study (Rasch KL converges
+to 0, non-additive 2PL KL exceeds 0.01); the aggregation into a single
+proportion-of-cells tolerance is this package's, since his stated rule
+rejects additivity when one or more cells exceed the cutoff. The verdict
+also reports the global KL and the per-cell KL distribution
+(median, Q3, 90th percentile, max), which are his headline inferential
+summaries.}
 
 \item{cc_max_viol}{Maximum ConjointChecks weighted violation rate to judge
 the data additivity-consistent (default 0.10).}
@@ -89,14 +97,24 @@ groups inject spurious violations - whereas a small number of ability bands
 with a real ability metric is well calibrated (simulated Rasch data pass;
 data with dispersed item slopes are flagged).
 
+The Kara route is genuinely inferential in its own right: Karabatsos's
+method performs approximate Bayesian inference (synthetic-likelihood
+importance sampling) and rejects additivity when the per-cell
+Kullback-Leibler divergence exceeds 0.01, a criterion he validated by
+simulation. The verdict therefore reports his inferential quantities - the
+global KL and the per-cell KL distribution - not just a flag. (Karabatsos
+considered and rejected standardized-residual and credible-interval
+statistics as, respectively, too liberal and too conservative, so the KL is
+used here as he intended.)
+
 Two limitations are worth stating. First, banding on a unidimensional
 ability estimate can wash out \emph{multidimensional} departures from
 additivity, so a low Kara/CC violation rate is evidence about within-scale
-additivity, not a guarantee of unidimensionality. Second, only the LC route
-is calibrated in the strict sense (its bootstrap gives a chi-bar-squared
-p-value); the CC and Kara routes use the fixed thresholds below, which are
-heuristic - the verdict reports each route's raw statistic so the judgement
-can be inspected, not just the flag.
+additivity, not a guarantee of unidimensionality. Second, the LC route is
+calibrated by bootstrap (a chi-bar-squared p-value) and the Kara route by
+Karabatsos's simulation-validated KL criterion; the CC threshold and the
+aggregation of Kara's per-cell rule into a single verdict remain heuristic,
+so the verdict reports each route's raw statistics for inspection.
 
 A quantitative reading is best supported when the model route selects
 LCR/RM \emph{and} both axiom routes are additivity-consistent.
