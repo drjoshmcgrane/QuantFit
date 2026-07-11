@@ -28,20 +28,32 @@ lines of work into one framework with a common, optimised C++ core.
 
 ## New in this release
 
+* `cc_bootstrap_null()` - calibrates the [ConjointChecks()] violation rate
+  against a null distribution simulated from the Rasch model fitted to the
+  data, following Student & Read (2025). The raw violation rate is not
+  interpretable on its own (even interval-scalable Rasch data violate at a
+  rate that depends on sample size, test length, and item parameters), so the
+  observed rate's percentile within the Rasch null is treated as a p-value -
+  interval scaling is rejected when it exceeds, say, the 95th percentile.
+  Because observed and null data share the same pipeline, the null
+  self-calibrates the baseline, so no fixed cutoff is needed. Includes `print`
+  and `plot` methods and an under-power warning below ~1000 examinees.
+
 * `assess_quantitative()` - a single triangulated judgement on whether data
   support a quantitative (interval / additive) interpretation, combining all
-  three of the package's routes: latent-structure model selection
-  ([select_model_ll()]) on the raw data, plus the Bayesian cancellation
-  checks ([ConjointChecks()], double and triple) and the Karabatsos
-  synthetic-likelihood test ([KaraChecks()]) on an ability-banded score
-  matrix. The banding is deliberate: the axiom checks read genuinely additive
-  (Rasch) data as non-additive when applied to raw sum-score groups (a
-  sum-score-to-ability nonlinearity plus sparse extreme groups), whereas a
-  small number of ability bands with a real ability metric is well calibrated
-  - simulated Rasch data pass and data with dispersed item slopes are flagged.
-  The verdict names the supporting routes and reports each raw statistic; only
-  the model route is strictly calibrated, and the (unidimensional) banding can
-  miss multidimensional departures, both of which the output states.
+  three of the package's routes, each with its appropriate calibration:
+  latent-structure model selection ([select_model_ll()], bootstrap
+  chi-bar-squared) on the raw data; the cancellation checks calibrated against
+  a Rasch bootstrap null ([cc_bootstrap_null()], per Student & Read 2025); and
+  the Karabatsos synthetic-likelihood test ([KaraChecks()], his KL > 0.01
+  criterion) on an ability-banded matrix. The Kara banding is deliberate - the
+  KL test reads additive Rasch data as non-additive on raw sum-score groups,
+  whereas ability bands with a real ability metric are well calibrated; the CC
+  route needs no banding because its bootstrap null self-calibrates the
+  pipeline. The verdict names the supporting routes and reports each route's
+  statistics. It states its limits: the CC route is under-powered below ~1000
+  examinees, and the (unidimensional) Kara banding can miss multidimensional
+  departures.
 
 
 * `select_model_ll()` and `ll_equivalence_test()` — a statistically calibrated

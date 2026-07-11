@@ -10,11 +10,12 @@ assess_quantitative(
   n_bands = 6L,
   cc_n_mat = 50,
   triple = TRUE,
+  cc_B = 100,
+  cc_cutoff = 0.95,
   kara_S = 20000,
   kara_N_synth = 100,
   B = 99,
   kara_max_viol = 0.15,
-  cc_max_viol = 0.1,
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE,
@@ -32,8 +33,14 @@ resolution).}
 
 \item{cc_n_mat}{Submatrices sampled per \code{\link[=ConjointChecks]{ConjointChecks()}} run (default 50).}
 
-\item{triple}{Also run the triple-cancellation check (4x4), conditional on
-double (default TRUE). Requires \code{n_bands >= 4}.}
+\item{triple}{Also calibrate the triple-cancellation check against its own
+Rasch bootstrap null (default TRUE).}
+
+\item{cc_B}{Number of Rasch-simulated null datasets for the CC route
+(default 100, passed to \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}).}
+
+\item{cc_cutoff}{Null percentile above which the CC route rejects interval
+scaling (default 0.95).}
 
 \item{kara_S, kara_N_synth}{Iterations and synthetic datasets for
 \code{\link[=KaraChecks]{KaraChecks()}} (defaults 20000, 100).}
@@ -50,9 +57,6 @@ rejects additivity when one or more cells exceed the cutoff. The verdict
 also reports the global KL and the per-cell KL distribution
 (median, Q3, 90th percentile, max), which are his headline inferential
 summaries.}
-
-\item{cc_max_viol}{Maximum ConjointChecks weighted violation rate to judge
-the data additivity-consistent (default 0.10).}
 
 \item{mc.cores}{Cores for the parallelisable steps (default 1).}
 
@@ -80,22 +84,30 @@ triangulated verdict:
 quantitative model (LCR or RM) win over the classificatory and ordinal
 alternatives?
 \item \strong{CC} - Bayesian cancellation checks (\code{\link[=ConjointChecks]{ConjointChecks()}}),
-double then triple, on an ability-banded score matrix: are the
-cancellation axioms of additive conjoint measurement satisfied?
+double (and optionally triple), calibrated against a Rasch bootstrap
+null via \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} (Student & Read, 2025): is the observed
+violation rate higher than expected under interval scaling?
 \item \strong{Kara} - the Karabatsos (2018) synthetic-likelihood test
-(\code{\link[=KaraChecks]{KaraChecks()}}) on the same banded matrix: do the additive axioms
+(\code{\link[=KaraChecks]{KaraChecks()}}) on an ability-banded matrix: do the additive axioms
 hold, as measured by Kullback-Leibler departures from additivity?
 }
 
-Persons are grouped into \code{n_bands} ability bands by their Rasch ability
-estimate (from \code{\link[=fit_rm]{fit_rm()}}); the CC and Kara routes both operate on the
-resulting band-by-item matrix, with each band's mean ability as the row
-metric. This banding is deliberate: applying these axiom checks to raw
-sum-score groups makes them read genuinely additive (Rasch) data as
-non-additive - the sum-score-to-ability nonlinearity and sparse extreme
-groups inject spurious violations - whereas a small number of ability bands
-with a real ability metric is well calibrated (simulated Rasch data pass;
-data with dispersed item slopes are flagged).
+The three routes use the calibration appropriate to each. \strong{CC} runs
+\code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}: the observed \code{\link[=ConjointChecks]{ConjointChecks()}} violation rate is
+located in a null distribution of rates simulated from the Rasch model
+fitted to the data, and interval scaling is rejected when the observed rate
+exceeds the \code{cc_cutoff} percentile of that null (Student & Read, 2025).
+Because observed and null data pass through the same sum-score pipeline, the
+null self-calibrates the baseline violation rate - no ability banding is
+needed for CC, and there is no fixed violation threshold.
+
+\strong{Kara} does need help: applying the Karabatsos KL test to raw
+sum-score groups reads genuinely additive (Rasch) data as non-additive (the
+sum-score-to-ability nonlinearity injects spurious violations), so persons
+are grouped into \code{n_bands} ability bands by their Rasch ability estimate
+(from \code{\link[=fit_rm]{fit_rm()}}) and the KL test runs on that band-by-item matrix with each
+band's mean ability as the row metric - which is well calibrated (simulated
+Rasch data pass; data with dispersed item slopes are flagged).
 
 The Kara route is genuinely inferential in its own right: Karabatsos's
 method performs approximate Bayesian inference (synthetic-likelihood
@@ -107,14 +119,20 @@ considered and rejected standardized-residual and credible-interval
 statistics as, respectively, too liberal and too conservative, so the KL is
 used here as he intended.)
 
-Two limitations are worth stating. First, banding on a unidimensional
-ability estimate can wash out \emph{multidimensional} departures from
-additivity, so a low Kara/CC violation rate is evidence about within-scale
-additivity, not a guarantee of unidimensionality. Second, the LC route is
-calibrated by bootstrap (a chi-bar-squared p-value) and the Kara route by
-Karabatsos's simulation-validated KL criterion; the CC threshold and the
-aggregation of Kara's per-cell rule into a single verdict remain heuristic,
-so the verdict reports each route's raw statistics for inspection.
+Calibration status of each route: \strong{LC} by bootstrap (a
+chi-bar-squared p-value); \strong{CC} by the Rasch bootstrap null (a
+percentile p-value, per Student & Read); \strong{Kara} by Karabatsos's
+simulation-validated KL > 0.01 criterion. The only remaining heuristic is
+the aggregation of Kara's per-cell rule into a single verdict, so the
+verdict reports each route's raw statistics for inspection.
+
+Two limitations are worth stating. First, the CC procedure is under-powered
+below roughly 1000 examinees (Student & Read, 2025): at small \eqn{N} a
+non-rejection may reflect low power rather than interval scalability, and a
+note is printed. Second, Kara's ability banding is unidimensional, so it can
+wash out \emph{multidimensional} departures from additivity - read a low Kara
+violation rate as within-scale additivity, not a guarantee of
+unidimensionality.
 
 A quantitative reading is best supported when the model route selects
 LCR/RM \emph{and} both axiom routes are additivity-consistent.
@@ -134,7 +152,12 @@ axioms using synthetic likelihood. \emph{Psychometrika}, 83(2), 321-332.
 
 Domingue, B. (2014). Evaluating the equal-interval hypothesis with test
 score scales. \emph{Psychometrika}, 79(1), 1-19.
+
+Student, S. R., & Read, W. S. (2025). Applying Bayesian checks of
+cancellation axioms for interval scaling in limited samples.
+\emph{Behavior Research Methods}, 57, 305.
 }
 \seealso{
-\code{\link[=select_model_ll]{select_model_ll()}}, \code{\link[=ConjointChecks]{ConjointChecks()}}, \code{\link[=KaraChecks]{KaraChecks()}}.
+\code{\link[=select_model_ll]{select_model_ll()}}, \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}, \code{\link[=ConjointChecks]{ConjointChecks()}},
+\code{\link[=KaraChecks]{KaraChecks()}}.
 }

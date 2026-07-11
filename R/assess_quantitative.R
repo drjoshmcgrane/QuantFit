@@ -10,23 +10,31 @@
 #'     quantitative model (LCR or RM) win over the classificatory and ordinal
 #'     alternatives?
 #'   \item \strong{CC} - Bayesian cancellation checks ([ConjointChecks()]),
-#'     double then triple, on an ability-banded score matrix: are the
-#'     cancellation axioms of additive conjoint measurement satisfied?
+#'     double (and optionally triple), calibrated against a Rasch bootstrap
+#'     null via [cc_bootstrap_null()] (Student & Read, 2025): is the observed
+#'     violation rate higher than expected under interval scaling?
 #'   \item \strong{Kara} - the Karabatsos (2018) synthetic-likelihood test
-#'     ([KaraChecks()]) on the same banded matrix: do the additive axioms
+#'     ([KaraChecks()]) on an ability-banded matrix: do the additive axioms
 #'     hold, as measured by Kullback-Leibler departures from additivity?
 #' }
 #'
 #' @details
-#' Persons are grouped into `n_bands` ability bands by their Rasch ability
-#' estimate (from [fit_rm()]); the CC and Kara routes both operate on the
-#' resulting band-by-item matrix, with each band's mean ability as the row
-#' metric. This banding is deliberate: applying these axiom checks to raw
-#' sum-score groups makes them read genuinely additive (Rasch) data as
-#' non-additive - the sum-score-to-ability nonlinearity and sparse extreme
-#' groups inject spurious violations - whereas a small number of ability bands
-#' with a real ability metric is well calibrated (simulated Rasch data pass;
-#' data with dispersed item slopes are flagged).
+#' The three routes use the calibration appropriate to each. \strong{CC} runs
+#' [cc_bootstrap_null()]: the observed [ConjointChecks()] violation rate is
+#' located in a null distribution of rates simulated from the Rasch model
+#' fitted to the data, and interval scaling is rejected when the observed rate
+#' exceeds the `cc_cutoff` percentile of that null (Student & Read, 2025).
+#' Because observed and null data pass through the same sum-score pipeline, the
+#' null self-calibrates the baseline violation rate - no ability banding is
+#' needed for CC, and there is no fixed violation threshold.
+#'
+#' \strong{Kara} does need help: applying the Karabatsos KL test to raw
+#' sum-score groups reads genuinely additive (Rasch) data as non-additive (the
+#' sum-score-to-ability nonlinearity injects spurious violations), so persons
+#' are grouped into `n_bands` ability bands by their Rasch ability estimate
+#' (from [fit_rm()]) and the KL test runs on that band-by-item matrix with each
+#' band's mean ability as the row metric - which is well calibrated (simulated
+#' Rasch data pass; data with dispersed item slopes are flagged).
 #'
 #' The Kara route is genuinely inferential in its own right: Karabatsos's
 #' method performs approximate Bayesian inference (synthetic-likelihood
@@ -38,14 +46,20 @@
 #' statistics as, respectively, too liberal and too conservative, so the KL is
 #' used here as he intended.)
 #'
-#' Two limitations are worth stating. First, banding on a unidimensional
-#' ability estimate can wash out \emph{multidimensional} departures from
-#' additivity, so a low Kara/CC violation rate is evidence about within-scale
-#' additivity, not a guarantee of unidimensionality. Second, the LC route is
-#' calibrated by bootstrap (a chi-bar-squared p-value) and the Kara route by
-#' Karabatsos's simulation-validated KL criterion; the CC threshold and the
-#' aggregation of Kara's per-cell rule into a single verdict remain heuristic,
-#' so the verdict reports each route's raw statistics for inspection.
+#' Calibration status of each route: \strong{LC} by bootstrap (a
+#' chi-bar-squared p-value); \strong{CC} by the Rasch bootstrap null (a
+#' percentile p-value, per Student & Read); \strong{Kara} by Karabatsos's
+#' simulation-validated KL > 0.01 criterion. The only remaining heuristic is
+#' the aggregation of Kara's per-cell rule into a single verdict, so the
+#' verdict reports each route's raw statistics for inspection.
+#'
+#' Two limitations are worth stating. First, the CC procedure is under-powered
+#' below roughly 1000 examinees (Student & Read, 2025): at small \eqn{N} a
+#' non-rejection may reflect low power rather than interval scalability, and a
+#' note is printed. Second, Kara's ability banding is unidimensional, so it can
+#' wash out \emph{multidimensional} departures from additivity - read a low Kara
+#' violation rate as within-scale additivity, not a guarantee of
+#' unidimensionality.
 #'
 #' A quantitative reading is best supported when the model route selects
 #' LCR/RM \emph{and} both axiom routes are additivity-consistent.
@@ -56,8 +70,12 @@
 #'   more bands re-introduce the sparse-extreme problem, fewer lose
 #'   resolution).
 #' @param cc_n_mat Submatrices sampled per [ConjointChecks()] run (default 50).
-#' @param triple Also run the triple-cancellation check (4x4), conditional on
-#'   double (default TRUE). Requires `n_bands >= 4`.
+#' @param triple Also calibrate the triple-cancellation check against its own
+#'   Rasch bootstrap null (default TRUE).
+#' @param cc_B Number of Rasch-simulated null datasets for the CC route
+#'   (default 100, passed to [cc_bootstrap_null()]).
+#' @param cc_cutoff Null percentile above which the CC route rejects interval
+#'   scaling (default 0.95).
 #' @param kara_S,kara_N_synth Iterations and synthetic datasets for
 #'   [KaraChecks()] (defaults 20000, 100).
 #' @param B Bootstrap replicates for the LC route (default 99).
@@ -71,8 +89,6 @@
 #'   also reports the global KL and the per-cell KL distribution
 #'   (median, Q3, 90th percentile, max), which are his headline inferential
 #'   summaries.
-#' @param cc_max_viol Maximum ConjointChecks weighted violation rate to judge
-#'   the data additivity-consistent (default 0.10).
 #' @param mc.cores Cores for the parallelisable steps (default 1).
 #' @param seed Optional integer seed.
 #' @param verbose Print progress (default TRUE).
@@ -90,7 +106,12 @@
 #' Domingue, B. (2014). Evaluating the equal-interval hypothesis with test
 #' score scales. \emph{Psychometrika}, 79(1), 1-19.
 #'
-#' @seealso [select_model_ll()], [ConjointChecks()], [KaraChecks()].
+#' Student, S. R., & Read, W. S. (2025). Applying Bayesian checks of
+#' cancellation axioms for interval scaling in limited samples.
+#' \emph{Behavior Research Methods}, 57, 305.
+#'
+#' @seealso [select_model_ll()], [cc_bootstrap_null()], [ConjointChecks()],
+#'   [KaraChecks()].
 #'
 #' @examples
 #' \dontrun{
@@ -102,9 +123,10 @@
 #' }
 #' @export
 assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
-                                cc_n_mat = 50, triple = TRUE,
+                                cc_n_mat = 50, triple = TRUE, cc_B = 100,
+                                cc_cutoff = 0.95,
                                 kara_S = 20000, kara_N_synth = 100, B = 99,
-                                kara_max_viol = 0.15, cc_max_viol = 0.10,
+                                kara_max_viol = 0.15,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE,
                                 ...) {
 
@@ -141,25 +163,29 @@ assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
     list(N = Nb[, ord], n = nb[, ord], ability = ab)
   }, error = function(e) NULL)
 
-  # -- CC route (double, then triple) on the banded matrix ----------------
-  if (verbose) cat("[CC]   cancellation checks on", n_bands, "ability bands...\n")
-  cc <- if (is.null(band)) {
-    list(available = FALSE, msg = "ability banding failed", supports_quant = NA)
-  } else tryCatch({
-    dbl <- ConjointChecks(band$N, band$n, n.mat = cc_n_mat, check = "double",
-                          mc.cores = mc.cores)
-    dbl_v <- dbl@means$weighted
-    res <- list(available = TRUE, double_violation = dbl_v,
-                double_ok = dbl_v <= cc_max_viol)
-    if (triple && n_bands >= 4) {
-      tri <- ConjointChecks(band$N, band$n, n.mat = cc_n_mat, check = "triple",
-                            mc.cores = mc.cores)
-      res$triple_violation <- tri@means$weighted
-      res$triple_ok <- tri@means$weighted <= cc_max_viol
+  # -- CC route: bootstrapped null (Student & Read 2025) on the raw data ---
+  # The Rasch-simulated null self-calibrates the sum-score pipeline, so this
+  # runs on raw sum-score groups (not the bands) and needs no fixed threshold.
+  if (verbose) cat("[CC]   bootstrapped cancellation checks (Student & Read)...\n")
+  cc <- tryCatch({
+    dbl <- cc_bootstrap_null(data, check = "double", n.mat = cc_n_mat,
+                             B = cc_B, cutoff = cc_cutoff, mc.cores = mc.cores,
+                             seed = seed, verbose = FALSE)
+    res <- list(available = TRUE, double_rate = dbl$observed,
+                double_null_mean = mean(dbl$null),
+                double_percentile = dbl$percentile, double_p = dbl$p_value,
+                double_reject = dbl$reject)
+    if (triple) {
+      tri <- cc_bootstrap_null(data, check = "triple", n.mat = cc_n_mat,
+                               B = cc_B, cutoff = cc_cutoff, mc.cores = mc.cores,
+                               seed = if (!is.null(seed)) seed + 1L else NULL,
+                               verbose = FALSE)
+      res$triple_rate <- tri$observed; res$triple_percentile <- tri$percentile
+      res$triple_p <- tri$p_value; res$triple_reject <- tri$reject
     }
-    # CC supports additivity if double holds and (triple holds where run)
-    res$supports_quant <- res$double_ok &&
-      (is.null(res$triple_ok) || isTRUE(res$triple_ok))
+    # CC supports additivity when interval scaling is NOT rejected
+    res$supports_quant <- !isTRUE(res$double_reject) &&
+      (is.null(res$triple_reject) || !isTRUE(res$triple_reject))
     res
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
@@ -212,9 +238,9 @@ assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
   }
 
   structure(list(verdict = verdict, support = support, n_available = n_avail,
-                 lc = lc, cc = cc, kara = kara, n_bands = n_bands,
+                 lc = lc, cc = cc, kara = kara, n_bands = n_bands, N = nrow(data),
                  thresholds = c(kara_max_viol = kara_max_viol,
-                                cc_max_viol = cc_max_viol)),
+                                cc_cutoff = cc_cutoff)),
             class = "quantverdict")
 }
 
@@ -239,12 +265,13 @@ print.quantverdict <- function(x, ...) {
                 x$lc$selected, x$lc$n_classes, x$lc$scale, yn(x$lc$supports_quant)))
   } else cat("       unavailable:", x$lc$msg, "\n")
 
-  cat(sprintf("[CC]   Cancellation checks (%d ability bands)\n", x$n_bands))
+  cat("[CC]   Cancellation checks vs Rasch bootstrap null (Student & Read)\n")
   if (isTRUE(x$cc$available)) {
-    cat(sprintf("       double %.1f%%%s   [%s]\n",
-                100 * x$cc$double_violation,
-                if (!is.null(x$cc$triple_violation))
-                  sprintf(", triple %.1f%%", 100 * x$cc$triple_violation) else "",
+    cat(sprintf("       double: rate %.3f, %.0f%%ile of null (p = %.3f)%s   [%s]\n",
+                x$cc$double_rate, 100 * x$cc$double_percentile, x$cc$double_p,
+                if (!is.null(x$cc$triple_percentile))
+                  sprintf("; triple %.0f%%ile (p = %.3f)",
+                          100 * x$cc$triple_percentile, x$cc$triple_p) else "",
                 yn(x$cc$supports_quant)))
   } else cat("       unavailable:", x$cc$msg, "\n")
 
@@ -258,9 +285,13 @@ print.quantverdict <- function(x, ...) {
                 100 * x$kara$prop_violations, yn(x$kara$supports_quant)))
   } else cat("       unavailable:", x$kara$msg, "\n")
 
-  cat("\nLC calibrated by bootstrap; Kara uses Karabatsos's KL > 0.01 criterion",
-      sprintf("(flag if\n> %.0f%% of cells exceed it);", 100 * x$thresholds["kara_max_viol"]),
-      sprintf("CC flag if weighted violation > %.0f%%.", 100 * x$thresholds["cc_max_viol"]),
-      "\nBanding is unidimensional, so the axiom routes can miss multidimensional\ndepartures - read a low violation rate as within-scale additivity.\n")
+  cat("\nLC calibrated by bootstrap; CC by a Rasch bootstrap null",
+      sprintf("(reject > %.0f%%ile);", 100 * x$thresholds["cc_cutoff"]),
+      "Kara by Karabatsos's KL > 0.01 criterion.")
+  if (!is.null(x$N) && x$N < 1000) {
+    cat(sprintf("\nNote: N = %d; the CC procedure is under-powered below ~1000 (Student & Read 2025).", x$N))
+  }
+  cat("\nAxiom banding (Kara) is unidimensional, so it can miss multidimensional",
+      "\ndepartures - read a low violation rate as within-scale additivity.\n")
   invisible(x)
 }
