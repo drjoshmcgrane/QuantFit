@@ -5,9 +5,9 @@ test_that("assess_quantitative returns a well-formed triangulated verdict", {
   dat <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n),
                        seq(-1.8, 1.8, length.out = J), "-"))), n, J)
 
-  v <- assess_quantitative(dat, n_bands = 5, cc_B = 12, kara_S = 2000,
-                           kara_N_synth = 20, cc_n_mat = 8, B = 19,
-                           mc.cores = 2, seed = 1, verbose = FALSE)
+  v <- assess_quantitative(dat, n_bands = 5, cc_B = 10, kara_B = 8,
+                           kara_S = 1500, kara_N_synth = 15, cc_n_mat = 8,
+                           B = 19, mc.cores = 2, seed = 1, verbose = FALSE)
 
   expect_s3_class(v, "quantverdict")
   expect_true(is.character(v$verdict) && nchar(v$verdict) > 0)
@@ -33,11 +33,28 @@ test_that("assess_quantitative respects triple = FALSE", {
   n <- 400; J <- 8
   dat <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n),
                        seq(-1.5, 1.5, length.out = J), "-"))), n, J)
-  v <- assess_quantitative(dat, n_bands = 5, triple = FALSE, cc_B = 10,
-                           kara_S = 1500, kara_N_synth = 15, cc_n_mat = 8,
-                           B = 19, mc.cores = 2, seed = 2, verbose = FALSE)
+  v <- assess_quantitative(dat, n_bands = 5, triple = FALSE, cc_B = 8,
+                           kara_B = 6, kara_S = 1200, kara_N_synth = 12,
+                           cc_n_mat = 8, B = 19, mc.cores = 2, seed = 2,
+                           verbose = FALSE)
   expect_s3_class(v, "quantverdict")
   if (isTRUE(v$cc$available)) expect_null(v$cc$triple_percentile)
+})
+
+test_that("kara_bootstrap_null returns a well-formed ccnull object", {
+  skip_on_cran()
+  set.seed(4)
+  n <- 800; J <- 12
+  dat <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n),
+                       seq(-2, 2, length.out = J), "-"))), n, J)
+  res <- kara_bootstrap_null(dat, n_bands = 5, B = 8, S = 1500, N_synth = 15,
+                             mc.cores = 2, seed = 1, verbose = FALSE)
+  expect_s3_class(res, "ccnull")
+  expect_identical(res$check, "kara-KL")
+  expect_true(res$observed >= 0)
+  expect_true(res$percentile >= 0 && res$percentile <= 1)
+  expect_true(all(c("kl_median", "kl_max") %in% names(res)))
+  expect_output(print(res), "Karabatsos global-KL")
 })
 
 test_that("cc_bootstrap_null returns a well-formed ccnull object", {

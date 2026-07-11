@@ -52,6 +52,53 @@ par_lapply <- function(X, FUN, mc.cores = 1L) {
   }
 }
 
+#' Bootstrap test of continuous (RM) vs discrete (LCR) Rasch structure
+#'
+#' RM and LCR are non-nested and use different estimators (marginal maximum
+#' likelihood over a continuous latent density vs the EM algorithm over
+#' discrete classes), so a likelihood-ratio bootstrap is not clean. Instead the
+#' BIC difference \eqn{BIC_{LCR} - BIC_{RM}} is calibrated against a null
+#' simulated from the fitted (continuous) RM: the discrete LCR is preferred only
+#' when it fits better than the RM null would produce by chance. This keeps the
+#' final step of the hierarchy consistent with the bootstrap tests above.
+#'
+#' @param data Binary response matrix.
+#' @param fit_rm_obj,fit_lcr_obj Fitted RM and LCR models.
+#' @param n_classes Number of latent classes for LCR.
+#' @param B,n_starts,use_cpp,mc.cores,seed As in [select_model_ll()].
+#' @return A list with `statistic` (observed BIC difference), `p_value`
+#'   (lower-tail: how often the RM null is at least as favourable to LCR), and
+#'   `select_lcr` (TRUE when discreteness is significant).
+#' @keywords internal
+rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
+                           n_starts = 3, use_cpp = TRUE, mc.cores = 1L,
+                           seed = NULL) {
+  obs <- BIC(fit_lcr_obj) - BIC(fit_rm_obj)     # negative favours LCR
+  n <- nrow(data); J <- ncol(data)
+  theta <- rm_scores(fit_rm_obj)$theta
+  P <- plogis(outer(theta, fit_rm_obj$delta, "-"))
+  if (!is.null(seed)) set.seed(seed)
+  rep_seeds <- sample.int(.Machine$integer.max, B)
+  boot_one <- function(b) {
+    set.seed(rep_seeds[b])
+    d <- matrix(rbinom(n * J, 1, P), n, J)
+    rm_b <- tryCatch(suppressWarnings(fit_rm(d, verbose = FALSE)),
+                     error = function(e) NULL)
+    lcr_b <- tryCatch(
+      suppressWarnings(fit_lcr(d, n_classes, n_starts = n_starts, use_cpp = use_cpp)),
+      error = function(e) NULL)
+    if (is.null(rm_b) || is.null(lcr_b)) return(NA_real_)
+    BIC(lcr_b) - BIC(rm_b)
+  }
+  raw <- par_lapply(seq_len(B), boot_one, mc.cores)
+  null <- vapply(raw, function(z)
+    if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
+  null <- null[!is.na(null)]
+  p_lower <- if (length(null) == 0L) NA_real_ else mean(null <= obs)
+  list(statistic = obs, p_value = p_lower, null = sort(null),
+       select_lcr = isTRUE(p_lower <= 0.05))
+}
+
 #' Refit a latent class model of a given type
 #'
 #' @param model_type One of "UN", "MON", "IIO", "DM", "LCR".
@@ -382,14 +429,17 @@ print.qleqtest <- function(x, ...) {
 #'     from the fitted LCR and refitting both models. If LCR is adequate it
 #'     becomes the quantitative candidate; otherwise DM is selected
 #'     (ORDINAL interpretation).
-#'   \item \strong{Continuous quantitative structure.} RM is compared with
-#'     LCR by BIC. A bootstrap LR across these two is not clean because
-#'     they are estimated with different machinery (mirt marginal maximum
-#'     likelihood over a continuous latent density vs the EM algorithm over
-#'     discrete classes), but BIC is legitimate here because the parameter
-#'     counts genuinely differ. If \eqn{BIC_{RM} < BIC_{LCR}} the Rasch
-#'     model is selected (QUANTITATIVE, continuous); otherwise LCR
-#'     (QUANTITATIVE, discrete).
+#'   \item \strong{Continuous quantitative structure.} RM (continuous) and
+#'     LCR (discrete) are non-nested and estimated with different machinery
+#'     (mirt marginal maximum likelihood over a continuous latent density vs
+#'     the EM algorithm over discrete classes), so a likelihood-ratio
+#'     bootstrap is not clean. Instead the BIC difference
+#'     \eqn{BIC_{LCR} - BIC_{RM}} is calibrated against a null simulated from
+#'     the fitted RM: the discrete LCR is selected (QUANTITATIVE, discrete)
+#'     only when it fits better than the RM null would produce by chance,
+#'     otherwise the continuous Rasch model is selected (QUANTITATIVE,
+#'     continuous). This keeps the final step consistent with the
+#'     bootstrap-calibrated tests above rather than a raw BIC comparison.
 #' }
 #'
 #' \strong{Why bootstrap rather than chi-square?} UN, MON, IIO, and DM all
@@ -617,15 +667,32 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
       selected <- "DM"
       interpretation <- "ORDINAL (double monotonicity)"
     } else {
-      # Step 3: continuous quantitative structure (RM vs LCR by BIC)
+      # Step 3: continuous (RM) vs discrete (LCR), bootstrap-calibrated on the
+      # BIC difference against a null simulated from the fitted RM.
       bics["LCR"] <- BIC(fits$LCR)
       if (!is.null(fits$RM)) bics["RM"] <- BIC(fits$RM)
-      if (!is.na(bics["RM"]) && bics["RM"] < bics["LCR"]) {
-        selected <- "RM"
-        interpretation <- "QUANTITATIVE (continuous: Rasch model)"
-      } else {
+      if (is.null(fits$RM)) {
         selected <- "LCR"
         interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
+      } else {
+        if (verbose) cat("Step 3: testing RM vs LCR (BIC bootstrap)...\n")
+        rl <- rm_vs_lcr_test(data, fits$RM, fits$LCR, n_classes, B = B,
+                             n_starts = boot_n_starts, use_cpp = use_cpp,
+                             mc.cores = mc.cores,
+                             seed = if (!is.null(seed)) seed + 7000L else NULL)
+        tests <- rbind(tests, data.frame(
+          comparison = "RM vs LCR", statistic = rl$statistic,
+          p_value = rl$p_value,
+          decision = if (rl$select_lcr) "discrete (LCR) supported"
+                     else "continuous (RM) preferred",
+          stringsAsFactors = FALSE))
+        if (rl$select_lcr) {
+          selected <- "LCR"
+          interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
+        } else {
+          selected <- "RM"
+          interpretation <- "QUANTITATIVE (continuous: Rasch model)"
+        }
       }
     }
   }

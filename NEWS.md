@@ -28,6 +28,16 @@ lines of work into one framework with a common, optimised C++ core.
 
 ## New in this release
 
+* `kara_bootstrap_null()` - applies the same Rasch bootstrap-null calibration
+  to Karabatsos's global KL statistic that `cc_bootstrap_null()` applies to the
+  cancellation-check violation rate, giving a per-dataset percentile p-value in
+  place of a fixed KL > 0.01 cutoff. With this, all three routes of
+  `assess_quantitative()` are calibrated the same way - a per-dataset
+  parametric bootstrap with an accept/reject percentile - so their evidence is
+  statistically consistent and comparable. The final LC step (RM vs LCR) is
+  likewise now bootstrap-calibrated (the BIC difference against a Rasch null)
+  rather than a raw BIC comparison, removing the last non-bootstrap criterion.
+
 * `cc_bootstrap_null()` - calibrates the [ConjointChecks()] violation rate
   against a null distribution simulated from the Rasch model fitted to the
   data, following Student & Read (2025). The raw violation rate is not

@@ -13,53 +13,46 @@
 #'     double (and optionally triple), calibrated against a Rasch bootstrap
 #'     null via [cc_bootstrap_null()] (Student & Read, 2025): is the observed
 #'     violation rate higher than expected under interval scaling?
-#'   \item \strong{Kara} - the Karabatsos (2018) synthetic-likelihood test
-#'     ([KaraChecks()]) on an ability-banded matrix: do the additive axioms
-#'     hold, as measured by Kullback-Leibler departures from additivity?
+#'   \item \strong{Kara} - the Karabatsos (2018) synthetic-likelihood global
+#'     KL statistic ([KaraChecks()]) on an ability-banded matrix, calibrated
+#'     against its own Rasch bootstrap null ([kara_bootstrap_null()]): is the
+#'     KL departure from additivity higher than expected under interval
+#'     scaling?
 #' }
 #'
 #' @details
-#' The three routes use the calibration appropriate to each. \strong{CC} runs
-#' [cc_bootstrap_null()]: the observed [ConjointChecks()] violation rate is
-#' located in a null distribution of rates simulated from the Rasch model
-#' fitted to the data, and interval scaling is rejected when the observed rate
-#' exceeds the `cc_cutoff` percentile of that null (Student & Read, 2025).
-#' Because observed and null data pass through the same sum-score pipeline, the
-#' null self-calibrates the baseline violation rate - no ability banding is
-#' needed for CC, and there is no fixed violation threshold.
+#' All three routes are calibrated the same way - a per-dataset parametric
+#' bootstrap, with the statistic located in a null distribution and interval
+#' scaling / the constrained model rejected above the `cc_cutoff` percentile.
+#' \strong{LC} bootstraps the likelihood-ratio statistic against its
+#' chi-bar-squared null (simulating from the fitted constrained model);
+#' \strong{CC} bootstraps the [ConjointChecks()] violation rate against a Rasch
+#' null (Student & Read, 2025); \strong{Kara} bootstraps the Karabatsos global
+#' KL against a Rasch null. This makes the three routes statistically
+#' consistent and their p-values comparable, and removes every fixed threshold.
 #'
-#' \strong{Kara} does need help: applying the Karabatsos KL test to raw
-#' sum-score groups reads genuinely additive (Rasch) data as non-additive (the
-#' sum-score-to-ability nonlinearity injects spurious violations), so persons
-#' are grouped into `n_bands` ability bands by their Rasch ability estimate
-#' (from [fit_rm()]) and the KL test runs on that band-by-item matrix with each
-#' band's mean ability as the row metric - which is well calibrated (simulated
-#' Rasch data pass; data with dispersed item slopes are flagged).
+#' \strong{CC} runs on raw sum-score groups: because observed and null data
+#' share the pipeline, the null self-calibrates the baseline, so no ability
+#' banding is needed. \strong{Kara} does need banding - the KL test on raw
+#' sum-score groups reads genuinely additive (Rasch) data as non-additive (a
+#' sum-score-to-ability nonlinearity) - so persons are grouped into `n_bands`
+#' ability bands by their Rasch ability estimate, with each band's mean ability
+#' as the row metric. Its bootstrap null passes each simulated dataset through
+#' the same banding. The verdict still reports Karabatsos's descriptive
+#' summaries (global KL and the per-cell KL distribution) alongside the
+#' bootstrap percentile.
 #'
-#' The Kara route is genuinely inferential in its own right: Karabatsos's
-#' method performs approximate Bayesian inference (synthetic-likelihood
-#' importance sampling) and rejects additivity when the per-cell
-#' Kullback-Leibler divergence exceeds 0.01, a criterion he validated by
-#' simulation. The verdict therefore reports his inferential quantities - the
-#' global KL and the per-cell KL distribution - not just a flag. (Karabatsos
-#' considered and rejected standardized-residual and credible-interval
-#' statistics as, respectively, too liberal and too conservative, so the KL is
-#' used here as he intended.)
+#' The only heuristic that remains is the ordinal / classificatory /
+#' quantitative \emph{labelling} of the LC-selected model; every route's
+#' accept/reject decision is a bootstrap percentile.
 #'
-#' Calibration status of each route: \strong{LC} by bootstrap (a
-#' chi-bar-squared p-value); \strong{CC} by the Rasch bootstrap null (a
-#' percentile p-value, per Student & Read); \strong{Kara} by Karabatsos's
-#' simulation-validated KL > 0.01 criterion. The only remaining heuristic is
-#' the aggregation of Kara's per-cell rule into a single verdict, so the
-#' verdict reports each route's raw statistics for inspection.
-#'
-#' Two limitations are worth stating. First, the CC procedure is under-powered
-#' below roughly 1000 examinees (Student & Read, 2025): at small \eqn{N} a
-#' non-rejection may reflect low power rather than interval scalability, and a
-#' note is printed. Second, Kara's ability banding is unidimensional, so it can
-#' wash out \emph{multidimensional} departures from additivity - read a low Kara
-#' violation rate as within-scale additivity, not a guarantee of
-#' unidimensionality.
+#' Two limitations are worth stating. First, the axiom procedures are
+#' under-powered below roughly 1000 examinees (Student & Read, 2025): at small
+#' \eqn{N} a non-rejection may reflect low power rather than interval
+#' scalability, and a note is printed. Second, Kara's ability banding is
+#' unidimensional, so it can wash out \emph{multidimensional} departures from
+#' additivity - read a low Kara statistic as within-scale additivity, not a
+#' guarantee of unidimensionality.
 #'
 #' A quantitative reading is best supported when the model route selects
 #' LCR/RM \emph{and} both axiom routes are additivity-consistent.
@@ -76,19 +69,13 @@
 #'   (default 100, passed to [cc_bootstrap_null()]).
 #' @param cc_cutoff Null percentile above which the CC route rejects interval
 #'   scaling (default 0.95).
-#' @param kara_S,kara_N_synth Iterations and synthetic datasets for
-#'   [KaraChecks()] (defaults 20000, 100).
+#' @param kara_S,kara_N_synth Iterations and synthetic datasets for each
+#'   [KaraChecks()] run (defaults 10000, 100), used identically for the
+#'   observed statistic and every bootstrap replicate.
+#' @param kara_B Number of Rasch-simulated null datasets for the Kara route
+#'   (default 50; each is a full [KaraChecks()] run, so this is the most
+#'   expensive step - raise it for a final analysis).
 #' @param B Bootstrap replicates for the LC route (default 99).
-#' @param kara_max_viol Maximum proportion of Kara cells that may exceed
-#'   Karabatsos's KL > 0.01 rejection criterion for the data to be judged
-#'   additivity-consistent (default 0.15). The KL > 0.01 cutoff is
-#'   Karabatsos's own, established by his simulation study (Rasch KL converges
-#'   to 0, non-additive 2PL KL exceeds 0.01); the aggregation into a single
-#'   proportion-of-cells tolerance is this package's, since his stated rule
-#'   rejects additivity when one or more cells exceed the cutoff. The verdict
-#'   also reports the global KL and the per-cell KL distribution
-#'   (median, Q3, 90th percentile, max), which are his headline inferential
-#'   summaries.
 #' @param mc.cores Cores for the parallelisable steps (default 1).
 #' @param seed Optional integer seed.
 #' @param verbose Print progress (default TRUE).
@@ -125,8 +112,8 @@
 assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
                                 cc_n_mat = 50, triple = TRUE, cc_B = 100,
                                 cc_cutoff = 0.95,
-                                kara_S = 20000, kara_N_synth = 100, B = 99,
-                                kara_max_viol = 0.15,
+                                kara_S = 10000, kara_N_synth = 100,
+                                kara_B = 50, B = 99,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE,
                                 ...) {
 
@@ -145,23 +132,6 @@ assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
          supports_quant = sel$selected %in% c("LCR", "RM"))
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
-
-  # -- ability banding for the axiom routes -------------------------------
-  band <- tryCatch({
-    th <- rm_scores(suppressWarnings(fit_rm(data, verbose = FALSE)))$theta
-    br <- stats::quantile(th, seq(0, 1, length.out = n_bands + 1))
-    br[1] <- -Inf; br[length(br)] <- Inf
-    grp <- cut(th, br, labels = FALSE)
-    J <- ncol(data)
-    Nb <- nb <- matrix(0, n_bands, J); ab <- numeric(n_bands)
-    for (k in seq_len(n_bands)) {
-      idx <- grp == k
-      Nb[k, ] <- sum(idx); nb[k, ] <- colSums(data[idx, , drop = FALSE])
-      ab[k] <- mean(th[idx])
-    }
-    ord <- order(colSums(data))                 # items by difficulty
-    list(N = Nb[, ord], n = nb[, ord], ability = ab)
-  }, error = function(e) NULL)
 
   # -- CC route: bootstrapped null (Student & Read 2025) on the raw data ---
   # The Rasch-simulated null self-calibrates the sum-score pipeline, so this
@@ -190,24 +160,21 @@ assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
 
-  # -- Kara route on the same banded matrix -------------------------------
-  if (verbose) cat("[Kara] synthetic-likelihood additivity test on bands...\n")
-  kara <- if (is.null(band)) {
-    list(available = FALSE, msg = "ability banding failed", supports_quant = NA)
-  } else tryCatch({
-    nr <- nrow(band$N); nc <- ncol(band$N)
-    kc <- KaraChecks(as.vector(band$N), as.vector(band$n), S = kara_S,
-                     N_synth = kara_N_synth, mc.cores = mc.cores, verbose = FALSE,
-                     testscore = rep(band$ability, nc), item = rep(1:nc, each = nr))
-    # Karabatsos's inferential summaries: the global KL and the distribution
-    # of per-cell KL, with his KL > 0.01 rejection criterion.
-    kl <- as.vector(kc$KL)
-    qs <- stats::quantile(kl, c(0.5, 0.75, 0.90, 1), names = FALSE)
-    prop <- kc$n_violations / (nr * nc)
-    list(available = TRUE, global_KL = kc$global_KL, n_violations = kc$n_violations,
-         n_cells = nr * nc, prop_violations = prop,
-         kl_median = qs[1], kl_q3 = qs[2], kl_p90 = qs[3], kl_max = qs[4],
-         supports_quant = prop <= kara_max_viol)
+  # -- Kara route: bootstrapped null for the global KL --------------------
+  # Same per-dataset parametric-bootstrap logic as CC, applied to Karabatsos's
+  # global KL on the ability-banded matrix (see kara_bootstrap_null()).
+  if (verbose) cat("[Kara] bootstrapped Karabatsos KL test (banded)...\n")
+  kara <- tryCatch({
+    kn <- kara_bootstrap_null(data, n_bands = n_bands, B = kara_B,
+                              cutoff = cc_cutoff, S = kara_S,
+                              N_synth = kara_N_synth, mc.cores = mc.cores,
+                              seed = if (!is.null(seed)) seed + 2L else NULL,
+                              verbose = FALSE)
+    list(available = TRUE, global_KL = kn$observed,
+         null_mean = mean(kn$null), percentile = kn$percentile,
+         p_value = kn$p_value, reject = kn$reject,
+         kl_median = kn$kl_median, kl_q3 = kn$kl_q3, kl_p90 = kn$kl_p90,
+         kl_max = kn$kl_max, supports_quant = !kn$reject)
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
 
@@ -239,8 +206,7 @@ assess_quantitative <- function(data, n_classes = 1:6, n_bands = 6L,
 
   structure(list(verdict = verdict, support = support, n_available = n_avail,
                  lc = lc, cc = cc, kara = kara, n_bands = n_bands, N = nrow(data),
-                 thresholds = c(kara_max_viol = kara_max_viol,
-                                cc_cutoff = cc_cutoff)),
+                 thresholds = c(cc_cutoff = cc_cutoff)),
             class = "quantverdict")
 }
 
@@ -275,21 +241,20 @@ print.quantverdict <- function(x, ...) {
                 yn(x$cc$supports_quant)))
   } else cat("       unavailable:", x$cc$msg, "\n")
 
-  cat("[Kara] Karabatsos synthetic-likelihood additivity test (banded)\n")
+  cat("[Kara] Karabatsos KL vs Rasch bootstrap null (banded)\n")
   if (isTRUE(x$kara$available)) {
-    cat(sprintf("       global KL %.2f; per-cell KL median %.3f, Q3 %.3f, 90%% %.3f, max %.3f\n",
-                x$kara$global_KL, x$kara$kl_median, x$kara$kl_q3,
-                x$kara$kl_p90, x$kara$kl_max))
-    cat(sprintf("       %d/%d cells exceed KL > 0.01 (%.0f%%)   [%s]\n",
-                x$kara$n_violations, x$kara$n_cells,
-                100 * x$kara$prop_violations, yn(x$kara$supports_quant)))
+    cat(sprintf("       global KL %.3f, %.0f%%ile of null (p = %.3f)   [%s]\n",
+                x$kara$global_KL, 100 * x$kara$percentile, x$kara$p_value,
+                yn(x$kara$supports_quant)))
+    cat(sprintf("       per-cell KL median %.3f, Q3 %.3f, 90%% %.3f, max %.3f\n",
+                x$kara$kl_median, x$kara$kl_q3, x$kara$kl_p90, x$kara$kl_max))
   } else cat("       unavailable:", x$kara$msg, "\n")
 
-  cat("\nLC calibrated by bootstrap; CC by a Rasch bootstrap null",
-      sprintf("(reject > %.0f%%ile);", 100 * x$thresholds["cc_cutoff"]),
-      "Kara by Karabatsos's KL > 0.01 criterion.")
+  cat(sprintf("\nAll three routes are bootstrap-calibrated (reject > %.0f%%ile of the null):",
+              100 * x$thresholds["cc_cutoff"]),
+      "\nLC by a chi-bar-squared LR bootstrap, CC and Kara by Rasch bootstrap nulls.")
   if (!is.null(x$N) && x$N < 1000) {
-    cat(sprintf("\nNote: N = %d; the CC procedure is under-powered below ~1000 (Student & Read 2025).", x$N))
+    cat(sprintf("\nNote: N = %d; the axiom procedures are under-powered below ~1000 (Student & Read 2025).", x$N))
   }
   cat("\nAxiom banding (Kara) is unidimensional, so it can miss multidimensional",
       "\ndepartures - read a low violation rate as within-scale additivity.\n")

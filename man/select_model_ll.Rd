@@ -134,14 +134,17 @@ equality constraints on top of the orderings), so
 from the fitted LCR and refitting both models. If LCR is adequate it
 becomes the quantitative candidate; otherwise DM is selected
 (ORDINAL interpretation).
-\item \strong{Continuous quantitative structure.} RM is compared with
-LCR by BIC. A bootstrap LR across these two is not clean because
-they are estimated with different machinery (mirt marginal maximum
-likelihood over a continuous latent density vs the EM algorithm over
-discrete classes), but BIC is legitimate here because the parameter
-counts genuinely differ. If \eqn{BIC_{RM} < BIC_{LCR}} the Rasch
-model is selected (QUANTITATIVE, continuous); otherwise LCR
-(QUANTITATIVE, discrete).
+\item \strong{Continuous quantitative structure.} RM (continuous) and
+LCR (discrete) are non-nested and estimated with different machinery
+(mirt marginal maximum likelihood over a continuous latent density vs
+the EM algorithm over discrete classes), so a likelihood-ratio
+bootstrap is not clean. Instead the BIC difference
+\eqn{BIC_{LCR} - BIC_{RM}} is calibrated against a null simulated from
+the fitted RM: the discrete LCR is selected (QUANTITATIVE, discrete)
+only when it fits better than the RM null would produce by chance,
+otherwise the continuous Rasch model is selected (QUANTITATIVE,
+continuous). This keeps the final step consistent with the
+bootstrap-calibrated tests above rather than a raw BIC comparison.
 }
 
 \strong{Why bootstrap rather than chi-square?} UN, MON, IIO, and DM all

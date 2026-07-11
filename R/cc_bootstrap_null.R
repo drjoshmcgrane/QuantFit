@@ -90,12 +90,14 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
             "may reflect low power rather than interval scalability.")
   }
 
-  # 1. observed violation rate
+  # 1. observed violation rate (mc.cores = 1 and seeded so the random
+  #    submatrix sampling is reproducible; mclapply would not control it)
   if (verbose) cat("Computing observed violation rate...\n")
+  if (!is.null(seed)) set.seed(seed)
   obs <- {
     prep <- PrepareChecks(data, ss.lower = ss.lower)
     ConjointChecks(prep$N, prep$n, n.mat = n.mat, check = check,
-                   mc.cores = mc.cores)@means$weighted
+                   mc.cores = 1L)@means$weighted
   }
 
   # 2. fit Rasch, get person and item parameters
@@ -151,11 +153,19 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
 #' @return Invisibly returns x.
 #' @export
 print.ccnull <- function(x, ...) {
-  cat("\nBootstrapped conjoint-check null (Student & Read, 2025)\n")
-  cat("------------------------------------------------------\n")
-  cat(sprintf("Axiom            : %s cancellation\n", x$check))
+  is_kara <- identical(x$check, "kara-KL")
+  if (is_kara) {
+    cat("\nBootstrapped Karabatsos global-KL null (Rasch)\n")
+    cat("---------------------------------------------\n")
+    cat("Statistic        : Karabatsos global KL (banded)\n")
+    cat(sprintf("Observed KL      : %.4f\n", x$observed))
+  } else {
+    cat("\nBootstrapped conjoint-check null (Student & Read, 2025)\n")
+    cat("------------------------------------------------------\n")
+    cat(sprintf("Axiom            : %s cancellation\n", x$check))
+    cat(sprintf("Observed rate    : %.4f\n", x$observed))
+  }
   cat(sprintf("N x J            : %d x %d,  %d null datasets\n", x$N, x$J, x$B))
-  cat(sprintf("Observed rate    : %.4f\n", x$observed))
   cat(sprintf("Null (Rasch)     : mean %.4f, 95%%ile %.4f, max %.4f\n",
               mean(x$null), stats::quantile(x$null, 0.95, names = FALSE),
               max(x$null)))
