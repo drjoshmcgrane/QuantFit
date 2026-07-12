@@ -52,6 +52,22 @@ par_lapply <- function(X, FUN, mc.cores = 1L) {
   }
 }
 
+#' Fitted latent variance of a Rasch (RM) qlfit
+#'
+#' Extracts the estimated latent variance from the underlying mirt object so a
+#' marginal parametric bootstrap can redraw abilities from N(0, sigma^2).
+#' Falls back to 1 if the variance cannot be recovered.
+#'
+#' @param fit An RM qlfit (from [fit_rm()]).
+#' @return A positive numeric latent variance.
+#' @keywords internal
+rasch_latent_var <- function(fit) {
+  mo <- attr(fit, "mirt_object")
+  v <- tryCatch(as.numeric(mirt::coef(mo, simplify = TRUE)$cov),
+                error = function(e) NA_real_)
+  if (length(v) == 0L || is.na(v[1]) || v[1] <= 0) 1 else v[1]
+}
+
 #' Bootstrap test of continuous (RM) vs discrete (LCR) Rasch structure
 #'
 #' RM and LCR are non-nested and use different estimators (marginal maximum
@@ -65,23 +81,29 @@ par_lapply <- function(X, FUN, mc.cores = 1L) {
 #' @param data Binary response matrix.
 #' @param fit_rm_obj,fit_lcr_obj Fitted RM and LCR models.
 #' @param n_classes Number of latent classes for LCR.
+#' @param alpha Significance level for choosing LCR over RM (default 0.05).
 #' @param B,n_starts,use_cpp,mc.cores,seed As in [select_model_ll()].
 #' @return A list with `statistic` (observed BIC difference), `p_value`
-#'   (lower-tail: how often the RM null is at least as favourable to LCR), and
-#'   `select_lcr` (TRUE when discreteness is significant).
+#'   (lower-tail, with the `(1 + .)/(B + 1)` correction, `NA` if every
+#'   replicate failed), `available` (FALSE when the bootstrap could not be
+#'   computed), and `select_lcr` (TRUE when discreteness is significant at
+#'   `alpha`). The null is a marginal parametric bootstrap: abilities are
+#'   redrawn from N(0, sigma^2) with the RM-estimated latent variance.
 #' @keywords internal
 rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
-                           n_starts = 3, use_cpp = TRUE, mc.cores = 1L,
-                           seed = NULL) {
+                           alpha = 0.05, n_starts = 3, use_cpp = TRUE,
+                           mc.cores = 1L, seed = NULL) {
   obs <- BIC(fit_lcr_obj) - BIC(fit_rm_obj)     # negative favours LCR
   n <- nrow(data); J <- ncol(data)
-  theta <- rm_scores(fit_rm_obj)$theta
-  P <- plogis(outer(theta, fit_rm_obj$delta, "-"))
+  # marginal parametric bootstrap: redraw abilities from N(0, sigma^2)
+  beta <- fit_rm_obj$delta
+  sigma <- sqrt(rasch_latent_var(fit_rm_obj))
   if (!is.null(seed)) set.seed(seed)
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    d <- matrix(rbinom(n * J, 1, P), n, J)
+    theta <- rnorm(n, 0, sigma)
+    d <- matrix(rbinom(n * J, 1, plogis(outer(theta, beta, "-"))), n, J)
     rm_b <- tryCatch(suppressWarnings(fit_rm(d, verbose = FALSE)),
                      error = function(e) NULL)
     lcr_b <- tryCatch(
@@ -94,9 +116,11 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   null <- vapply(raw, function(z)
     if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
   null <- null[!is.na(null)]
-  p_lower <- if (length(null) == 0L) NA_real_ else mean(null <= obs)
+  # lower-tail p (LCR favoured) with the (1 + .)/(B + 1) correction
+  p_lower <- if (length(null) == 0L) NA_real_
+             else (1 + sum(null <= obs)) / (length(null) + 1)
   list(statistic = obs, p_value = p_lower, null = sort(null),
-       select_lcr = isTRUE(p_lower <= 0.05))
+       available = length(null) > 0L, select_lcr = isTRUE(p_lower <= alpha))
 }
 
 #' Refit a latent class model of a given type
@@ -677,16 +701,26 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
       } else {
         if (verbose) cat("Step 3: testing RM vs LCR (BIC bootstrap)...\n")
         rl <- rm_vs_lcr_test(data, fits$RM, fits$LCR, n_classes, B = B,
-                             n_starts = boot_n_starts, use_cpp = use_cpp,
-                             mc.cores = mc.cores,
+                             alpha = alpha, n_starts = boot_n_starts,
+                             use_cpp = use_cpp, mc.cores = mc.cores,
                              seed = if (!is.null(seed)) seed + 7000L else NULL)
         tests <- rbind(tests, data.frame(
           comparison = "RM vs LCR", statistic = rl$statistic,
           p_value = rl$p_value,
-          decision = if (rl$select_lcr) "discrete (LCR) supported"
+          decision = if (!isTRUE(rl$available)) "comparison unavailable"
+                     else if (rl$select_lcr) "discrete (LCR) supported"
                      else "continuous (RM) preferred",
           stringsAsFactors = FALSE))
-        if (rl$select_lcr) {
+        if (!isTRUE(rl$available)) {
+          # bootstrap failed; fall back to the raw BIC comparison
+          if (bics["RM"] <= bics["LCR"]) {
+            selected <- "RM"
+            interpretation <- "QUANTITATIVE (continuous: Rasch model)"
+          } else {
+            selected <- "LCR"
+            interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
+          }
+        } else if (rl$select_lcr) {
           selected <- "LCR"
           interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
         } else {

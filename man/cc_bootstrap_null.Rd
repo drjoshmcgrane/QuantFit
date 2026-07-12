@@ -43,8 +43,9 @@ platforms; each is seeded independently, so results are reproducible.}
 \value{
 An object of class \code{ccnull}: a list with \code{observed} (the observed
 weighted violation rate), \code{null} (vector of null rates), \code{percentile}
-(of \code{observed} within \code{null}, in [0, 1]), \code{p_value} (upper-tail,
-\code{1 - percentile}), \code{reject} (logical, at \code{cutoff}), and the settings.
+(of \code{observed} within \code{null}, in [0, 1]), \code{p_value} (upper-tail, with the
+\verb{(1 + #\{null >= observed\}) / (B + 1)} continuity correction so it is never
+exactly 0), \code{reject} (logical, at \code{cutoff}), and the settings.
 }
 \description{
 Calibrates the \code{\link[=ConjointChecks]{ConjointChecks()}} weighted violation rate against a null
@@ -58,18 +59,23 @@ rate above (say) the 95th percentile of the null is evidence that the data
 are \emph{not} compatible with an interval scale.
 }
 \details{
-The procedure (Student & Read, 2025):
+The procedure follows Student & Read (2025):
 \enumerate{
 \item Compute the observed weighted mean proportion of cancellation-axiom
 violations with \code{\link[=ConjointChecks]{ConjointChecks()}}.
-\item Fit the Rasch model to the data (via \code{\link[=fit_rm]{fit_rm()}}), giving item
-difficulties and person abilities.
-\item Simulate \code{B} datasets of the same size from those Rasch parameters
-and compute the violation rate for each - the null distribution of
-rates \emph{expected under interval scaling}.
+\item Fit the Rasch model to the data (via \code{\link[=fit_rm]{fit_rm()}}), giving the item
+difficulties and the latent variance.
+\item Simulate \code{B} datasets of the same size under the fitted \emph{marginal}
+Rasch model - abilities are redrawn from N(0, sigma^2) afresh for each
+replicate - and compute the violation rate for each: the null
+distribution of rates \emph{expected under interval scaling}.
 \item Locate the observed rate in that null distribution; its percentile
 is the (one-sided) evidence against interval scaling.
 }
+This uses a marginal parametric bootstrap (redrawing abilities) rather than
+Student & Read's fixed plug-in of person-parameter estimates; the marginal
+version includes the sampling variability of the latent distribution and is
+the more defensible parametric bootstrap of the Rasch model.
 Because the observed and simulated datasets pass through the identical
 sum-score \code{\link[=PrepareChecks]{PrepareChecks()}} + \code{\link[=ConjointChecks]{ConjointChecks()}} pipeline, any baseline
 violation rate the pipeline induces on additive data (including the

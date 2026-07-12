@@ -10,6 +10,7 @@ rm_vs_lcr_test(
   fit_lcr_obj,
   n_classes,
   B = 99,
+  alpha = 0.05,
   n_starts = 3,
   use_cpp = TRUE,
   mc.cores = 1L,
@@ -24,11 +25,16 @@ rm_vs_lcr_test(
 \item{n_classes}{Number of latent classes for LCR.}
 
 \item{B, n_starts, use_cpp, mc.cores, seed}{As in \code{\link[=select_model_ll]{select_model_ll()}}.}
+
+\item{alpha}{Significance level for choosing LCR over RM (default 0.05).}
 }
 \value{
 A list with \code{statistic} (observed BIC difference), \code{p_value}
-(lower-tail: how often the RM null is at least as favourable to LCR), and
-\code{select_lcr} (TRUE when discreteness is significant).
+(lower-tail, with the \code{(1 + .)/(B + 1)} correction, \code{NA} if every
+replicate failed), \code{available} (FALSE when the bootstrap could not be
+computed), and \code{select_lcr} (TRUE when discreteness is significant at
+\code{alpha}). The null is a marginal parametric bootstrap: abilities are
+redrawn from N(0, sigma^2) with the RM-estimated latent variance.
 }
 \description{
 RM and LCR are non-nested and use different estimators (marginal maximum

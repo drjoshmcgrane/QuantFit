@@ -13,7 +13,9 @@ Description: Tools for empirically testing whether psychological and
     of the latent variable. Implements three complementary approaches:
     (1) Bayesian checks of the single, double, and triple cancellation
     axioms of additive conjoint measurement, extending the ConjointChecks
-    package of Domingue (2014) <doi:10.1007/s11336-013-9342-4>;
+    package of Domingue (2014) <doi:10.1007/s11336-013-9342-4>; the
+    parametric bootstrap calibration of these axiom checks follows
+    Student & Read (2025) <doi:10.3758/s13428-025-02844-7>;
     (2) the Bayesian omnibus test of additive conjoint measurement axioms
     using synthetic likelihood of Karabatsos (2018)
     <doi:10.1007/s11336-017-9581-x>; and
@@ -47,7 +49,6 @@ LinkingTo:
     RcppArmadillo
 Suggests:
     testthat (>= 3.0.0),
-    ggplot2,
     knitr,
     rmarkdown
 Config/testthat/edition: 3

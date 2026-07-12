@@ -54,13 +54,14 @@ p-value instead.
 }
 \details{
 The observed global KL is computed on an ability-banded matrix (see
-\code{\link[=band_by_ability]{band_by_ability()}}); \code{B} datasets are then simulated from the fitted Rasch
-person and item parameters, each is re-fitted, re-banded, and passed through
-\code{\link[=KaraChecks]{KaraChecks()}} at the same \code{S}, and the observed global KL is located in the
-resulting null distribution. Observed and null share the identical pipeline
-and iteration count, so any baseline the pipeline induces on additive data
-cancels. Interval scaling is rejected when the observed global KL exceeds
-the \code{cutoff} percentile of the null.
+\code{\link[=band_by_ability]{band_by_ability()}}); \code{B} datasets are then simulated under the fitted
+\emph{marginal} Rasch model - abilities redrawn from N(0, sigma^2) per replicate,
+with the estimated item difficulties - each is re-fitted, re-banded, and
+passed through \code{\link[=KaraChecks]{KaraChecks()}} at the same \code{S}, and the observed global KL is
+located in the resulting null distribution. Observed and null share the
+identical pipeline and iteration count, so any baseline the pipeline induces
+on additive data cancels. Interval scaling is rejected when the observed
+global KL exceeds the \code{cutoff} percentile of the null.
 
 This is computationally heavy - each replicate is a full \code{\link[=KaraChecks]{KaraChecks()}}
 importance-sampling run - so \code{B} and \code{S} default lower than for the

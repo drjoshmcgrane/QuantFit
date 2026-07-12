@@ -183,22 +183,41 @@ cmp
 against its parent with a parametric bootstrap of the likelihood-ratio
 statistic — the correct calibration when the models are nested by inequality
 constraints and share a parameter count (the asymptotic null is
-chi-bar-squared, not chi-squared). It walks down the hierarchy and uses BIC
-only for the final RM-versus-LCR step, where the parameter counts really do
-differ. Because it refits models on bootstrap samples it is moderately
-expensive; here we use a small `B` for illustration:
+chi-bar-squared, not chi-squared). It walks down the hierarchy
+UN -> DM -> LCR -> RM, accepting each reduction whose bootstrap test is
+adequate. Even the final RM-versus-LCR step is bootstrap-calibrated: rather than
+comparing the two BIC values directly, it bootstraps the BIC *difference*
+against a null simulated from the fitted Rasch model (`rm_vs_lcr_test()`), so
+the continuous model is preferred only when the discrete latent-class Rasch fit
+is no better than Rasch data would produce by chance. Because it refits models
+on bootstrap samples it is moderately expensive; here we use a small `B` for
+illustration:
 
 ```{r select-ll, eval = FALSE}
 sel <- select_model_ll(responses, n_classes = 3, B = 99, seed = 1)
 sel
-#> Selected model: RM
-#> Interpretation: QUANTITATIVE (continuous: Rasch model)
 #>
-#>   comparison  statistic p_value                 decision
-#>     DM vs UN  204.38      0.01   rejected (p <= alpha)
-#>    IIO vs UN  204.03      0.01   rejected (p <= alpha)
-#>    MON vs UN    0.47      0.37   adequate (p > alpha)
+#> Bootstrap LL-equivalence latent structure selection
+#> ---------------------------------------------------
+#> Selected model : RM
+#> Interpretation : QUANTITATIVE (continuous: Rasch model)
+#> Latent classes : 3
+#> Method = joint   Alpha = 0.05   Bootstrap replicates per test = 99
+#>
+#> Decision path (bootstrap LR tests):
+#>   DM vs UN   LR =    2.104   p = 0.2727   -> adequate (p > alpha)
+#>   LCR vs DM  LR =    3.856   p = 0.1414   -> adequate (p > alpha)
+#>   RM vs LCR  LR =    4.219   p = 0.6238   -> continuous (RM) preferred
+#>
+#> BIC comparison at the quantitative step:
+#>   LCR  BIC = 11846.88
+#>   RM   BIC = 11842.66   (selected)
 ```
+
+Here the doubly-monotone reduction is adequate (DM vs UN not rejected), the
+discrete Rasch reduction is adequate (LCR vs DM not rejected), and the final
+bootstrap prefers the continuous Rasch model, so the data are read as
+quantitative — the expected verdict for Rasch-generated data.
 
 A purely diagnostic alternative, `select_model_constraint()`, inspects whether
 the unconstrained estimates *satisfy* each ordinal constraint (within a
@@ -254,6 +273,62 @@ The practical message is that the coarse question this package is built to
 answer - is the structure classificatory, ordinal, or quantitative? - is
 recovered very reliably, while the finer within-family distinctions benefit
 from longer tests (for LCR vs RM) or richer class structure (for IIO vs DM).
+
+## Putting it together: `quant_fit()`
+
+Running the three approaches by hand and reconciling their conclusions is
+exactly what the flagship `quant_fit()` function automates. It executes all
+three routes on the same data set and returns a single triangulated verdict,
+with each route bootstrap-calibrated so the evidence is comparable:
+
+* the **LC route** runs `select_model_ll()` on the raw person-by-item data
+  (the chi-bar-squared likelihood-ratio bootstrap above);
+* the **CC route** runs `cc_bootstrap_null()`, which calibrates the
+  cancellation-check violation rate against a null simulated from the Rasch
+  model fitted to the data, following Student & Read (2025);
+* the **Kara route** runs `kara_bootstrap_null()`, which calibrates
+  Karabatsos's global KL statistic against the same kind of Rasch bootstrap
+  null, computed on an ability-banded matrix.
+
+All three nulls are *marginal* parametric bootstraps — each replicate redraws
+person abilities from the fitted Rasch latent distribution rather than reusing
+fixed person estimates — and each returns a
+`(1 + #{null >= observed}) / (B + 1)` percentile p-value. A route "supports
+quantitative" when interval scaling is *not* rejected at the chosen null
+percentile (default the 95th). The call fits and bootstraps all three routes,
+so it is shown but not evaluated here:
+
+```{r quant-fit, eval = FALSE}
+v <- quant_fit(responses, mc.cores = 4, seed = 1)
+v
+#>
+#> Quantitative structure - triangulated judgement
+#> ===============================================
+#> QUANTITATIVE (well supported) - a quantitative model is selected and
+#> the conjoint axioms are satisfied; the routes converge.
+#>
+#> Routes supporting a quantitative reading: 3 of 3
+#>
+#> [LC]   Latent-structure model selection (raw data)
+#>        selected RM (3 classes) - quantitative   [ yes ]
+#> [CC]   Cancellation checks vs Rasch bootstrap null (Student & Read)
+#>        double: rate 0.031, 44%ile of null (p = 0.564); triple 39%ile (p = 0.624)   [ yes ]
+#> [Kara] Karabatsos KL vs Rasch bootstrap null (banded)
+#>        global KL 0.006, 52%ile of null (p = 0.485)   [ yes ]
+#>        per-cell KL median 0.004, Q3 0.009, 90% 0.014, max 0.021
+#>
+#> All three routes are bootstrap-calibrated (reject > 95%ile of the null):
+#> LC by a chi-bar-squared LR bootstrap, CC and Kara by Rasch bootstrap nulls.
+#> Note: N = 800; the axiom procedures are under-powered below ~1000 (Student & Read 2025).
+#> Axiom banding (Kara) is unidimensional, so it can miss multidimensional
+#> departures - read a low violation rate as within-scale additivity.
+```
+
+Either bootstrap-null route can also be run on its own — for example
+`cc_bootstrap_null(responses, check = "double", B = 200, mc.cores = 4)` returns
+an object carrying `observed`, `null`, `percentile`, `p_value`, and `reject`,
+with `print` and `plot` methods — but `quant_fit()` is the recommended one-call
+entry point when you want the triangulated verdict.
 
 ## Which approach when?
 

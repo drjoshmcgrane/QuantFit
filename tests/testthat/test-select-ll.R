@@ -166,7 +166,7 @@ test_that("select_model_ll picks a quantitative model on Rasch data", {
   expect_match(sel$interpretation, "QUANTITATIVE")
   expect_true(all(c("comparison", "statistic", "p_value", "decision") %in%
                     names(sel$tests)))
-  # lattice default reaches DM through the increment edges, not DM vs UN
+  # joint default (no method arg) tests DM vs UN directly, then LCR vs DM
   expect_true(any(grepl("DM", sel$tests$comparison)))
   expect_true(any(grepl("LCR vs DM", sel$tests$comparison)))
   expect_false(any(is.na(sel$bics)))

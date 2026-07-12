@@ -67,8 +67,9 @@
 #'   Rasch bootstrap null (default TRUE).
 #' @param cc_B Number of Rasch-simulated null datasets for the CC route
 #'   (default 100, passed to [cc_bootstrap_null()]).
-#' @param cc_cutoff Null percentile above which the CC route rejects interval
-#'   scaling (default 0.95).
+#' @param cc_cutoff Null percentile above which the CC \emph{and} Kara routes
+#'   reject interval scaling (default 0.95); it is passed as the `cutoff` to
+#'   both [cc_bootstrap_null()] and [kara_bootstrap_null()].
 #' @param kara_S,kara_N_synth Iterations and synthetic datasets for each
 #'   [KaraChecks()] run (defaults 10000, 100), used identically for the
 #'   observed statistic and every bootstrap replicate.
@@ -82,9 +83,9 @@
 #' @param ... Passed to [select_model_ll()].
 #'
 #' @return An object of class `quantverdict`: a list with `verdict`
-#'   (character), `support` (0-3 routes supporting a quantitative reading),
-#'   per-route sub-lists `lc`, `cc`, `kara`, the `n_bands` used, and the
-#'   `thresholds`.
+#'   (character), `support` (routes supporting a quantitative reading),
+#'   `n_available` (routes that returned a result), per-route sub-lists `lc`,
+#'   `cc`, `kara`, `n_bands`, `N` (sample size), and `thresholds`.
 #'
 #' @references
 #' Karabatsos, G. (2018). On Bayesian testing of additive conjoint measurement
@@ -105,7 +106,7 @@
 #' set.seed(1)
 #' theta <- rnorm(1500); beta <- seq(-2, 2, length.out = 12)
 #' dat <- matrix(rbinom(1500 * 12, 1, plogis(outer(theta, beta, "-"))), 1500, 12)
-#' v <- assess_quantitative(dat, mc.cores = 4, seed = 1)
+#' v <- quant_fit(dat, mc.cores = 4, seed = 1)
 #' v
 #' }
 #' @export
@@ -190,13 +191,17 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
     "INCONCLUSIVE - no method returned a usable result."
   } else if (identical(lc_scale, "classificatory")) {
     "CLASSIFICATORY - model selection favours unstructured latent classes; a quantitative interpretation is not supported."
-  } else if (isTRUE(lc$supports_quant) && axiom_avail > 0 && axiom_ok == axiom_avail) {
-    "QUANTITATIVE (well supported) - a quantitative model is selected and the conjoint axioms are satisfied; the three routes converge."
+  } else if (isTRUE(lc$supports_quant) && axiom_avail == 0) {
+    "QUANTITATIVE MODEL, AXIOM CHECKS UNAVAILABLE - a quantitative model is selected, but neither conjoint-axiom route could be computed, so the additivity evidence is missing (not failed)."
+  } else if (isTRUE(lc$supports_quant) && axiom_ok == axiom_avail) {
+    "QUANTITATIVE (well supported) - a quantitative model is selected and the conjoint axioms are satisfied; the routes converge."
   } else if (isTRUE(lc$supports_quant) && axiom_ok > 0) {
     "QUANTITATIVE (qualified) - a quantitative model is selected, but one axiom check shows departures from additivity; interpret with caution."
   } else if (isTRUE(lc$supports_quant)) {
     "QUANTITATIVE MODEL, WEAK AXIOM SUPPORT - a quantitative model fits best, but the conjoint axioms are not satisfied; the interval interpretation is not tenable on the axiom evidence."
-  } else if (identical(lc_scale, "ordinal") && axiom_avail > 0 && axiom_ok == axiom_avail) {
+  } else if (identical(lc_scale, "ordinal") && axiom_avail == 0) {
+    "ORDINAL - model selection favours an ordinal structure (the conjoint-axiom routes could not be computed)."
+  } else if (identical(lc_scale, "ordinal") && axiom_ok == axiom_avail) {
     "BORDERLINE - model selection favours an ordinal structure, yet the conjoint axioms hold; possibly quantitative with weak class separation."
   } else if (identical(lc_scale, "ordinal")) {
     "ORDINAL - model selection favours an ordinal structure and the axiom checks do not support additivity."

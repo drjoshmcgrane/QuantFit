@@ -11,18 +11,23 @@
 #' are *not* compatible with an interval scale.
 #'
 #' @details
-#' The procedure (Student & Read, 2025):
+#' The procedure follows Student & Read (2025):
 #' \enumerate{
 #'   \item Compute the observed weighted mean proportion of cancellation-axiom
 #'     violations with [ConjointChecks()].
-#'   \item Fit the Rasch model to the data (via [fit_rm()]), giving item
-#'     difficulties and person abilities.
-#'   \item Simulate `B` datasets of the same size from those Rasch parameters
-#'     and compute the violation rate for each - the null distribution of
-#'     rates *expected under interval scaling*.
+#'   \item Fit the Rasch model to the data (via [fit_rm()]), giving the item
+#'     difficulties and the latent variance.
+#'   \item Simulate `B` datasets of the same size under the fitted *marginal*
+#'     Rasch model - abilities are redrawn from N(0, sigma^2) afresh for each
+#'     replicate - and compute the violation rate for each: the null
+#'     distribution of rates *expected under interval scaling*.
 #'   \item Locate the observed rate in that null distribution; its percentile
 #'     is the (one-sided) evidence against interval scaling.
 #' }
+#' This uses a marginal parametric bootstrap (redrawing abilities) rather than
+#' Student & Read's fixed plug-in of person-parameter estimates; the marginal
+#' version includes the sampling variability of the latent distribution and is
+#' the more defensible parametric bootstrap of the Rasch model.
 #' Because the observed and simulated datasets pass through the identical
 #' sum-score [PrepareChecks()] + [ConjointChecks()] pipeline, any baseline
 #' violation rate the pipeline induces on additive data (including the
@@ -53,8 +58,9 @@
 #'
 #' @return An object of class `ccnull`: a list with `observed` (the observed
 #'   weighted violation rate), `null` (vector of null rates), `percentile`
-#'   (of `observed` within `null`, in \[0, 1]), `p_value` (upper-tail,
-#'   `1 - percentile`), `reject` (logical, at `cutoff`), and the settings.
+#'   (of `observed` within `null`, in \[0, 1]), `p_value` (upper-tail, with the
+#'   `(1 + #{null >= observed}) / (B + 1)` continuity correction so it is never
+#'   exactly 0), `reject` (logical, at `cutoff`), and the settings.
 #'
 #' @references
 #' Student, S. R., & Read, W. S. (2025). Applying Bayesian checks of
@@ -84,10 +90,10 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   data <- validate_data(data)
   n_obs <- nrow(data); J <- ncol(data)
 
-  if (n_obs < 500) {
-    warning("N = ", n_obs, " is small; Student & Read (2025) find this ",
-            "procedure underpowered below ~1000 examinees. A non-rejection ",
-            "may reflect low power rather than interval scalability.")
+  if (n_obs < 1000) {
+    warning("N = ", n_obs, " is below ~1000; Student & Read (2025) find this ",
+            "procedure underpowered at moderate samples. A non-rejection may ",
+            "reflect low power rather than interval scalability.")
   }
 
   # 1. observed violation rate (mc.cores = 1 and seeded so the random
@@ -100,11 +106,11 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
                    mc.cores = 1L)@means$weighted
   }
 
-  # 2. fit Rasch, get person and item parameters
+  # 2. fit Rasch, get item difficulties and the latent variance for a marginal
+  #    parametric bootstrap (redraw abilities from N(0, sigma^2) per replicate)
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))
   beta <- fit$delta
-  theta <- rm_scores(fit)$theta
-  P <- plogis(outer(theta, beta, "-"))       # n_obs x J response probabilities
+  sigma <- sqrt(rasch_latent_var(fit))
 
   # 3. simulate B null datasets and compute each violation rate
   if (verbose) cat("Simulating", B, "Rasch null datasets...\n")
@@ -113,6 +119,8 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
 
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
+    theta <- rnorm(n_obs, 0, sigma)
+    P <- plogis(outer(theta, beta, "-"))
     d <- matrix(rbinom(n_obs * J, 1, P), n_obs, J)
     p <- tryCatch(PrepareChecks(d, ss.lower = ss.lower),
                   error = function(e) NULL)
@@ -138,8 +146,10 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   }
 
   percentile <- mean(null < obs)
+  # upper-tail p with the (1 + .)/(B + 1) continuity correction (avoids p = 0)
+  p_value <- (1 + sum(null >= obs)) / (length(null) + 1)
   structure(list(observed = obs, null = sort(null),
-                 percentile = percentile, p_value = 1 - percentile,
+                 percentile = percentile, p_value = p_value,
                  reject = percentile >= cutoff, cutoff = cutoff,
                  check = check, N = n_obs, J = J, B = length(null),
                  n_failed = n_failed),
@@ -169,6 +179,10 @@ print.ccnull <- function(x, ...) {
   cat(sprintf("Null (Rasch)     : mean %.4f, 95%%ile %.4f, max %.4f\n",
               mean(x$null), stats::quantile(x$null, 0.95, names = FALSE),
               max(x$null)))
+  if (is_kara && !is.null(x$kl_median)) {
+    cat(sprintf("Per-cell KL      : median %.3f, Q3 %.3f, 90%% %.3f, max %.3f\n",
+                x$kl_median, x$kl_q3, x$kl_p90, x$kl_max))
+  }
   cat(sprintf("Percentile (p)   : %.1f%%  (p = %.3f)\n",
               100 * x$percentile, x$p_value))
   cat(sprintf("Interval scaling : %s at the %.0f%% cutoff\n",
@@ -185,10 +199,14 @@ print.ccnull <- function(x, ...) {
 #' @return Invisibly returns x.
 #' @export
 plot.ccnull <- function(x, ...) {
+  is_kara <- identical(x$check, "kara-KL")
   rng <- range(c(x$null, x$observed))
   graphics::hist(x$null, breaks = "FD", col = "grey85", border = "white",
-                 xlim = rng, main = "Conjoint-check null vs observed",
-                 xlab = "Weighted mean proportion of violations", ...)
+                 xlim = rng,
+                 main = if (is_kara) "Karabatsos KL null vs observed"
+                        else "Conjoint-check null vs observed",
+                 xlab = if (is_kara) "Global Kullback-Leibler divergence"
+                        else "Weighted mean proportion of violations", ...)
   graphics::abline(v = stats::quantile(x$null, x$cutoff, names = FALSE),
                    lty = 2, col = "grey40")
   graphics::abline(v = x$observed, col = "firebrick", lwd = 2)

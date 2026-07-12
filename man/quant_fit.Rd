@@ -42,8 +42,9 @@ Rasch bootstrap null (default TRUE).}
 \item{cc_B}{Number of Rasch-simulated null datasets for the CC route
 (default 100, passed to \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}).}
 
-\item{cc_cutoff}{Null percentile above which the CC route rejects interval
-scaling (default 0.95).}
+\item{cc_cutoff}{Null percentile above which the CC \emph{and} Kara routes
+reject interval scaling (default 0.95); it is passed as the \code{cutoff} to
+both \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} and \code{\link[=kara_bootstrap_null]{kara_bootstrap_null()}}.}
 
 \item{kara_S, kara_N_synth}{Iterations and synthetic datasets for each
 \code{\link[=KaraChecks]{KaraChecks()}} run (defaults 10000, 100), used identically for the
@@ -65,9 +66,9 @@ expensive step - raise it for a final analysis).}
 }
 \value{
 An object of class \code{quantverdict}: a list with \code{verdict}
-(character), \code{support} (0-3 routes supporting a quantitative reading),
-per-route sub-lists \code{lc}, \code{cc}, \code{kara}, the \code{n_bands} used, and the
-\code{thresholds}.
+(character), \code{support} (routes supporting a quantitative reading),
+\code{n_available} (routes that returned a result), per-route sub-lists \code{lc},
+\code{cc}, \code{kara}, \code{n_bands}, \code{N} (sample size), and \code{thresholds}.
 }
 \description{
 Combines the three routes QuantFit offers to the question \emph{do these data
@@ -134,7 +135,7 @@ LCR/RM \emph{and} both axiom routes are additivity-consistent.
 set.seed(1)
 theta <- rnorm(1500); beta <- seq(-2, 2, length.out = 12)
 dat <- matrix(rbinom(1500 * 12, 1, plogis(outer(theta, beta, "-"))), 1500, 12)
-v <- assess_quantitative(dat, mc.cores = 4, seed = 1)
+v <- quant_fit(dat, mc.cores = 4, seed = 1)
 v
 }
 }

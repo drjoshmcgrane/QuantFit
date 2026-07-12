@@ -36,7 +36,7 @@ lines of work into one framework with a common, optimised C++ core.
   to Karabatsos's global KL statistic that `cc_bootstrap_null()` applies to the
   cancellation-check violation rate, giving a per-dataset percentile p-value in
   place of a fixed KL > 0.01 cutoff. With this, all three routes of
-  `assess_quantitative()` are calibrated the same way - a per-dataset
+  `quant_fit()` are calibrated the same way - a per-dataset
   parametric bootstrap with an accept/reject percentile - so their evidence is
   statistically consistent and comparable. The final LC step (RM vs LCR) is
   likewise now bootstrap-calibrated (the BIC difference against a Rasch null)
@@ -53,21 +53,26 @@ lines of work into one framework with a common, optimised C++ core.
   self-calibrates the baseline, so no fixed cutoff is needed. Includes `print`
   and `plot` methods and an under-power warning below ~1000 examinees.
 
-* `assess_quantitative()` - a single triangulated judgement on whether data
+* `quant_fit()` - a single triangulated judgement on whether data
   support a quantitative (interval / additive) interpretation, combining all
-  three of the package's routes, each with its appropriate calibration:
-  latent-structure model selection ([select_model_ll()], bootstrap
-  chi-bar-squared) on the raw data; the cancellation checks calibrated against
-  a Rasch bootstrap null ([cc_bootstrap_null()], per Student & Read 2025); and
-  the Karabatsos synthetic-likelihood test ([KaraChecks()], his KL > 0.01
-  criterion) on an ability-banded matrix. The Kara banding is deliberate - the
-  KL test reads additive Rasch data as non-additive on raw sum-score groups,
-  whereas ability bands with a real ability metric are well calibrated; the CC
-  route needs no banding because its bootstrap null self-calibrates the
-  pipeline. The verdict names the supporting routes and reports each route's
-  statistics. It states its limits: the CC route is under-powered below ~1000
-  examinees, and the (unidimensional) Kara banding can miss multidimensional
-  departures.
+  three of the package's routes, each calibrated the same way: latent-structure
+  model selection ([select_model_ll()], bootstrap chi-bar-squared) on the raw
+  data; the cancellation checks calibrated against a Rasch bootstrap null
+  ([cc_bootstrap_null()], per Student & Read 2025); and the Karabatsos
+  synthetic-likelihood test calibrated against a Rasch bootstrap null
+  ([kara_bootstrap_null()], the global KL statistic's percentile within the
+  null rather than a fixed KL > 0.01 cutoff) on an ability-banded matrix. The
+  Kara banding is deliberate - the KL test reads additive Rasch data as
+  non-additive on raw sum-score groups, whereas ability bands with a real
+  ability metric are well calibrated; the CC route needs no banding because its
+  bootstrap null self-calibrates the pipeline. All three bootstrap nulls are
+  marginal parametric bootstraps: each replicate redraws abilities
+  theta ~ N(0, sigma^2) from the fitted Rasch latent variance rather than
+  reusing fixed person estimates, and the percentile p-value carries the
+  (1 + #{null >= observed}) / (B + 1) continuity correction. The verdict names
+  the supporting routes and reports each route's statistics. It states its
+  limits: the CC route is under-powered below ~1000 examinees, and the
+  (unidimensional) Kara banding can miss multidimensional departures.
 
 
 * `select_model_ll()` and `ll_equivalence_test()` — a statistically calibrated
