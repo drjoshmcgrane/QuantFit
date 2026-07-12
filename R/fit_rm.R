@@ -85,10 +85,17 @@ fit_rm <- function(data, method = c("EM", "MHRM", "QMCEM"),
 
   # Capture call
   call <- match.call()
+  method <- match.arg(method)
+
+  # Dispatch polytomous data to the native partial-credit model (mirt)
+  if (is.data.frame(data)) data <- as.matrix(data)
+  if (.is_polytomous(data)) {
+    return(.fit_rm_poly(data, method = method, quadpts = quadpts,
+                        verbose = verbose, call = call, ...))
+  }
 
   # Validate inputs
   data <- validate_data(data)
-  method <- match.arg(method)
 
   n_obs <- nrow(data)
   n_items <- ncol(data)

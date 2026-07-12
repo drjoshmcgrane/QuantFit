@@ -8,3 +8,5 @@
 src/*.o
 src/*.so
 tests/testthat/_problems/
+QuantFit.Rcheck/
+*.tar.gz

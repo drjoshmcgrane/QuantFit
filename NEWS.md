@@ -28,6 +28,23 @@ lines of work into one framework with a common, optimised C++ core.
 
 ## New in this release
 
+* **Polytomous data support across all three routes.** Items scored with
+  ordered integer categories `0, 1, ..., m` are now handled natively, with no
+  loss of information. The latent-structure models (`fit_un()`, `fit_mon()`,
+  `fit_iio()`, `fit_dm()`, `fit_lcr()`, `fit_rm()`) fit polytomous data directly
+  via a multinomial EM engine: each item-by-class combination carries a full
+  category-probability vector, class monotonicity becomes stochastic ordering of
+  the category distributions across classes, invariant item ordering becomes
+  non-crossing expected item-score curves, and the quantitative models use the
+  partial credit model (latent-class PCM for `LCR`; `mirt`'s native PCM for
+  `RM`). `select_model_ll()` and `quant_fit()` dispatch on the data automatically.
+  For the conjoint cancellation routes, `prepare_polytomous()` recodes each item
+  into its adjacent-category ("partial credit") dichotomisations and conditions
+  on the total score before `ConjointChecks()` / `KaraChecks()`; the CC and Kara
+  bootstrap nulls simulate from a fitted partial credit model. All six fits, the
+  bootstrap tests, and the triangulated verdict work on dichotomous and
+  polytomous data alike, choosing the representation appropriate to each route.
+
 * The triangulated verdict function is now `quant_fit()` - the package's
   namesake flagship function. `assess_quantitative()` is kept as a deprecated
   alias.

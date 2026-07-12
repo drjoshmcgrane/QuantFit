@@ -9,8 +9,9 @@ Authors@R: c(
     person("Liam", "Fox", role = "ctb"),
     person("Vithor", "Franco", role = "ctb"))
 Description: Tools for empirically testing whether psychological and
-    educational item response data support a quantitative interpretation
-    of the latent variable. Implements three complementary approaches:
+    educational item response data (dichotomous or polytomous) support a
+    quantitative interpretation of the latent variable. Implements three
+    complementary approaches:
     (1) Bayesian checks of the single, double, and triple cancellation
     axioms of additive conjoint measurement, extending the ConjointChecks
     package of Domingue (2014) <doi:10.1007/s11336-013-9342-4>; the

@@ -89,6 +89,14 @@ fit_iio <- function(data, n_classes,
   # Capture call
   call <- match.call()
 
+  # Dispatch polytomous data to the multinomial EM engine
+  if (is.data.frame(data)) data <- as.matrix(data)
+  if (.is_polytomous(data)) {
+    return(fit_lca_poly(data, n_classes, "IIO", n_starts = n_starts,
+                        max_iter = max_iter, tol = tol, seed = seed,
+                        item_order = item_order, call = call))
+  }
+
   # Validate inputs
   data <- validate_data(data)
   method <- match.arg(method)

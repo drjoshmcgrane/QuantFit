@@ -87,7 +87,9 @@
 cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
                               cutoff = 0.95, ss.lower = 10, mc.cores = 1L,
                               seed = NULL, verbose = TRUE) {
-  data <- validate_data(data)
+  if (is.data.frame(data)) data <- as.matrix(data)
+  poly <- .is_polytomous(data)
+  data <- if (poly) .validate_poly(data) else validate_data(data)
   n_obs <- nrow(data); J <- ncol(data)
 
   if (n_obs < 1000) {
@@ -96,35 +98,52 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
             "reflect low power rather than interval scalability.")
   }
 
+  # Build the score-by-item count matrices. Polytomous data goes through the
+  # adjacent-category recoding of prepare_polytomous(); dichotomous data uses
+  # PrepareChecks() directly.
+  min_rows <- if (check == "triple") 4 else 3
+  prep_fn <- if (poly) {
+    function(d) prepare_polytomous(d, ss.lower = ss.lower)
+  } else {
+    function(d) PrepareChecks(d, ss.lower = ss.lower)
+  }
+
   # 1. observed violation rate (mc.cores = 1 and seeded so the random
   #    submatrix sampling is reproducible; mclapply would not control it)
   if (verbose) cat("Computing observed violation rate...\n")
   if (!is.null(seed)) set.seed(seed)
   obs <- {
-    prep <- PrepareChecks(data, ss.lower = ss.lower)
+    prep <- prep_fn(data)
     ConjointChecks(prep$N, prep$n, n.mat = n.mat, check = check,
                    mc.cores = 1L)@means$weighted
   }
 
-  # 2. fit Rasch, get item difficulties and the latent variance for a marginal
-  #    parametric bootstrap (redraw abilities from N(0, sigma^2) per replicate)
+  # 2. fit the (partial-credit) Rasch model for a marginal parametric bootstrap:
+  #    redraw abilities from N(0, sigma^2) per replicate.
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))
-  beta <- fit$delta
   sigma <- sqrt(rasch_latent_var(fit))
+  if (poly) {
+    mfit <- attr(fit, "mirt_object")
+    sim_fn <- function() .simulate_pcm(mfit, n_obs, sigma)
+  } else {
+    beta <- fit$delta
+    sim_fn <- function() {
+      theta <- rnorm(n_obs, 0, sigma)
+      matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
+    }
+  }
 
   # 3. simulate B null datasets and compute each violation rate
-  if (verbose) cat("Simulating", B, "Rasch null datasets...\n")
+  if (verbose) cat("Simulating", B, if (poly) "partial-credit" else "Rasch",
+                   "null datasets...\n")
   if (!is.null(seed)) set.seed(seed)
   rep_seeds <- sample.int(.Machine$integer.max, B)
 
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    theta <- rnorm(n_obs, 0, sigma)
-    P <- plogis(outer(theta, beta, "-"))
-    d <- matrix(rbinom(n_obs * J, 1, P), n_obs, J)
-    p <- tryCatch(PrepareChecks(d, ss.lower = ss.lower),
-                  error = function(e) NULL)
-    if (is.null(p) || nrow(p$N) < (if (check == "triple") 4 else 3)) {
+    d <- sim_fn()
+    p <- tryCatch(prep_fn(d), error = function(e) NULL)
+    if (is.null(p) || nrow(p$N) < min_rows) {
       return(NA_real_)
     }
     tryCatch(

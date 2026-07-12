@@ -25,6 +25,24 @@ simulate_from_qlfit <- function(fit, n_obs) {
   n_classes <- length(fit$class_probs)
   cls <- sample.int(n_classes, size = n_obs, replace = TRUE,
                     prob = fit$class_probs)
+  if (isTRUE(fit$polytomous)) {
+    # item_probs is a list of C x (m_j + 1) category-probability matrices;
+    # draw each person's class, then a category per item from that class
+    J <- length(fit$item_probs)
+    out <- matrix(0L, n_obs, J)
+    for (j in seq_len(J)) {
+      P <- fit$item_probs[[j]]
+      m1 <- ncol(P)
+      for (c in seq_len(nrow(P))) {
+        who <- which(cls == c)
+        if (length(who)) {
+          out[who, j] <- sample.int(m1, length(who), replace = TRUE,
+                                    prob = P[c, ]) - 1L
+        }
+      }
+    }
+    return(out)
+  }
   # item_probs is items x classes; transpose so rows index classes,
   # then expand to an n_obs x n_items probability matrix
   prob <- t(fit$item_probs)[cls, , drop = FALSE]
@@ -96,14 +114,23 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   obs <- BIC(fit_lcr_obj) - BIC(fit_rm_obj)     # negative favours LCR
   n <- nrow(data); J <- ncol(data)
   # marginal parametric bootstrap: redraw abilities from N(0, sigma^2)
-  beta <- fit_rm_obj$delta
+  poly <- isTRUE(fit_rm_obj$polytomous)
   sigma <- sqrt(rasch_latent_var(fit_rm_obj))
+  if (poly) {
+    mfit <- attr(fit_rm_obj, "mirt_object")
+    sim_fn <- function() .simulate_pcm(mfit, n, sigma)
+  } else {
+    beta <- fit_rm_obj$delta
+    sim_fn <- function() {
+      theta <- rnorm(n, 0, sigma)
+      matrix(rbinom(n * J, 1, plogis(outer(theta, beta, "-"))), n, J)
+    }
+  }
   if (!is.null(seed)) set.seed(seed)
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    theta <- rnorm(n, 0, sigma)
-    d <- matrix(rbinom(n * J, 1, plogis(outer(theta, beta, "-"))), n, J)
+    d <- sim_fn()
     rm_b <- tryCatch(suppressWarnings(fit_rm(d, verbose = FALSE)),
                      error = function(e) NULL)
     lcr_b <- tryCatch(
@@ -248,7 +275,7 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
          "(RM uses different estimation machinery; compare it by BIC)")
   }
 
-  data <- validate_data(data)
+  data <- validate_data_any(data)
   n_obs <- nrow(data)
   n_classes <- fit_constrained$n_classes
   if (!is.na(fit_un$n_classes) && fit_un$n_classes != n_classes) {
@@ -508,7 +535,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
                             ...) {
 
   method <- match.arg(method)
-  data <- validate_data(data)
+  data <- validate_data_any(data)
 
   # Optional first stage: if a range of class counts is supplied, select the
   # number of classes by BIC before the structural comparison. The structural

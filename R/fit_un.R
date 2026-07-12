@@ -73,6 +73,14 @@ fit_un <- function(data, n_classes,
   # Capture call
   call <- match.call()
 
+  # Dispatch polytomous data to the multinomial EM engine
+  if (is.data.frame(data)) data <- as.matrix(data)
+  if (.is_polytomous(data)) {
+    return(fit_lca_poly(data, n_classes, "UN", n_starts = n_starts,
+                        max_iter = max_iter, tol = tol, seed = seed,
+                        call = call))
+  }
+
   # Validate inputs
   data <- validate_data(data)
   init_method <- match.arg(init_method)

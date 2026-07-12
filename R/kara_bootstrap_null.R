@@ -101,7 +101,9 @@ band_by_ability <- function(data, n_bands, theta = NULL) {
 kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
                                 S = 10000, N_synth = 100, mc.cores = 1L,
                                 seed = NULL, verbose = TRUE) {
-  data <- validate_data(data)
+  if (is.data.frame(data)) data <- as.matrix(data)
+  poly <- .is_polytomous(data)
+  data <- if (poly) .validate_poly(data) else validate_data(data)
   n_obs <- nrow(data); J <- ncol(data)
 
   run_kara <- function(band) {
@@ -111,37 +113,61 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
                N_synth = N_synth, mc.cores = 1L, verbose = FALSE,
                testscore = rep(band$ability, nc), item = rep(1:nc, each = nr))
   }
-  global_kl <- function(band) {
-    kc <- run_kara(band)
+  # KaraChecks on a polytomous dataset via the adjacent-category, total-score
+  # conditioned matrix (prepare_polytomous), using score groups as the person
+  # factor and sub-items as the item factor.
+  run_kara_poly <- function(d) {
+    prep <- tryCatch(prepare_polytomous(d, ss.lower = 10), error = function(e) NULL)
+    if (is.null(prep)) return(NULL)
+    nr <- nrow(prep$N); nc <- ncol(prep$N)
+    KaraChecks(as.vector(prep$N), as.vector(prep$n), S = S,
+               N_synth = N_synth, mc.cores = 1L, verbose = FALSE,
+               testscore = rep(as.numeric(rownames(prep$N)), nc),
+               item = rep(1:nc, each = nr))
+  }
+  kara_of <- function(d, theta = NULL) {
+    if (poly) run_kara_poly(d)
+    else run_kara(band_by_ability(d, n_bands, theta = theta))
+  }
+  global_kl <- function(d) {
+    kc <- kara_of(d)
     if (is.null(kc)) NA_real_ else kc$global_KL
   }
 
-  # 1. observed global KL + per-cell KL quantiles (banded); seeded so the
-  #    KaraChecks sampler is reproducible (it runs at mc.cores = 1 inside)
+  # 1. observed global KL + per-cell KL quantiles; seeded so the KaraChecks
+  #    sampler is reproducible (it runs at mc.cores = 1 inside)
   if (verbose) cat("Computing observed Karabatsos global KL...\n")
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))
-  theta0 <- rm_scores(fit)$theta
+  theta0 <- if (poly) NULL else rm_scores(fit)$theta
   if (!is.null(seed)) set.seed(seed)
-  kc_obs <- run_kara(band_by_ability(data, n_bands, theta = theta0))
+  kc_obs <- kara_of(data, theta = theta0)
   if (is.null(kc_obs)) stop("Observed KaraChecks failed")
   obs <- kc_obs$global_KL
   kl_q <- stats::quantile(as.vector(kc_obs$KL), c(0.5, 0.75, 0.90, 1),
                           names = FALSE)
 
-  # 2. Rasch parameters for a marginal parametric bootstrap (redraw abilities
-  #    from N(0, sigma^2) per replicate, not the fixed EAP estimates)
-  beta <- fit$delta
+  # 2. parameters for a marginal parametric bootstrap (redraw abilities from
+  #    N(0, sigma^2) per replicate, not the fixed EAP estimates)
   sigma <- sqrt(rasch_latent_var(fit))
+  if (poly) {
+    mfit <- attr(fit, "mirt_object")
+    sim_fn <- function() .simulate_pcm(mfit, n_obs, sigma)
+  } else {
+    beta <- fit$delta
+    sim_fn <- function() {
+      theta <- rnorm(n_obs, 0, sigma)
+      matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
+    }
+  }
 
-  # 3. simulate B Rasch null datasets
-  if (verbose) cat("Simulating", B, "Rasch null datasets (KaraChecks each)...\n")
+  # 3. simulate B null datasets
+  if (verbose) cat("Simulating", B, if (poly) "partial-credit" else "Rasch",
+                   "null datasets (KaraChecks each)...\n")
   if (!is.null(seed)) set.seed(seed)
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    theta <- rnorm(n_obs, 0, sigma)
-    d <- matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
-    tryCatch(global_kl(band_by_ability(d, n_bands)), error = function(e) NA_real_)
+    tryCatch(global_kl(sim_fn()), error = function(e) NA_real_)
   }
   raw <- par_lapply(seq_len(B), boot_one, mc.cores)
   null <- vapply(raw, function(z)
