@@ -91,7 +91,7 @@ fit_mon <- function(data, n_classes,
   if (is.data.frame(data)) data <- as.matrix(data)
   if (.is_polytomous(data)) {
     return(fit_lca_poly(data, n_classes, "MON", n_starts = n_starts,
-                        max_iter = max_iter, tol = tol, seed = seed,
+                        max_iter = max_iter, tol = tol, seed = seed, use_cpp = use_cpp,
                         call = call))
   }
 

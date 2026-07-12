@@ -123,8 +123,8 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))
   sigma <- sqrt(rasch_latent_var(fit))
   if (poly) {
-    mfit <- attr(fit, "mirt_object")
-    sim_fn <- function() .simulate_pcm(mfit, n_obs, sigma)
+    rmf <- attr(fit, "rm_fit")
+    sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma)
   } else {
     beta <- fit$delta
     sim_fn <- function() {

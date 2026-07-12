@@ -216,6 +216,60 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_poly_estep
+List cpp_poly_estep(const arma::imat& data, const List& item_probs, const arma::vec& class_probs);
+RcppExport SEXP _QuantFit_cpp_poly_estep(SEXP dataSEXP, SEXP item_probsSEXP, SEXP class_probsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::imat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const List& >::type item_probs(item_probsSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type class_probs(class_probsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_poly_estep(data, item_probs, class_probs));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_poly_expected_counts
+List cpp_poly_expected_counts(const arma::imat& data, const arma::mat& posteriors, const IntegerVector& cat_counts);
+RcppExport SEXP _QuantFit_cpp_poly_expected_counts(SEXP dataSEXP, SEXP posteriorsSEXP, SEXP cat_countsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::imat& >::type data(dataSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type posteriors(posteriorsSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type cat_counts(cat_countsSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_poly_expected_counts(data, posteriors, cat_counts));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_pcm_probs
+arma::mat cpp_pcm_probs(const arma::vec& theta, const arma::vec& delta);
+RcppExport SEXP _QuantFit_cpp_pcm_probs(SEXP thetaSEXP, SEXP deltaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type delta(deltaSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_pcm_probs(theta, delta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_poly_mstep_solve
+NumericVector cpp_poly_mstep_solve(const arma::vec& w, const arma::vec& p0, const arma::mat& Aeq, const arma::mat& B, double xtol_rel, int maxeval);
+RcppExport SEXP _QuantFit_cpp_poly_mstep_solve(SEXP wSEXP, SEXP p0SEXP, SEXP AeqSEXP, SEXP BSEXP, SEXP xtol_relSEXP, SEXP maxevalSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::vec& >::type w(wSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type p0(p0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Aeq(AeqSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type B(BSEXP);
+    Rcpp::traits::input_parameter< double >::type xtol_rel(xtol_relSEXP);
+    Rcpp::traits::input_parameter< int >::type maxeval(maxevalSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_poly_mstep_solve(w, p0, Aeq, B, xtol_rel, maxeval));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_QuantFit_CCIterate", (DL_FUNC) &_QuantFit_CCIterate, 7},
@@ -232,6 +286,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_QuantFit_cpp_em_lca", (DL_FUNC) &_QuantFit_cpp_em_lca, 5},
     {"_QuantFit_cpp_em_constrained", (DL_FUNC) &_QuantFit_cpp_em_constrained, 8},
     {"_QuantFit_cpp_lcr_q", (DL_FUNC) &_QuantFit_cpp_lcr_q, 4},
+    {"_QuantFit_cpp_poly_estep", (DL_FUNC) &_QuantFit_cpp_poly_estep, 3},
+    {"_QuantFit_cpp_poly_expected_counts", (DL_FUNC) &_QuantFit_cpp_poly_expected_counts, 3},
+    {"_QuantFit_cpp_pcm_probs", (DL_FUNC) &_QuantFit_cpp_pcm_probs, 2},
+    {"_QuantFit_cpp_poly_mstep_solve", (DL_FUNC) &_QuantFit_cpp_poly_mstep_solve, 6},
     {NULL, NULL, 0}
 };
 

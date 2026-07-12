@@ -202,12 +202,8 @@ resolve_se_data <- function(object, data, caller_env) {
   if (!is.null(d)) return(validate_data(d))
 
   if (object$model_type == "RM") {
-    mirt_fit <- attr(object, "mirt_object")
-    if (!is.null(mirt_fit)) {
-      d <- tryCatch(mirt::extract.mirt(mirt_fit, "data"),
-                    error = function(e) NULL)
-      if (!is.null(d)) return(validate_data(d))
-    }
+    rf <- attr(object, "rm_fit")
+    if (!is.null(rf) && !is.null(rf$data)) return(validate_data_any(rf$data))
   }
 
   if (!is.null(object$call) && !is.null(object$call$data)) {
@@ -332,63 +328,47 @@ se_hessian_lcr <- function(object, data, use_cpp, verbose) {
   )
 }
 
-#' Extract the SEs of the item intercepts (d) from a mirt fit
+#' Hessian SEs for the Rasch / partial-credit model
 #'
-#' @param mirt_fit A fitted mirt model (or NULL)
-#' @return Named vector of SEs for the d parameters, or NULL / NAs when the
-#'   fit does not carry standard errors
-#' @keywords internal
-#' @noRd
-extract_mirt_d_se <- function(mirt_fit) {
-  if (is.null(mirt_fit)) return(NULL)
-  co <- tryCatch(
-    suppressWarnings(suppressMessages(mirt::coef(mirt_fit, printSE = TRUE))),
-    error = function(e) NULL
-  )
-  if (is.null(co) || !is.list(co)) return(NULL)
-  item_names <- setdiff(names(co), c("GroupPars", "lr.betas"))
-  if (!length(item_names)) return(NULL)
-  vapply(item_names, function(nm) {
-    m <- co[[nm]]
-    if (is.matrix(m) && "SE" %in% rownames(m) && "d" %in% colnames(m)) {
-      m["SE", "d"]
-    } else {
-      NA_real_
-    }
-  }, numeric(1))
-}
-
-#' Hessian SEs for the Rasch model (delegated to mirt)
+#' Observed-information standard errors from the numeric Hessian of the marginal
+#' (Gauss-Hermite) log-likelihood evaluated at the fitted step parameters and
+#' log latent SD. No external IRT package is used.
 #'
 #' @keywords internal
 #' @noRd
 se_hessian_rm <- function(object, verbose) {
-  mirt_fit <- attr(object, "mirt_object")
-  if (is.null(mirt_fit)) {
-    stop("mirt object not found on the RM fit. Re-fit the model using ",
-         "fit_rm().", call. = FALSE)
+  rf <- attr(object, "rm_fit")
+  if (is.null(rf)) {
+    stop("RM fit not found on the object. Re-fit the model using fit_rm().",
+         call. = FALSE)
   }
+  data <- rf$data; cat_counts <- rf$cat_counts; sumM <- sum(cat_counts)
+  w <- rf$weights
+  z0 <- rf$nodes / rf$sigma                       # base N(0,1) quadrature nodes
+  idx <- split(seq_len(sumM), rep(seq_len(ncol(data)), cat_counts))
 
-  se_d <- extract_mirt_d_se(mirt_fit)
-
-  if (is.null(se_d) || anyNA(se_d)) {
-    # The original fit does not carry SEs: re-fit with SE = TRUE
-    if (verbose) message("Re-fitting the Rasch model with SE = TRUE ...")
-    dat <- mirt::extract.mirt(mirt_fit, "data")
-    refit <- mirt::mirt(as.data.frame(dat), 1, itemtype = "Rasch",
-                        SE = TRUE, quadpts = 61, verbose = FALSE)
-    se_d <- extract_mirt_d_se(refit)
+  negll <- function(par) {
+    delta <- par[seq_len(sumM)]; sigma <- exp(par[sumM + 1L])
+    dl <- lapply(idx, function(ii) delta[ii])
+    ip <- compute_pcm_probs(sigma * z0, dl, use_cpp = TRUE)
+    -poly_estep(data, ip, w, use_cpp = TRUE)$loglik
   }
-
-  if (is.null(se_d) || anyNA(se_d)) {
-    stop("Could not obtain standard errors from mirt.", call. = FALSE)
+  par_hat <- c(rf$delta, log(rf$sigma))
+  H <- numDeriv::hessian(negll, par_hat)
+  V <- tryCatch(solve(H), error = function(e) NULL)
+  if (is.null(V)) {
+    warning("Rasch information matrix is singular; standard errors are NA.",
+            call. = FALSE)
+    se_all <- rep(NA_real_, length(par_hat))
+  } else {
+    se_all <- sqrt(pmax(diag(V), 0))
   }
-
-  # delta = -d, so SE(delta) = SE(d)
-  se_delta <- as.numeric(se_d)
-  names(se_delta) <- names(object$delta)
-
-  list(se = list(delta = se_delta))
+  se_delta <- se_all[seq_len(sumM)]
+  step <- unlist(lapply(seq_along(cat_counts), function(j) seq_len(cat_counts[j])))
+  item <- rep(seq_along(cat_counts), cat_counts)
+  names(se_delta) <- if (sumM == length(cat_counts)) rownames(object$item_probs)
+                     else sprintf("%s.s%d", rownames(object$item_probs)[item], step)
+  list(se = list(delta = se_delta, log_sigma = se_all[sumM + 1L]))
 }
 
 # ============================================================================

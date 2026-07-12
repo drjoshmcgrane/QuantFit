@@ -4,45 +4,43 @@
 \alias{fit_rm}
 \title{Fit Rasch Model (RM)}
 \usage{
-fit_rm(
-  data,
-  method = c("EM", "MHRM", "QMCEM"),
-  quadpts = 61,
-  verbose = FALSE,
-  ...
-)
+fit_rm(data, quadpts = 61L, use_cpp = TRUE, seed = NULL, verbose = FALSE, ...)
 }
 \arguments{
-\item{data}{A matrix or data frame of binary responses (0/1) with subjects in rows
-and items in columns.}
+\item{data}{A matrix or data frame of item responses with subjects in rows
+and items in columns. Dichotomous (0/1) or polytomous (0..m) scoring.}
 
-\item{method}{Estimation method: "EM" (default), "MHRM", or "QMCEM"}
+\item{quadpts}{Number of Gauss-Hermite quadrature points (default 61)}
 
-\item{quadpts}{Number of quadrature points for numerical integration (default 61)}
+\item{use_cpp}{Use the compiled C++ engine for the E-step (default TRUE)}
+
+\item{seed}{Optional random seed for the starting values}
 
 \item{verbose}{Print progress messages (default FALSE)}
 
-\item{...}{Additional arguments passed to \code{\link[mirt]{mirt}}}
+\item{...}{Ignored (accepted for backward compatibility)}
 }
 \value{
 A qlfit object containing:
 \describe{
 \item{model_type}{"RM" for Rasch Model}
-\item{item_probs}{Matrix of item probabilities at quadrature points (for compatibility)}
+\item{item_probs}{Expected item-score curves on a theta grid (for
+dichotomous items, the usual response probabilities)}
 \item{class_probs}{Not used for RM (set to NULL)}
-\item{delta}{Vector of item difficulty parameters}
-\item{posteriors}{Not directly available (set to NULL)}
-\item{loglik}{Maximized log-likelihood}
-\item{n_par}{Number of estimated parameters (I item intercepts plus the
-latent variance, as counted by \code{mirt::extract.mirt(fit, "nest")})}
+\item{delta}{Vector of item step (difficulty) parameters}
+\item{loglik}{Maximized marginal log-likelihood}
+\item{n_par}{Number of estimated parameters (total category steps plus the
+latent variance)}
 \item{convergence}{Logical indicating successful convergence}
-\item{mirt_object}{The underlying mirt object for additional methods}
 }
+The fitted quadrature model is stored in \code{attr(fit, "rm_fit")}.
 }
 \description{
-Fits a standard Rasch model with continuous latent trait using
-the mirt package. This represents the full quantitative interpretation
-of the latent variable.
+Fits a Rasch / partial-credit model with a continuous latent
+trait by marginal maximum likelihood over Gauss-Hermite quadrature, using
+the package's own EM engine (no external IRT package). This represents the
+full quantitative interpretation of the latent variable. Dichotomous data
+give the Rasch model; polytomous data give the partial credit model.
 }
 \details{
 The Rasch model assumes:
@@ -55,10 +53,15 @@ where:
 }
 
 Unlike the Latent Class Rasch model (LCR), the continuous Rasch model assumes
-the latent trait is continuously distributed (typically normal). This
-represents the strongest quantitative interpretation.
+the latent trait is continuously distributed (normal). This represents the
+strongest quantitative interpretation.
 
-The model is estimated using the \code{mirt} package with itemtype = "Rasch".
+The model is estimated by marginal maximum likelihood: person locations
+\eqn{\theta \sim N(0, \sigma^2)} are integrated out by Gauss-Hermite
+quadrature and the quadrature nodes play the role of latent classes in the
+same EM engine used for the latent-class models, so no external IRT package
+is required. Validated against \code{mirt} to a log-likelihood difference
+below 0.02.
 }
 \examples{
 \dontrun{

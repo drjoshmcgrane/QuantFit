@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_rm.R
 \name{rm_personfit}
 \alias{rm_personfit}
-\title{Person fit statistics for Rasch model}
+\title{Person fit statistics for Rasch / partial-credit model}
 \usage{
 rm_personfit(object)
 }
@@ -10,8 +10,8 @@ rm_personfit(object)
 \item{object}{A qlfit object from fit_rm}
 }
 \value{
-Data frame with person fit statistics
+Data frame with outfit and infit mean-square statistics per person.
 }
 \description{
-Person fit statistics for Rasch model
+Person fit statistics for Rasch / partial-credit model
 }

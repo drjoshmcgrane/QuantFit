@@ -330,6 +330,45 @@ an object carrying `observed`, `null`, `percentile`, `p_value`, and `reject`,
 with `print` and `plot` methods — but `quant_fit()` is the recommended one-call
 entry point when you want the triangulated verdict.
 
+## Polytomous data
+
+Everything above works unchanged on **polytomous** items — responses scored with
+ordered integer categories `0, 1, ..., m`. QuantFit detects the scoring
+automatically and fits each model natively, with no dichotomising and no loss of
+information:
+
+```{r polytomous, eval = FALSE}
+# simulate partial-credit data: 6 items, 4 categories (0-3)
+set.seed(1)
+nP <- 1500; J <- 6; M <- 3
+theta <- rnorm(nP)
+delta <- matrix(seq(-1, 1, length.out = J), J, M) +
+  matrix(seq(-0.8, 0.8, length.out = M), J, M, byrow = TRUE)
+poly <- matrix(0L, nP, J)
+for (j in seq_len(J)) {
+  num <- cbind(0, t(apply(outer(theta, delta[j, ], "-"), 1, cumsum)))
+  P <- exp(num) / rowSums(exp(num))
+  poly[, j] <- rowSums(runif(nP) > t(apply(P, 1, cumsum)))
+}
+
+# the same calls as before — the six models fit the polytomous data directly
+select_model_ll(poly, n_classes = 2, B = 99, seed = 1)
+#> Selected model: RM
+#> ... QUANTITATIVE (continuous: Rasch model)
+```
+
+Under the hood the latent-structure models carry a full category-probability
+vector for each item and class; class monotonicity becomes stochastic ordering
+of those category distributions across classes, invariant item ordering becomes
+non-crossing expected item-score curves, and the quantitative models use the
+partial credit model (a latent-class partial credit model for `LCR`, and a
+marginal-maximum-likelihood partial credit model for `RM`). The conjoint routes
+(`quant_fit()`'s CC and Kara components) recode each polytomous item into its
+adjacent-category dichotomisations and condition on the total score before
+running the cancellation checks. From the user's side, nothing changes: pass the
+polytomous responses to `quant_fit()`, `select_model_ll()`, `fit_rm()`, and the
+rest exactly as for dichotomous data.
+
 ## Which approach when?
 
 * The **cancellation checks** and the **Karabatsos test** are axiom-focused:

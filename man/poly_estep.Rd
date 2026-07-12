@@ -4,7 +4,7 @@
 \alias{poly_estep}
 \title{Polytomous E-step}
 \usage{
-poly_estep(data, item_probs, class_probs)
+poly_estep(data, item_probs, class_probs, use_cpp = TRUE)
 }
 \arguments{
 \item{data}{integer matrix (n x J), entries 0..m_j}

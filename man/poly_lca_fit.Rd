@@ -12,7 +12,8 @@ poly_lca_fit(
   max_iter = 1000L,
   tol = 1e-06,
   seed = NULL,
-  item_order = NULL
+  item_order = NULL,
+  use_cpp = TRUE
 )
 }
 \arguments{

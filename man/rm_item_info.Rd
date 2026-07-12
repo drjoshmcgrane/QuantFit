@@ -2,7 +2,7 @@
 % Please edit documentation in R/fit_rm.R
 \name{rm_item_info}
 \alias{rm_item_info}
-\title{Item information function for Rasch model}
+\title{Item information function for Rasch / partial-credit model}
 \usage{
 rm_item_info(object, theta = seq(-4, 4, by = 0.1))
 }
@@ -15,5 +15,5 @@ rm_item_info(object, theta = seq(-4, 4, by = 0.1))
 Matrix of item information values (items x theta)
 }
 \description{
-Item information function for Rasch model
+Item information function for Rasch / partial-credit model
 }

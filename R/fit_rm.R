@@ -1,33 +1,36 @@
 #' Fit Rasch Model (RM)
 #'
 #' @name fit_rm
-#' @description Fits a standard Rasch model with continuous latent trait using
-#'   the mirt package. This represents the full quantitative interpretation
-#'   of the latent variable.
+#' @description Fits a Rasch / partial-credit model with a continuous latent
+#'   trait by marginal maximum likelihood over Gauss-Hermite quadrature, using
+#'   the package's own EM engine (no external IRT package). This represents the
+#'   full quantitative interpretation of the latent variable. Dichotomous data
+#'   give the Rasch model; polytomous data give the partial credit model.
 NULL
 
 #' Fit Rasch Model
 #'
-#' @param data A matrix or data frame of binary responses (0/1) with subjects in rows
-#'   and items in columns.
-#' @param method Estimation method: "EM" (default), "MHRM", or "QMCEM"
-#' @param quadpts Number of quadrature points for numerical integration (default 61)
+#' @param data A matrix or data frame of item responses with subjects in rows
+#'   and items in columns. Dichotomous (0/1) or polytomous (0..m) scoring.
+#' @param quadpts Number of Gauss-Hermite quadrature points (default 61)
+#' @param use_cpp Use the compiled C++ engine for the E-step (default TRUE)
+#' @param seed Optional random seed for the starting values
 #' @param verbose Print progress messages (default FALSE)
-#' @param ... Additional arguments passed to \code{\link[mirt]{mirt}}
+#' @param ... Ignored (accepted for backward compatibility)
 #'
 #' @return A qlfit object containing:
 #' \describe{
 #'   \item{model_type}{"RM" for Rasch Model}
-#'   \item{item_probs}{Matrix of item probabilities at quadrature points (for compatibility)}
+#'   \item{item_probs}{Expected item-score curves on a theta grid (for
+#'     dichotomous items, the usual response probabilities)}
 #'   \item{class_probs}{Not used for RM (set to NULL)}
-#'   \item{delta}{Vector of item difficulty parameters}
-#'   \item{posteriors}{Not directly available (set to NULL)}
-#'   \item{loglik}{Maximized log-likelihood}
-#'   \item{n_par}{Number of estimated parameters (I item intercepts plus the
-#'     latent variance, as counted by \code{mirt::extract.mirt(fit, "nest")})}
+#'   \item{delta}{Vector of item step (difficulty) parameters}
+#'   \item{loglik}{Maximized marginal log-likelihood}
+#'   \item{n_par}{Number of estimated parameters (total category steps plus the
+#'     latent variance)}
 #'   \item{convergence}{Logical indicating successful convergence}
-#'   \item{mirt_object}{The underlying mirt object for additional methods}
 #' }
+#' The fitted quadrature model is stored in \code{attr(fit, "rm_fit")}.
 #'
 #' @details
 #' The Rasch model assumes:
@@ -40,10 +43,15 @@ NULL
 #' }
 #'
 #' Unlike the Latent Class Rasch model (LCR), the continuous Rasch model assumes
-#' the latent trait is continuously distributed (typically normal). This
-#' represents the strongest quantitative interpretation.
+#' the latent trait is continuously distributed (normal). This represents the
+#' strongest quantitative interpretation.
 #'
-#' The model is estimated using the \code{mirt} package with itemtype = "Rasch".
+#' The model is estimated by marginal maximum likelihood: person locations
+#' \eqn{\theta \sim N(0, \sigma^2)} are integrated out by Gauss-Hermite
+#' quadrature and the quadrature nodes play the role of latent classes in the
+#' same EM engine used for the latent-class models, so no external IRT package
+#' is required. Validated against \code{mirt} to a log-likelihood difference
+#' below 0.02.
 #'
 #' @examples
 #' \dontrun{
@@ -75,103 +83,49 @@ NULL
 #' @seealso \code{\link{fit_lcr}} for Latent Class Rasch model
 #'
 #' @export
-fit_rm <- function(data, method = c("EM", "MHRM", "QMCEM"),
-                   quadpts = 61, verbose = FALSE, ...) {
-
-  # Check for mirt
-  if (!requireNamespace("mirt", quietly = TRUE)) {
-    stop("Package 'mirt' is required for fit_rm(). Please install it.")
-  }
+fit_rm <- function(data, quadpts = 61L, use_cpp = TRUE, seed = NULL,
+                   verbose = FALSE, ...) {
 
   # Capture call
   call <- match.call()
-  method <- match.arg(method)
 
-  # Dispatch polytomous data to the native partial-credit model (mirt)
+  # Estimate the Rasch / partial-credit model with the package's own marginal
+  # maximum-likelihood engine (Gauss-Hermite quadrature EM), for both
+  # dichotomous and polytomous data. No external IRT package is required.
   if (is.data.frame(data)) data <- as.matrix(data)
-  if (.is_polytomous(data)) {
-    return(.fit_rm_poly(data, method = method, quadpts = quadpts,
-                        verbose = verbose, call = call, ...))
-  }
+  poly <- .is_polytomous(data)
+  data <- validate_data_any(data)
+  n_obs <- nrow(data); n_items <- ncol(data)
 
-  # Validate inputs
-  data <- validate_data(data)
+  mml <- em_rasch_mml(data, n_quad = quadpts, use_cpp = use_cpp, seed = seed)
+  cat_counts <- mml$cat_counts
+  item_names <- colnames(data)
+  if (is.null(item_names)) item_names <- paste0("Item", seq_len(n_items))
+  idx <- split(seq_along(mml$delta), rep(seq_len(n_items), cat_counts))
+  delta_list <- lapply(idx, function(ii) mml$delta[ii])
 
-  n_obs <- nrow(data)
-  n_items <- ncol(data)
+  # expected item-score curves E(X_j | theta) on a grid (item_probs slot); for
+  # dichotomous items this is the usual P(X = 1 | theta)
+  theta_grid <- seq(-4, 4, length.out = 21L)
+  item_probs <- t(vapply(seq_len(n_items), function(j) {
+    P <- cpp_pcm_probs(theta_grid, delta_list[[j]])
+    as.numeric(P %*% (0:cat_counts[j]))
+  }, numeric(length(theta_grid))))
+  rownames(item_probs) <- item_names
 
-  # Fit Rasch model using mirt
-  mirt_fit <- tryCatch({
-    mirt::mirt(
-      data = as.data.frame(data),
-      model = 1,
-      itemtype = "Rasch",
-      method = method,
-      quadpts = quadpts,
-      verbose = verbose,
-      ...
-    )
-  }, error = function(e) {
-    stop("mirt estimation failed: ", e$message)
-  })
-
-  # Extract parameters
-  coefs <- mirt::coef(mirt_fit, simplify = TRUE)
-  delta <- -coefs$items[, "d"]  # mirt uses d = -delta convention
-  names(delta) <- rownames(coefs$items)
-
-  # Note: delta is NOT re-centered. mirt's scale (latent mean fixed at 0)
-  # is already identified, and re-centering would make delta inconsistent
-  # with rm_scores() thetas and item_probs.
-
-  # Extract log-likelihood
-  loglik <- mirt::extract.mirt(mirt_fit, "logLik")
-
-  # Check convergence
-  converged <- mirt::extract.mirt(mirt_fit, "converged")
-  iterations <- mirt::extract.mirt(mirt_fit, "iterations")
-
-  # Compute item probabilities at quadrature points (for compatibility with other models)
-  # This gives a matrix similar to LCA item_probs but at continuous theta points
-  theta_grid <- seq(-4, 4, length.out = 21)
-  item_probs <- matrix(0, nrow = n_items, ncol = length(theta_grid))
-  for (t in seq_along(theta_grid)) {
-    item_probs[, t] <- inv_logit(theta_grid[t] - delta)
-  }
-
-  # Number of parameters: mirt's Rasch estimates I item intercepts plus the
-  # latent variance (latent mean fixed at 0) = I + 1. Use mirt's own count.
-  n_par <- tryCatch(
-    as.integer(mirt::extract.mirt(mirt_fit, "nest")),
-    error = function(e) n_items + 1L
-  )
-
-  # Create qlfit object
   result <- new_qlfit(
-    model_type = "RM",
-    item_probs = item_probs,
-    class_probs = NULL,
-    posteriors = NULL,
-    loglik = as.numeric(loglik),
-    n_par = n_par,
-    n_obs = n_obs,
-    n_items = n_items,
-    n_classes = NA,
-    convergence = converged,
-    iterations = iterations,
-    call = call,
-    theta = theta_grid,  # Grid points, not class locations
-    delta = delta,
-    item_order = NULL,
-    constraints = NULL,
-    se = NULL
-  )
-
-  # Store mirt object for additional functionality
-  attr(result, "mirt_object") <- mirt_fit
-
-  result
+    model_type = "RM", item_probs = item_probs, class_probs = NULL,
+    posteriors = NULL, loglik = mml$loglik, n_par = mml$n_par, n_obs = n_obs,
+    n_items = n_items, n_classes = NA, convergence = mml$converged,
+    iterations = mml$iterations, call = call, theta = theta_grid,
+    delta = stats::setNames(mml$delta, NULL), item_order = NULL,
+    constraints = NULL, se = NULL)
+  if (poly) result$polytomous <- TRUE
+  result$cat_counts <- cat_counts
+  attr(result, "rm_fit") <- mml
+  return(result)
 }
+
 
 #' Extract Rasch scores from RM model
 #'
@@ -185,63 +139,88 @@ rm_scores <- function(object, type = c("EAP", "MAP", "ML", "WLE")) {
   if (object$model_type != "RM") {
     stop("rm_scores only applies to RM models")
   }
-
   type <- match.arg(type)
+  rf <- attr(object, "rm_fit")
+  if (is.null(rf)) stop("RM fit not found. Re-fit the model using fit_rm().")
 
-  # Get mirt object
-  mirt_fit <- attr(object, "mirt_object")
-  if (is.null(mirt_fit)) {
-    stop("mirt object not found. Re-fit the model using fit_rm().")
+  nodes <- rf$nodes; post <- rf$posteriors      # posteriors: n x Q over nodes
+  if (type == "EAP") {
+    eap <- as.numeric(post %*% nodes)
+    v <- as.numeric(post %*% (nodes^2)) - eap^2
+    return(data.frame(theta = eap, se = sqrt(pmax(v, 0))))
+  }
+  if (type == "MAP") {
+    return(data.frame(theta = nodes[max.col(post, ties.method = "first")],
+                      se = NA_real_))
   }
 
-  # Extract scores using mirt
-  scores <- mirt::fscores(mirt_fit, method = type, full.scores = TRUE)
-
-  data.frame(
-    theta = scores[, 1],
-    se = if (ncol(scores) > 1) scores[, 2] else NA
-  )
+  # ML / WLE via the sufficient total score (valid for the Rasch/PCM family):
+  # solve the test-score equation for each distinct observed total score.
+  dl <- rf$delta_list; sumM <- sum(rf$cat_counts)
+  TS <- function(th) sum(vapply(dl, function(dj) .pcm_moments(th, dj)$E, numeric(1)))
+  Inf_fn <- function(th) sum(vapply(dl, function(dj) .pcm_moments(th, dj)$V, numeric(1)))
+  warm <- function(th) sum(vapply(dl, function(dj) .pcm_moments(th, dj)$M3, numeric(1)))
+  solve_theta <- function(target) {
+    if (target <= 0) return(if (type == "ML") -Inf else NA_real_)
+    if (target >= sumM) return(if (type == "ML") Inf else NA_real_)
+    f <- if (type == "ML") function(th) TS(th) - target
+         else function(th) TS(th) + warm(th) / (2 * Inf_fn(th)) - target
+    tryCatch(stats::uniroot(f, c(-10, 10))$root, error = function(e) NA_real_)
+  }
+  us <- sort(unique(rf$scores))
+  tmap <- vapply(us, solve_theta, numeric(1)); names(tmap) <- as.character(us)
+  th <- tmap[as.character(rf$scores)]
+  se <- vapply(th, function(x) if (is.finite(x)) 1 / sqrt(Inf_fn(x)) else NA_real_,
+               numeric(1))
+  data.frame(theta = as.numeric(th), se = as.numeric(se))
 }
 
-#' Item fit statistics for Rasch model
+#' Item fit statistics for Rasch / partial-credit model
 #'
 #' @param object A qlfit object from fit_rm
 #'
-#' @return Data frame with item fit statistics
+#' @return Data frame with outfit and infit mean-square statistics per item.
 #' @export
 rm_itemfit <- function(object) {
-  if (object$model_type != "RM") {
-    stop("rm_itemfit only applies to RM models")
+  if (object$model_type != "RM") stop("rm_itemfit only applies to RM models")
+  rf <- attr(object, "rm_fit")
+  if (is.null(rf)) stop("RM fit not found. Re-fit the model using fit_rm().")
+  data <- rf$data; dl <- rf$delta_list
+  th <- rm_scores(object, "EAP")$theta
+  J <- ncol(data)
+  outfit <- infit <- numeric(J)
+  for (j in seq_len(J)) {
+    m <- .pcm_moments(th, dl[[j]])
+    resid2 <- (data[, j] - m$E)^2
+    outfit[j] <- mean(resid2 / m$V)              # unweighted mean-square
+    infit[j] <- sum(resid2) / sum(m$V)           # information-weighted
   }
-
-  mirt_fit <- attr(object, "mirt_object")
-  if (is.null(mirt_fit)) {
-    stop("mirt object not found. Re-fit the model using fit_rm().")
-  }
-
-  mirt::itemfit(mirt_fit)
+  data.frame(item = rownames(object$item_probs),
+             outfit_MSQ = outfit, infit_MSQ = infit,
+             stringsAsFactors = FALSE)
 }
 
-#' Person fit statistics for Rasch model
+#' Person fit statistics for Rasch / partial-credit model
 #'
 #' @param object A qlfit object from fit_rm
 #'
-#' @return Data frame with person fit statistics
+#' @return Data frame with outfit and infit mean-square statistics per person.
 #' @export
 rm_personfit <- function(object) {
-  if (object$model_type != "RM") {
-    stop("rm_personfit only applies to RM models")
-  }
-
-  mirt_fit <- attr(object, "mirt_object")
-  if (is.null(mirt_fit)) {
-    stop("mirt object not found. Re-fit the model using fit_rm().")
-  }
-
-  mirt::personfit(mirt_fit)
+  if (object$model_type != "RM") stop("rm_personfit only applies to RM models")
+  rf <- attr(object, "rm_fit")
+  if (is.null(rf)) stop("RM fit not found. Re-fit the model using fit_rm().")
+  data <- rf$data; dl <- rf$delta_list
+  th <- rm_scores(object, "EAP")$theta
+  n <- nrow(data); J <- ncol(data)
+  E <- V <- matrix(0, n, J)
+  for (j in seq_len(J)) { m <- .pcm_moments(th, dl[[j]]); E[, j] <- m$E; V[, j] <- m$V }
+  resid2 <- (data - E)^2
+  data.frame(outfit_MSQ = rowMeans(resid2 / V),
+             infit_MSQ = rowSums(resid2) / rowSums(V))
 }
 
-#' Item information function for Rasch model
+#' Item information function for Rasch / partial-credit model
 #'
 #' @param object A qlfit object from fit_rm
 #' @param theta Vector of theta values at which to compute information
@@ -249,23 +228,14 @@ rm_personfit <- function(object) {
 #' @return Matrix of item information values (items x theta)
 #' @export
 rm_item_info <- function(object, theta = seq(-4, 4, by = 0.1)) {
-  if (object$model_type != "RM") {
-    stop("rm_item_info only applies to RM models")
-  }
-
-  # Item information for Rasch model: I(theta) = P(theta) * Q(theta)
-  delta <- object$delta
-  n_items <- length(delta)
-
-  info <- matrix(0, nrow = n_items, ncol = length(theta))
-  for (i in 1:n_items) {
-    p <- inv_logit(theta - delta[i])
-    info[i, ] <- p * (1 - p)
-  }
-
-  rownames(info) <- names(delta)
+  if (object$model_type != "RM") stop("rm_item_info only applies to RM models")
+  rf <- attr(object, "rm_fit")
+  if (is.null(rf)) stop("RM fit not found. Re-fit the model using fit_rm().")
+  # partial-credit item information is the response variance at theta
+  info <- t(vapply(rf$delta_list, function(dj) .pcm_moments(theta, dj)$V,
+                   numeric(length(theta))))
+  rownames(info) <- rownames(object$item_probs)
   colnames(info) <- round(theta, 2)
-
   info
 }
 

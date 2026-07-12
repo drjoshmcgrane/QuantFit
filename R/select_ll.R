@@ -80,9 +80,8 @@ par_lapply <- function(X, FUN, mc.cores = 1L) {
 #' @return A positive numeric latent variance.
 #' @keywords internal
 rasch_latent_var <- function(fit) {
-  mo <- attr(fit, "mirt_object")
-  v <- tryCatch(as.numeric(mirt::coef(mo, simplify = TRUE)$cov),
-                error = function(e) NA_real_)
+  rf <- attr(fit, "rm_fit")
+  v <- if (is.null(rf)) NA_real_ else rf$sigma^2
   if (length(v) == 0L || is.na(v[1]) || v[1] <= 0) 1 else v[1]
 }
 
@@ -117,8 +116,8 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   poly <- isTRUE(fit_rm_obj$polytomous)
   sigma <- sqrt(rasch_latent_var(fit_rm_obj))
   if (poly) {
-    mfit <- attr(fit_rm_obj, "mirt_object")
-    sim_fn <- function() .simulate_pcm(mfit, n, sigma)
+    rmf <- attr(fit_rm_obj, "rm_fit")
+    sim_fn <- function() .simulate_pcm(rmf, n, sigma)
   } else {
     beta <- fit_rm_obj$delta
     sim_fn <- function() {

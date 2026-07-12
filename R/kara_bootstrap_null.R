@@ -150,8 +150,8 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   #    N(0, sigma^2) per replicate, not the fixed EAP estimates)
   sigma <- sqrt(rasch_latent_var(fit))
   if (poly) {
-    mfit <- attr(fit, "mirt_object")
-    sim_fn <- function() .simulate_pcm(mfit, n_obs, sigma)
+    rmf <- attr(fit, "rm_fit")
+    sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma)
   } else {
     beta <- fit$delta
     sim_fn <- function() {

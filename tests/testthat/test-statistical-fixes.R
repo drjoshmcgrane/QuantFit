@@ -231,14 +231,17 @@ test_that("RM n_par equals mirt's estimated parameter count (nest)", {
   for (j in 1:n_items) data[, j] <- rbinom(n, 1, plogis(theta - delta[j]))
 
   fit <- fit_rm(data, verbose = FALSE)
-  mirt_fit <- attr(fit, "mirt_object")
 
-  expect_equal(fit$n_par, as.integer(mirt::extract.mirt(mirt_fit, "nest")))
+  # Rasch parameter count: J item difficulties + 1 latent variance
   expect_equal(fit$n_par, n_items + 1)
 
-  # delta must NOT be re-centered: it should match mirt's -d exactly
+  # our marginal-ML delta reproduces mirt's -d (both estimate the same model)
+  skip_if_not_installed("mirt")
+  mirt_fit <- mirt::mirt(as.data.frame(data), 1, itemtype = "Rasch",
+                         verbose = FALSE)
+  expect_equal(fit$n_par, as.integer(mirt::extract.mirt(mirt_fit, "nest")))
   mirt_d <- -mirt::coef(mirt_fit, simplify = TRUE)$items[, "d"]
-  expect_equal(unname(fit$delta), unname(mirt_d), tolerance = 1e-10)
+  expect_equal(unname(fit$delta), unname(mirt_d), tolerance = 5e-2)
 })
 
 test_that("LCR n_par equals 2C + J - 2", {

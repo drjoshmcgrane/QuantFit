@@ -158,3 +158,55 @@ cpp_lcr_q <- function(par, data, posteriors, n_classes) {
     .Call(`_QuantFit_cpp_lcr_q`, par, data, posteriors, n_classes)
 }
 
+#' Polytomous multinomial E-step (internal)
+#'
+#' @param data Integer response matrix (n x J), entries 0..m_j.
+#' @param item_probs List of length J; element j is a C x (m_j + 1) matrix of
+#'   category probabilities (rows index classes, sum to 1).
+#' @param class_probs Class probability vector (length C).
+#' @return List with \code{posteriors} (n x C) and \code{loglik}.
+#' @noRd
+cpp_poly_estep <- function(data, item_probs, class_probs) {
+    .Call(`_QuantFit_cpp_poly_estep`, data, item_probs, class_probs)
+}
+
+#' Expected category counts per item (internal)
+#'
+#' @param data Integer response matrix (n x J).
+#' @param posteriors Posterior class-membership matrix (n x C).
+#' @param cat_counts Integer vector of m_j (categories run 0..m_j).
+#' @return List of length J; element j is a C x (m_j + 1) matrix of expected
+#'   counts.
+#' @noRd
+cpp_poly_expected_counts <- function(data, posteriors, cat_counts) {
+    .Call(`_QuantFit_cpp_poly_expected_counts`, data, posteriors, cat_counts)
+}
+
+#' Partial-credit category probabilities (internal)
+#'
+#' For class/quadrature locations \code{theta} (length C) and item step
+#' parameters \code{delta} (length m), returns the C x (m+1) matrix with
+#' P(X = x | c) proportional to exp(sum_{k<=x} (theta_c - delta_k)).
+#'
+#' @param theta Numeric vector of person/class locations (length C).
+#' @param delta Numeric vector of item step parameters (length m).
+#' @return C x (m+1) matrix of category probabilities.
+#' @noRd
+cpp_pcm_probs <- function(theta, delta) {
+    .Call(`_QuantFit_cpp_pcm_probs`, theta, delta)
+}
+
+#' Constrained multinomial M-step via NLopt SLSQP (internal)
+#'
+#' @param w Packed expected-count weights (length = total free cells).
+#' @param p0 Packed warm-start probabilities (same length).
+#' @param Aeq Equality-constraint matrix (rows sum to 1).
+#' @param B Inequality-constraint matrix (B p <= 0); may have zero rows.
+#' @param xtol_rel Relative x tolerance for SLSQP.
+#' @param maxeval Maximum objective evaluations.
+#' @return The solution vector (unnormalised; the caller renormalises rows).
+#' @noRd
+cpp_poly_mstep_solve <- function(w, p0, Aeq, B, xtol_rel = 1e-8, maxeval = 500L) {
+    .Call(`_QuantFit_cpp_poly_mstep_solve`, w, p0, Aeq, B, xtol_rel, maxeval)
+}
+

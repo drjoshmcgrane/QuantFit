@@ -94,7 +94,7 @@ fit_iio <- function(data, n_classes,
   if (.is_polytomous(data)) {
     return(fit_lca_poly(data, n_classes, "IIO", n_starts = n_starts,
                         max_iter = max_iter, tol = tol, seed = seed,
-                        item_order = item_order, call = call))
+                        item_order = item_order, use_cpp = use_cpp, call = call))
   }
 
   # Validate inputs

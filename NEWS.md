@@ -44,6 +44,22 @@ lines of work into one framework with a common, optimised C++ core.
   bootstrap nulls simulate from a fitted partial credit model. All six fits, the
   bootstrap tests, and the triangulated verdict work on dichotomous and
   polytomous data alike, choosing the representation appropriate to each route.
+  The polytomous engine has a compiled RcppArmadillo core (multinomial E-step,
+  expected counts, partial-credit probabilities); the ordered-model M-steps run
+  NLopt's SLSQP directly from C++ (via `nloptrAPI.h`), with class monotonicity
+  solved per item and an exact shortcut for the coupled IIO / DM cases, so
+  constrained fits on constraint-consistent data are orders of magnitude faster.
+
+* **The Rasch / partial-credit model is now estimated by the package's own
+  engine, and the `mirt` dependency has been dropped** (moved to Suggests, used
+  only to cross-check in the test suite). `fit_rm()` fits by marginal maximum
+  likelihood over Gauss-Hermite quadrature, reusing the same EM engine as the
+  latent-class models (the quadrature nodes play the role of classes); it
+  handles dichotomous (Rasch) and polytomous (partial credit) data and
+  reproduces `mirt`'s log-likelihood, item parameters, and latent variance to
+  within rounding. `rm_scores()` (EAP / MAP / ML / WLE), `rm_itemfit()`,
+  `rm_personfit()`, `rm_item_info()`, and the Rasch standard errors are all
+  reimplemented against this engine.
 
 * The triangulated verdict function is now `quant_fit()` - the package's
   namesake flagship function. `assess_quantitative()` is kept as a deprecated

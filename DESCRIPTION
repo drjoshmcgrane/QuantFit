@@ -39,7 +39,6 @@ Imports:
     parallel,
     alabama,
     nloptr,
-    mirt,
     numDeriv,
     stats,
     utils,
@@ -47,9 +46,11 @@ Imports:
     grDevices
 LinkingTo:
     Rcpp,
-    RcppArmadillo
+    RcppArmadillo,
+    nloptr
 Suggests:
     testthat (>= 3.0.0),
+    mirt,
     knitr,
     rmarkdown
 Config/testthat/edition: 3
