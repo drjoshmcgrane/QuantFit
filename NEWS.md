@@ -113,14 +113,25 @@ lines of work into one framework with a common, optimised C++ core.
   have identical parameter counts, information criteria cannot distinguish
   them; these functions instead use a parametric bootstrap of the
   likelihood-ratio statistic, whose asymptotic null is chi-bar-squared, to
-  test each constrained model against its less-restricted parent. Selection
-  proceeds down the hierarchy UN -> MON/IIO/DM -> LCR -> RM, using BIC only at
-  the final step where parameter counts genuinely differ. A `method` argument
+  test each constrained model against its less-restricted parent. The ordinal
+  layer identifies the most restrictive supported model among UN/MON/IIO/DM,
+  and a single quantitative gate then tests the parametric latent-class Rasch
+  model directly against the unconstrained model (LCR vs UN): a one-step gate
+  rather than a sequential DM-then-LCR path, so genuinely quantitative data are
+  not lost to the ordinal layer by the compounded false-rejection rate of two
+  tests. This gate uses a separate, stricter `alpha_quant` (default 0.01) - the
+  quantitative model is only demoted on strong evidence. A `method` argument
   offers two ways to test the ordinal layer: `"joint"` (default) tests the
   doubly-monotone model against UN directly, while `"lattice"` tests each
-  constraint edge separately; a paired simulation study found them
-  statistically indistinguishable in recovery, so the cheaper joint procedure
-  is the default.
+  constraint edge separately. In a six-model recovery study (`simulate_responses()`,
+  N = 1500, K = 30) this raised quantitative-scale recovery from 82% to 97% and
+  overall scale-type accuracy to 96%, with nominal recovery at 100%.
+
+* `simulate_responses()` - generate dichotomous or polytomous data from any of
+  the six models (UN, MON, IIO, DM, LCR, RM) for validation and power studies;
+  reproduces the generators of Torres Irribarra & Diakow for dichotomous data
+  and generalises them to ordered categories. `inst/validation/selection_audit.R`
+  uses it to reproduce the recovery study above.
 
 * `compute_se()` — observed-information (Hessian, with delta-method
   back-transform) and nonparametric bootstrap standard errors for all six

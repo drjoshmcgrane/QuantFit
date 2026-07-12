@@ -166,9 +166,10 @@ test_that("select_model_ll picks a quantitative model on Rasch data", {
   expect_match(sel$interpretation, "QUANTITATIVE")
   expect_true(all(c("comparison", "statistic", "p_value", "decision") %in%
                     names(sel$tests)))
-  # joint default (no method arg) tests DM vs UN directly, then LCR vs DM
+  # joint default tests DM vs UN in the ordinal layer, then LCR vs UN at the
+  # quantitative gate
   expect_true(any(grepl("DM", sel$tests$comparison)))
-  expect_true(any(grepl("LCR vs DM", sel$tests$comparison)))
+  expect_true(any(grepl("LCR vs UN", sel$tests$comparison)))
   expect_false(any(is.na(sel$bics)))
   expect_output(print(sel), "Selected model")
   expect_output(print(sel), "Decision path")

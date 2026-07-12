@@ -400,6 +400,12 @@ print.qleqtest <- function(x, ...) {
 #'   \eqn{(1 + \#\{LR^* \ge LR\})/(B+1)} this is an exact level-\eqn{\alpha}
 #'   Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 #'   (e.g. `B = 99`, `alpha = 0.05`).
+#' @param alpha_quant Significance level for the single quantitative gate
+#'   (LCR vs UN), default 0.01. This governs the one decision that demotes a
+#'   fitted quantitative model to the ordinal layer; a stricter level than
+#'   `alpha` means the parametric quantitative model is only overturned on
+#'   strong evidence, so genuinely quantitative data are rarely misclassified
+#'   as merely ordinal.
 #' @param B Number of bootstrap replicates per test (default 99).
 #' @param n_starts Number of random starts for the observed-data fits
 #'   (default 5).
@@ -527,8 +533,8 @@ print.qleqtest <- function(x, ...) {
 #' print(sel)
 #' }
 #' @export
-select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
-                            n_starts = 5, boot_n_starts = 3,
+select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.01,
+                            B = 99, n_starts = 5, boot_n_starts = 3,
                             method = c("joint", "lattice"), seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
                             ...) {
@@ -615,108 +621,88 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, B = 99,
 
   # Run one edge test, record it, and return whether the constrained model
   # is adequate (p > alpha). NULL fits yield NA (no test performed).
-  test_adequate <- function(fit_c, fit_g, label, seed_offset) {
+  test_adequate <- function(fit_c, fit_g, label, seed_offset, a = alpha) {
     if (is.null(fit_c) || is.null(fit_g)) return(NA)
     t <- run_test(fit_c, fit_g, seed_offset)
-    ok <- t$p_value > alpha
+    ok <- t$p_value > a
     tests <<- add_test(tests, label, t, ok)
     ok
   }
 
-  # -- Step 1: ordinal structure -------------------------------------------
-  # Sets proceed_to_lcr = TRUE when the doubly-monotone model is supported;
-  # otherwise it terminates the selection in the ordinal/classificatory layer
-  # by setting `selected` and `interpretation`.
-  proceed_to_lcr <- FALSE
+  # -- Ordinal / nominal layer ---------------------------------------------
+  # Identify the most restrictive ORDINAL model supported (UN, MON, IIO, or DM).
+  # This is the fallback used when the data do not support the parametric
+  # quantitative model tested at the gate below.
+  ordinal_selected <- "UN"
+  ordinal_interp <- "CLASSIFICATORY (no ordinal structure supported)"
 
   if (method == "joint") {
-    # Test the most constrained ordinal model (DM) directly against UN;
-    # on rejection fall back to the single-constraint models.
-    if (verbose) cat("Step 1 (joint): testing DM vs UN...\n")
-    dm_adequate <- isTRUE(test_adequate(fits$DM, fits$UN, "DM vs UN", 1000L))
-
-    if (dm_adequate) {
-      proceed_to_lcr <- TRUE
+    if (verbose) cat("Ordinal layer (joint): testing DM vs UN...\n")
+    if (isTRUE(test_adequate(fits$DM, fits$UN, "DM vs UN", 1000L))) {
+      ordinal_selected <- "DM"
+      ordinal_interp <- "ORDINAL (double monotonicity)"
     } else {
       candidates <- list()
-      if (verbose) cat("Step 1 (joint): testing IIO vs UN and MON vs UN...\n")
-      if (isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L))) {
+      if (isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L)))
         candidates$IIO <- fits$IIO
-      }
-      if (isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L))) {
+      if (isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L)))
         candidates$MON <- fits$MON
-      }
-      if (length(candidates) == 0L) {
-        selected <- "UN"
-        interpretation <- "CLASSIFICATORY (no ordinal structure supported)"
-      } else {
+      if (length(candidates) > 0L) {
         lls <- vapply(candidates, function(f) f$loglik, numeric(1))
-        selected <- names(candidates)[which.max(lls)]
-        interpretation <- if (selected == "IIO") {
-          "ORDINAL (invariant item ordering)"
-        } else {
-          "ORDINAL (class monotonicity)"
-        }
+        ordinal_selected <- names(candidates)[which.max(lls)]
+        ordinal_interp <- if (ordinal_selected == "IIO")
+          "ORDINAL (invariant item ordering)" else "ORDINAL (class monotonicity)"
       }
     }
   } else {
-    # Lattice: test each constraint edge and accept the deepest model
-    # reachable by a path of non-rejected edges. The single-constraint
-    # edges (MON vs UN, IIO vs UN) are tested first; DM is reached only when
-    # one of them holds AND the corresponding increment edge (DM vs IIO for
-    # the added monotonicity, or DM vs MON for the added item ordering) is
-    # also not rejected. This gives each constraint family its own targeted
-    # test instead of diluting the signal across a joint DM-vs-UN test.
-    if (verbose) cat("Step 1 (lattice): testing constraint edges...\n")
+    # Lattice: test each constraint edge and accept the deepest ordinal model
+    # reachable by a path of non-rejected edges.
+    if (verbose) cat("Ordinal layer (lattice): testing constraint edges...\n")
     mon_ok <- isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L))
     iio_ok <- isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L))
-
     reach_dm <- FALSE
     if (!is.null(fits$DM)) {
-      if (iio_ok) {
-        # MON increment given IIO
+      if (iio_ok)
         reach_dm <- isTRUE(test_adequate(fits$DM, fits$IIO, "DM vs IIO", 5000L))
-      }
-      if (!reach_dm && mon_ok) {
-        # IIO increment given MON
+      if (!reach_dm && mon_ok)
         reach_dm <- isTRUE(test_adequate(fits$DM, fits$MON, "DM vs MON", 6000L))
-      }
     }
-
     if (reach_dm) {
-      proceed_to_lcr <- TRUE
+      ordinal_selected <- "DM"; ordinal_interp <- "ORDINAL (double monotonicity)"
     } else if (iio_ok && mon_ok) {
-      # Both single constraints hold individually but the doubly-monotone
-      # increment is rejected from either parent: keep the better-fitting
-      # single ordinal model.
-      selected <- if (fits$IIO$loglik >= fits$MON$loglik) "IIO" else "MON"
-      interpretation <- if (selected == "IIO") {
-        "ORDINAL (invariant item ordering)"
-      } else {
-        "ORDINAL (class monotonicity)"
-      }
+      ordinal_selected <- if (fits$IIO$loglik >= fits$MON$loglik) "IIO" else "MON"
+      ordinal_interp <- if (ordinal_selected == "IIO")
+        "ORDINAL (invariant item ordering)" else "ORDINAL (class monotonicity)"
     } else if (iio_ok) {
-      selected <- "IIO"
-      interpretation <- "ORDINAL (invariant item ordering)"
+      ordinal_selected <- "IIO"; ordinal_interp <- "ORDINAL (invariant item ordering)"
     } else if (mon_ok) {
-      selected <- "MON"
-      interpretation <- "ORDINAL (class monotonicity)"
-    } else {
-      selected <- "UN"
-      interpretation <- "CLASSIFICATORY (no ordinal structure supported)"
+      ordinal_selected <- "MON"; ordinal_interp <- "ORDINAL (class monotonicity)"
     }
   }
 
-  # -- Steps 2-3: quantitative structure (only when DM is supported) --------
-  if (proceed_to_lcr) {
-    # Step 2: discrete quantitative structure (LCR vs DM)
-    if (verbose) cat("Step 2: testing LCR vs DM...\n")
-    lcr_adequate <- isTRUE(test_adequate(fits$LCR, fits$DM, "LCR vs DM", 4000L))
+  # -- Quantitative gate ----------------------------------------------------
+  # Does the parametric latent-class Rasch model fit as well as the fully
+  # unconstrained model? Testing LCR directly against UN - a single gate rather
+  # than a sequential DM-then-LCR path - avoids compounding the false-rejection
+  # rate, so genuinely quantitative data are not lost to the ordinal layer by
+  # chance. A separate, stricter alpha_quant governs this one demotion decision
+  # (the quantitative model is only overturned on strong evidence).
+  proceed_to_lcr <- FALSE
+  if (!is.null(fits$LCR)) {
+    if (verbose) cat("Quantitative gate: testing LCR vs UN...\n")
+    # the gate cannot resolve a level finer than the bootstrap p-value floor
+    # 1/(B+1); use the achievable threshold so it can still reject on the
+    # strongest evidence (observed LR beyond every null draw) at small B.
+    a_q <- max(alpha_quant, 1 / (B + 1))
+    proceed_to_lcr <- isTRUE(test_adequate(fits$LCR, fits$UN, "LCR vs UN", 4000L,
+                                           a = a_q))
+  }
 
-    if (!lcr_adequate) {
-      selected <- "DM"
-      interpretation <- "ORDINAL (double monotonicity)"
-    } else {
+  if (!proceed_to_lcr) {
+    selected <- ordinal_selected
+    interpretation <- ordinal_interp
+  } else {
+    {
       # Step 3: continuous (RM) vs discrete (LCR), bootstrap-calibrated on the
       # BIC difference against a null simulated from the fitted RM.
       bics["LCR"] <- BIC(fits$LCR)

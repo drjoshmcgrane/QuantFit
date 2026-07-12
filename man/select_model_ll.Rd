@@ -8,6 +8,7 @@ select_model_ll(
   data,
   n_classes,
   alpha = 0.05,
+  alpha_quant = 0.01,
   B = 99,
   n_starts = 5,
   boot_n_starts = 3,
@@ -35,6 +36,13 @@ exceeds \code{alpha}, i.e. the constraints are rejected when
 \eqn{(1 + \#\{LR^* \ge LR\})/(B+1)} this is an exact level-\eqn{\alpha}
 Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 (e.g. \code{B = 99}, \code{alpha = 0.05}).}
+
+\item{alpha_quant}{Significance level for the single quantitative gate
+(LCR vs UN), default 0.01. This governs the one decision that demotes a
+fitted quantitative model to the ordinal layer; a stricter level than
+\code{alpha} means the parametric quantitative model is only overturned on
+strong evidence, so genuinely quantitative data are rarely misclassified
+as merely ordinal.}
 
 \item{B}{Number of bootstrap replicates per test (default 99).}
 
