@@ -455,11 +455,16 @@ print.qleqtest <- function(x, ...) {
 #'   Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 #'   (e.g. `B = 99`, `alpha = 0.05`).
 #' @param alpha_quant Significance level for the single quantitative gate
-#'   (LCR vs UN), default 0.01. This governs the one decision that demotes a
-#'   fitted quantitative model to the ordinal layer; a stricter level than
-#'   `alpha` means the parametric quantitative model is only overturned on
-#'   strong evidence, so genuinely quantitative data are rarely misclassified
-#'   as merely ordinal.
+#'   (LCR vs UN), default 0.05 (the conventional level; with `B = 99` this is
+#'   an exact level-0.05 Monte Carlo test). This governs the one decision that
+#'   demotes a fitted quantitative model to the ordinal layer. True
+#'   quantitative models are protected from chance upper-tail rejections by
+#'   the estimated-power check (a rejection must also separate from the
+#'   general model's reference distribution), so the conventional level does
+#'   not carry the compounded false-demotion cost it would in a plain
+#'   sequential procedure; lower it (e.g. 0.01) to demote the quantitative
+#'   model only on stronger evidence, at the cost of letting more
+#'   near-additive ordinal data pass as quantitative.
 #' @param B Number of bootstrap replicates per test (default 99).
 #' @param n_starts Number of random starts for the observed-data fits
 #'   (default 5).
@@ -587,7 +592,7 @@ print.qleqtest <- function(x, ...) {
 #' print(sel)
 #' }
 #' @export
-select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.01,
+select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                             B = 99, n_starts = 5, boot_n_starts = 3,
                             method = c("joint", "lattice"), seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
@@ -766,7 +771,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.01,
   # unconstrained model? Testing LCR directly against UN - a single gate rather
   # than a sequential DM-then-LCR path - avoids compounding the false-rejection
   # rate, so genuinely quantitative data are not lost to the ordinal layer by
-  # chance. A separate, stricter alpha_quant governs this one demotion decision
+  # chance. A separate alpha_quant governs this one demotion decision
   # (the quantitative model is only overturned on strong evidence).
   proceed_to_lcr <- FALSE
   if (!is.null(fits$LCR)) {

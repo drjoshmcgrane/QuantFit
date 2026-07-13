@@ -8,7 +8,7 @@ select_model_ll(
   data,
   n_classes,
   alpha = 0.05,
-  alpha_quant = 0.01,
+  alpha_quant = 0.05,
   B = 99,
   n_starts = 5,
   boot_n_starts = 3,
@@ -38,11 +38,16 @@ Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 (e.g. \code{B = 99}, \code{alpha = 0.05}).}
 
 \item{alpha_quant}{Significance level for the single quantitative gate
-(LCR vs UN), default 0.01. This governs the one decision that demotes a
-fitted quantitative model to the ordinal layer; a stricter level than
-\code{alpha} means the parametric quantitative model is only overturned on
-strong evidence, so genuinely quantitative data are rarely misclassified
-as merely ordinal.}
+(LCR vs UN), default 0.05 (the conventional level; with \code{B = 99} this is
+an exact level-0.05 Monte Carlo test). This governs the one decision that
+demotes a fitted quantitative model to the ordinal layer. True
+quantitative models are protected from chance upper-tail rejections by
+the estimated-power check (a rejection must also separate from the
+general model's reference distribution), so the conventional level does
+not carry the compounded false-demotion cost it would in a plain
+sequential procedure; lower it (e.g. 0.01) to demote the quantitative
+model only on stronger evidence, at the cost of letting more
+near-additive ordinal data pass as quantitative.}
 
 \item{B}{Number of bootstrap replicates per test (default 99).}
 

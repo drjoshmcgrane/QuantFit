@@ -189,9 +189,12 @@ then tests the parametric latent-class Rasch model directly against the
 unconstrained model (LCR vs UN). Using one gate rather than a sequential
 DM-then-LCR path avoids compounding the false-rejection rate of two tests, so
 genuinely quantitative data are not lost to the ordinal layer by chance; the
-gate uses a stricter `alpha_quant` (default 0.01) so the quantitative model is
-only demoted on strong evidence. Even the final RM-versus-LCR step is
-bootstrap-calibrated: rather than
+gate runs at `alpha_quant` (default 0.05, the conventional level), and a
+rejection must additionally pass an estimated-power check - the LR
+distribution is also simulated under the fitted unconstrained model, and the
+quantitative model is demoted only when the two reference distributions
+separate (a negligible estimated departure cannot justify the demotion). Even
+the final RM-versus-LCR step is bootstrap-calibrated: rather than
 comparing the two BIC values directly, it bootstraps the BIC *difference*
 against a null simulated from the fitted Rasch model (`rm_vs_lcr_test()`), so
 the continuous model is preferred only when the discrete latent-class Rasch fit

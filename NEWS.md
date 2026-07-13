@@ -154,7 +154,11 @@ lines of work into one framework with a common, optimised C++ core.
   model directly against the unconstrained model (LCR vs UN): a one-step gate
   rather than a sequential DM-then-LCR path, so genuinely quantitative data are
   not lost to the ordinal layer by the compounded false-rejection rate of two
-  tests. This gate uses a separate, stricter `alpha_quant` (default 0.01) - the
+  tests. This gate uses a separate `alpha_quant` (default 0.05, the
+  conventional level; true quantitative models are protected from chance
+  rejections by the estimated-power check below, so the conventional level
+  does not carry the compounded false-demotion cost of a plain sequential
+  procedure) - the
   quantitative model is only demoted on strong evidence. A `method` argument
   offers two ways to test the ordinal layer: `"joint"` (default) tests the
   doubly-monotone model against UN directly, while `"lattice"` tests each
