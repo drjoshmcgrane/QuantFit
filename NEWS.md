@@ -185,9 +185,16 @@ lines of work into one framework with a common, optimised C++ core.
   quantitative model is only demoted on strong evidence. A `method` argument
   offers two ways to test the ordinal layer: `"joint"` (default) tests the
   doubly-monotone model against UN directly, while `"lattice"` tests each
-  constraint edge separately. In a six-model recovery study (`simulate_responses()`,
-  N = 1500, K = 30) this raised quantitative-scale recovery from 82% to 97% and
-  overall scale-type accuracy to 96%, with nominal recovery at 100%.
+  constraint edge separately. Six-model recovery audits (`simulate_responses()`,
+  N = 1500, J = 8, K = 30 per model, B = 99, with the estimated-power check)
+  quantify the `alpha_quant` trade-off: at the default 0.05, false
+  quantitative claims (ordinal data selected as LCR/RM) occur in 1.1% of
+  ordinal datasets and quantitative-scale recovery is 88%; at 0.01, false
+  quantitative claims rise to 4.4% while quantitative recovery reaches 97%.
+  Nominal recovery is 100% and overall scale-type accuracy ~96% under both.
+  The conventional default is the conservative choice about quantitativeness
+  claims; set `alpha_quant = 0.01` when maximising quantitative recovery
+  matters more than guarding against false quantitative verdicts.
 
 * `simulate_responses()` - generate dichotomous or polytomous data from any of
   the six models (UN, MON, IIO, DM, LCR, RM) for validation and power studies;
