@@ -20,30 +20,63 @@ NULL
 }
 
 # Validate either dichotomous or polytomous data, dispatching by content.
-validate_data_any <- function(data) {
+validate_data_any <- function(data, allow_na = FALSE) {
   if (is.data.frame(data)) data <- as.matrix(data)
+  if (allow_na && anyNA(data)) return(.validate_poly(data, allow_na = TRUE))
   if (.is_polytomous(data)) .validate_poly(data) else validate_data(data)
 }
 
 # Number of category steps m_j per item (categories run 0..m_j).
-.item_cat_counts <- function(data) apply(data, 2L, max)
+.item_cat_counts <- function(data) apply(data, 2L, max, na.rm = TRUE)
 
-# Validate polytomous responses: complete, non-negative integers, and each item
-# uses consecutive categories starting at 0.
-.validate_poly <- function(data) {
+# Should this data use the masked polytomous engine? TRUE for polytomous
+# scoring OR any missingness (binary-with-NA runs as the m = 1 special case
+# of the masked multinomial engine).
+.needs_poly_engine <- function(data) .is_polytomous(data) || anyNA(data)
+
+# Impose the observed missingness pattern on a complete simulated dataset by
+# RANK-MATCHED assignment: the replicate person with the r-th smallest
+# simulated total score receives the mask of the observed person with the
+# r-th smallest observed total. Because the bootstrap redraws abilities
+# marginally, a fixed person-to-mask pairing would decouple missingness from
+# ability; rank matching preserves any ability-missingness dependence (e.g.
+# weaker examinees skipping harder items) nonparametrically, so the null
+# replicates share the observed pipeline - including its missing-data
+# structure - and pipeline effects cancel in the calibration.
+.impose_mask <- function(sim, obs) {
+  if (!anyNA(obs)) return(sim)
+  mask <- is.na(obs)
+  os <- order(rowSums(obs, na.rm = TRUE))
+  ss <- order(rowSums(sim))
+  m2 <- matrix(FALSE, nrow(sim), ncol(sim))
+  m2[ss, ] <- mask[os, , drop = FALSE]
+  sim[m2] <- NA
+  sim
+}
+
+# Validate polytomous (or, with allow_na, any masked) responses: non-negative
+# integers, each item using consecutive categories starting at 0. With
+# allow_na = TRUE, NA entries are permitted and mean "missing" - the masked
+# likelihood skips them (they are INT_MIN < 0 in the C++ engine).
+.validate_poly <- function(data, allow_na = FALSE) {
   if (is.data.frame(data)) data <- as.matrix(data)
   if (!is.matrix(data)) stop("Data must be a matrix or data frame")
-  if (any(is.na(data))) stop("Polytomous fitting requires complete data (no NA).")
-  if (any(data != round(data)) || any(data < 0)) {
+  if (!allow_na && any(is.na(data))) {
+    stop("Polytomous fitting requires complete data (no NA).")
+  }
+  v <- data[!is.na(data)]
+  if (any(v != round(v)) || any(v < 0)) {
     stop("Polytomous responses must be non-negative integer category scores ",
          "starting at 0.")
   }
   storage.mode(data) <- "integer"
   for (j in seq_len(ncol(data))) {
-    m <- max(data[, j])
+    xj <- data[!is.na(data[, j]), j]
+    if (!length(xj)) stop("Item ", j, " has no observed responses.")
+    m <- max(xj)
     if (m < 1L) stop("Item ", j, " uses a single category; every item must ",
                      "use at least two categories.")
-    used <- sort(unique(data[, j]))
+    used <- sort(unique(xj))
     if (!identical(used, 0:m)) {
       stop("Item ", j, " must use consecutive integer categories 0..", m,
            "; collapse or recode empty categories first.")
@@ -83,8 +116,11 @@ poly_estep <- function(data, item_probs, class_probs, use_cpp = TRUE) {
   ll <- matrix(log(class_probs), n, C, byrow = TRUE)
   for (j in seq_len(J)) {
     lp <- log(.bound(item_probs[[j]]))          # C x (m+1)
-    idx <- data[, j] + 1L
-    ll <- ll + t(lp[, idx, drop = FALSE])        # n x C
+    x <- data[, j]
+    obs <- which(!is.na(x) & x >= 0L)            # missing cells contribute 0
+    if (length(obs)) {
+      ll[obs, ] <- ll[obs, ] + t(lp[, x[obs] + 1L, drop = FALSE])
+    }
   }
   lrs <- .row_lse(ll)
   list(posteriors = exp(ll - lrs), loglik = sum(lrs))
@@ -99,7 +135,10 @@ poly_expected_counts <- function(data, posteriors, cat_counts, use_cpp = TRUE) {
   lapply(seq_len(J), function(j) {
     m <- cat_counts[j]
     ec <- matrix(0, ncol(posteriors), m + 1L)
-    for (x in 0:m) ec[, x + 1L] <- colSums(posteriors * (data[, j] == x))
+    for (x in 0:m) {
+      hit <- !is.na(data[, j]) & data[, j] == x    # missing cells contribute 0
+      ec[, x + 1L] <- colSums(posteriors * hit)
+    }
     ec
   })
 }
@@ -271,7 +310,7 @@ poly_mstep_for <- function(model_type, cat_counts, item_order = NULL) {
 # Estimate a fixed item order (easiest -> hardest) from marginal expected
 # scores; used to orient the IIO / DM constraints.
 .poly_item_order <- function(data, cat_counts) {
-  escore <- vapply(seq_len(ncol(data)), function(j) mean(data[, j]), numeric(1))
+  escore <- vapply(seq_len(ncol(data)), function(j) mean(data[, j], na.rm = TRUE), numeric(1))
   order(escore)
 }
 
@@ -361,7 +400,7 @@ em_lcr_poly <- function(data, n_classes, max_iter = 500L, tol = 1e-6,
 # High-level polytomous LCR fit with multiple starts.
 fit_lcr_poly <- function(data, n_classes, n_starts = 10L, max_iter = 500L,
                          tol = 1e-6, seed = NULL, call = NULL) {
-  data <- .validate_poly(data)
+  data <- .validate_poly(data, allow_na = TRUE)
   best <- NULL; best_ll <- -Inf
   for (s in seq_len(n_starts)) {
     ss <- if (!is.null(seed)) seed + s else NULL
@@ -458,7 +497,7 @@ em_rasch_mml <- function(data, n_quad = 61L, max_iter = 500L, tol = 1e-7,
   list(loglik = es$loglik, sigma = sigma, delta = unlist(unpack(dfree)),
        delta_list = unpack(dfree), nodes = sigma * z, weights = w,
        posteriors = es$posteriors, cat_counts = cat_counts, n_par = sumM + 1L,
-       data = data, scores = rowSums(data), iterations = it, converged = conv)
+       data = data, scores = rowSums(data, na.rm = TRUE), iterations = it, converged = conv)
 }
 
 # Re-estimate a fitted Rasch / partial-credit model with a FREE latent
@@ -697,7 +736,7 @@ poly_lca_fit <- function(data, n_classes, model_type = "UN",
 fit_lca_poly <- function(data, n_classes, model_type, n_starts = 10L,
                          max_iter = 1000L, tol = 1e-6, seed = NULL,
                          item_order = NULL, call = NULL, use_cpp = TRUE) {
-  data <- .validate_poly(data)
+  data <- .validate_poly(data, allow_na = TRUE)
   if (!is.numeric(n_classes) || n_classes < 2 || n_classes != round(n_classes)) {
     stop("n_classes must be an integer >= 2")
   }

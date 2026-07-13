@@ -94,7 +94,11 @@ fit_rm <- function(data, quadpts = 61L, use_cpp = TRUE, seed = NULL,
   # dichotomous and polytomous data. No external IRT package is required.
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
-  data <- validate_data_any(data)
+  # Missing responses are allowed: the quadrature E-step uses the masked
+  # likelihood (each person contributes only their observed cells), valid
+  # under MAR.
+  data <- if (anyNA(data)) .validate_poly(data, allow_na = TRUE)
+          else validate_data_any(data)
   n_obs <- nrow(data); n_items <- ncol(data)
 
   mml <- em_rasch_mml(data, n_quad = quadpts, use_cpp = use_cpp, seed = seed)
@@ -156,6 +160,13 @@ rm_scores <- function(object, type = c("EAP", "MAP", "ML", "WLE")) {
 
   # ML / WLE via the sufficient total score (valid for the Rasch/PCM family):
   # solve the test-score equation for each distinct observed total score.
+  # With missing responses the total is not comparable across persons (it
+  # depends on which items were answered), so the score-to-theta mapping is
+  # not defined; use EAP/MAP, which come from the masked likelihood.
+  if (anyNA(rf$data)) {
+    stop("ML/WLE scores are score-sufficiency based and require complete ",
+         "data; use type = \"EAP\" (or \"MAP\") with missing responses.")
+  }
   dl <- rf$delta_list; sumM <- sum(rf$cat_counts)
   TS <- function(th) sum(vapply(dl, function(dj) .pcm_moments(th, dj)$E, numeric(1)))
   Inf_fn <- function(th) sum(vapply(dl, function(dj) .pcm_moments(th, dj)$V, numeric(1)))

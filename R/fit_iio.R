@@ -91,7 +91,7 @@ fit_iio <- function(data, n_classes,
 
   # Dispatch polytomous data to the multinomial EM engine
   if (is.data.frame(data)) data <- as.matrix(data)
-  if (.is_polytomous(data)) {
+  if (.needs_poly_engine(data)) {
     return(fit_lca_poly(data, n_classes, "IIO", n_starts = n_starts,
                         max_iter = max_iter, tol = tol, seed = seed,
                         item_order = item_order, use_cpp = use_cpp, call = call))

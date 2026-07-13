@@ -28,10 +28,11 @@
 #' @export
 recode_adjacent <- function(resp) {
   resp <- as.matrix(resp)
-  if (any(is.na(resp))) {
-    stop("recode_adjacent() requires complete data (no NA in 'resp').")
-  }
-  if (any(resp != round(resp)) || any(resp < 0)) {
+  # Missing responses (NA) are allowed: they recode to NA on every sub-item -
+  # out-of-play, exactly like the structural NAs of adjacent-category coding -
+  # and simply do not count toward any cell's N.
+  v <- resp[!is.na(resp)]
+  if (any(v != round(v)) || any(v < 0)) {
     stop("Polytomous responses must be non-negative integer category scores ",
          "starting at 0.")
   }
@@ -42,7 +43,7 @@ recode_adjacent <- function(resp) {
   cn <- colnames(resp)
   if (is.null(cn)) cn <- paste0("I", seq_len(J))
   for (j in seq_len(J)) {
-    m <- max(resp[, j])
+    m <- max(resp[, j], na.rm = TRUE)
     if (m < 1L) {
       stop("Item ", cn[j], " has a single category; every item must use at ",
            "least two categories.")
@@ -126,17 +127,20 @@ recode_adjacent <- function(resp) {
 prepare_polytomous <- function(resp, ss.lower = 10, cell.lower = 5,
                                order.columns = TRUE) {
   resp <- as.matrix(resp)
-  if (any(is.na(resp))) {
-    stop("Checks will only work with complete data. Suggestion: remove ",
-         "respondents with missing responses.")
-  }
+  # Missing responses are allowed: the conditioning score is the total over
+  # OBSERVED responses, and every (score-group, sub-item) cell already counts
+  # only in-play respondents - a missing item simply removes that person from
+  # all of the item's sub-item cells, the same observation-weighting that
+  # handles structural out-of-play. Valid under MAR; the bootstrap null must
+  # impose the same missingness pattern so the grouping impurity of
+  # observed-total conditioning cancels in the calibration.
   if (ss.lower < 2) {
     message("ss.lower must be greater than 1, setting to 2.")
     ss.lower <- 2
   }
   if (cell.lower < 1) cell.lower <- 1
 
-  score <- rowSums(resp)
+  score <- rowSums(resp, na.rm = TRUE)             # total over observed items
   rec <- recode_adjacent(resp)                     # persons x sub-items (w/ NA)
 
   tab <- table(score)

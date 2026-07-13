@@ -33,8 +33,11 @@ test_that("recode_adjacent produces correct adjacent-category coding", {
   expect_equal(rec[, 3], c(NA, NA, 0L, 1L))
 })
 
-test_that("recode_adjacent rejects malformed input", {
-  expect_error(recode_adjacent(matrix(c(0, NA, 1), ncol = 1)), "complete data")
+test_that("recode_adjacent rejects malformed input and passes NA through", {
+  # missing responses are allowed: they recode to NA (out-of-play) on every
+  # sub-item, so they simply do not count toward any cell's N
+  rec <- recode_adjacent(matrix(c(0L, NA, 1L, 2L), ncol = 1))
+  expect_true(all(is.na(rec[2, ])))
   expect_error(recode_adjacent(matrix(c(0, 1.5, 2), ncol = 1)), "integer")
   expect_error(recode_adjacent(matrix(c(0L, 0L, 0L), ncol = 1)),
                "single category")

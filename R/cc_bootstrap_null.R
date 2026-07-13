@@ -101,7 +101,8 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   latent <- match.arg(latent)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
-  data <- if (poly) .validate_poly(data) else validate_data(data)
+  data <- if (poly || anyNA(data)) .validate_poly(data, allow_na = TRUE)
+          else validate_data(data)
   n_obs <- nrow(data); J <- ncol(data)
 
   if (n_obs < 1000) {
@@ -159,7 +160,7 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
 
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    d <- sim_fn()
+    d <- .impose_mask(sim_fn(), data)   # null replicates share the observed missingness
     p <- tryCatch(prep_fn(d), error = function(e) NULL)
     if (is.null(p) || nrow(p$N) < min_rows) {
       return(NA_real_)

@@ -75,6 +75,29 @@ lines of work into one framework with a common, optimised C++ core.
   likewise now bootstrap-calibrated (the BIC difference against a Rasch null)
   rather than a raw BIC comparison, removing the last non-bootstrap criterion.
 
+* **Missing data (MAR) is now supported across all three routes.** The
+  latent-structure models and the Rasch/partial-credit model use a masked
+  likelihood (each person contributes only their observed cells; binary data
+  with missing responses runs as the m = 1 case of the masked multinomial
+  engine; masked `fit_rm()` reproduces `mirt`'s native missing-data
+  log-likelihood). The conjoint routes handle missingness by observation
+  weighting - every cell of the conditioned matrix counts only the
+  respondents who answered that item, exactly the same weighting that
+  handles the structural out-of-play cells of the adjacent-category
+  polytomous recoding, with the conditioning score taken over observed
+  responses. Bootstrap null replicates inherit the observed missingness
+  pattern by rank-matched assignment (the replicate person with the r-th
+  smallest simulated total receives the mask of the r-th smallest observed
+  total), which preserves ability-missingness dependence under the marginal
+  redraw, so pipeline effects cancel in the calibration. Validated:
+  verdicts concordant across complete, 15% MCAR, and MAR-by-ability versions
+  of the same additive and non-additive datasets. ML/WLE person scores
+  require complete data (score sufficiency) and say so; EAP/MAP work under
+  missingness. Nonignorable (MNAR) missingness and heavily structured
+  designs (booklets/matrix sampling) remain outside scope: with such
+  designs, group-by-observed-total conditioning mixes very different
+  patterns and results should be read with care.
+
 * `cc_bootstrap_hierarchy()` - runs the calibrated cancellation checks in
   their logical order (single, then double, then triple), stopping at the
   first rejection. The cancellation axioms are hierarchical - double

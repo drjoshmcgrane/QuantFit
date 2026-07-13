@@ -118,7 +118,7 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE,
                                 ...) {
 
-  data <- validate_data_any(data)
+  data <- validate_data_any(data, allow_na = TRUE)
 
   # -- LC route (raw person x item data) ----------------------------------
   if (verbose) cat("[LC]   latent-structure model selection...\n")

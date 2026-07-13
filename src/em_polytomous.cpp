@@ -38,6 +38,7 @@ List cpp_poly_estep(const arma::imat& data, const List& item_probs,
     arma::mat lP = arma::log(arma::clamp(P, 1e-12, 1.0));
     for (arma::uword i = 0; i < n; ++i) {
       const int x = data(i, j);
+      if (x < 0) continue;   // NA (INT_MIN) / negative codes: missing, skip
       for (arma::uword c = 0; c < C; ++c) ll(i, c) += lP(c, x);
     }
   }
@@ -65,7 +66,9 @@ List cpp_poly_expected_counts(const arma::imat& data,
     const int m = cat_counts[j];
     arma::mat ec(C, m + 1, arma::fill::zeros);
     for (arma::uword i = 0; i < n; ++i) {
-      ec.col(data(i, j)) += posteriors.row(i).t();
+      const int x = data(i, j);
+      if (x < 0) continue;   // missing response contributes no expected count
+      ec.col(x) += posteriors.row(i).t();
     }
     out[j] = ec;
   }

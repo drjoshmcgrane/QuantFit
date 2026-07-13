@@ -29,10 +29,15 @@ band_by_ability <- function(data, n_bands, theta = NULL) {
     Nb <- nb <- matrix(0, nb_bands, J); ab <- numeric(nb_bands)
     for (k in seq_along(keep)) {
       idx <- grp == keep[k]
-      Nb[k, ] <- sum(idx); nb[k, ] <- colSums(data[idx, , drop = FALSE])
+      sub <- data[idx, , drop = FALSE]
+      # per-cell N: respondents in the band who ANSWERED the item (missing
+      # responses just lower the cell's observation count)
+      Nb[k, ] <- colSums(!is.na(sub))
+      nb[k, ] <- colSums(sub, na.rm = TRUE)
       ab[k] <- mean(theta[idx])
     }
-    ord <- order(colSums(data))
+    ord <- order(colSums(data, na.rm = TRUE))
+    if (any(Nb == 0)) return(NULL)          # a band with no observations
     list(N = Nb[, ord], n = nb[, ord], ability = ab)
   }, error = function(e) NULL)
 }
@@ -109,7 +114,8 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   latent <- match.arg(latent)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
-  data <- if (poly) .validate_poly(data) else validate_data(data)
+  data <- if (poly || anyNA(data)) .validate_poly(data, allow_na = TRUE)
+          else validate_data(data)
   n_obs <- nrow(data); J <- ncol(data)
 
   run_kara <- function(band) {
@@ -177,7 +183,7 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    tryCatch(global_kl(sim_fn()), error = function(e) NA_real_)
+    tryCatch(global_kl(.impose_mask(sim_fn(), data)), error = function(e) NA_real_)
   }
   raw <- par_lapply(seq_len(B), boot_one, mc.cores)
   null <- vapply(raw, function(z)

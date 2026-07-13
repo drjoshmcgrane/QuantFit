@@ -39,27 +39,44 @@
 #'
 #' @export
 PrepareChecks<-function(resp,ss.lower=10,collapse.columns=FALSE) {
-  if (any(is.na(resp))) stop("Checks will only work with complete data. Suggestion: remove respondents with missing responses.")
   if (ss.lower==1) {
     message("ss.lower must be greater than 1, setting to 2.")
     ss.lower<-2
   }
   ncol(resp)->n.items
+  # Missing responses are allowed: every cell's count N(s, j) is the number of
+  # respondents in score group s who ANSWERED item j (n = number correct among
+  # them), so each cell proportion is weighted by its own number of
+  # observations - the same weighting the adjacent-category polytomous matrix
+  # uses for out-of-play cells. The score is the number correct among answered
+  # items. Valid under MAR; the bootstrap null must impose the same
+  # missingness pattern so pipeline effects cancel.
+  has_na <- any(is.na(resp))
   #reorder columns
-  colSums(resp)->cs
+  colSums(resp, na.rm=TRUE)->cs
   resp[,order(cs)]->resp
-  #group by sum scores
-  rowSums(resp)->rs
+  #group by sum scores (number correct among answered items)
+  rowSums(resp, na.rm=TRUE)->rs
   n<-N<-list()
   table(rs)->tab
   as.numeric(names(tab))[tab>=ss.lower]->lev
   for (s in lev) {
-    resp[rs==s,]->tmp
-    rep(nrow(tmp),n.items)->N[[as.character(s)]]
-    colSums(tmp)->n[[as.character(s)]]
+    resp[rs==s,,drop=FALSE]->tmp
+    if (has_na) {
+      colSums(!is.na(tmp))->N[[as.character(s)]]
+    } else {
+      rep(nrow(tmp),n.items)->N[[as.character(s)]]
+    }
+    colSums(tmp, na.rm=TRUE)->n[[as.character(s)]]
   }
   do.call("rbind",N)->N
   do.call("rbind",n)->n
+  if (has_na && any(N==0)) {
+    keep <- rowSums(N==0)==0
+    if (sum(keep) < 3L) stop("Too many empty cells after missing-data ",
+                             "weighting; not enough complete score groups.")
+    N <- N[keep,,drop=FALSE]; n <- n[keep,,drop=FALSE]
+  }
   if (collapse.columns) {
     colSums(n)->cs
     sort(unique(cs))->cs.index

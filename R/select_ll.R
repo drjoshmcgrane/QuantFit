@@ -134,7 +134,7 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    d <- sim_fn()
+    d <- .impose_mask(sim_fn(), data)   # null replicates share the observed missingness
     rm_b <- tryCatch(suppressWarnings(fit_rm(d, verbose = FALSE)),
                      error = function(e) NULL)
     lcr_b <- tryCatch(
@@ -279,7 +279,7 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
          "(RM uses different estimation machinery; compare it by BIC)")
   }
 
-  data <- validate_data_any(data)
+  data <- validate_data_any(data, allow_na = TRUE)
   n_obs <- nrow(data)
   n_classes <- fit_constrained$n_classes
   if (!is.na(fit_un$n_classes) && fit_un$n_classes != n_classes) {
@@ -306,7 +306,7 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
 
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    boot_data <- simulate_from_qlfit(fit_constrained, n_obs)
+    boot_data <- .impose_mask(simulate_from_qlfit(fit_constrained, n_obs), data)
 
     fit_c_star <- tryCatch(
       suppressWarnings(
@@ -390,7 +390,7 @@ ll_general_null <- function(data, fit_constrained, fit_general,
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    boot_data <- simulate_from_qlfit(fit_general, n_obs)
+    boot_data <- .impose_mask(simulate_from_qlfit(fit_general, n_obs), data)
     fit_c_star <- tryCatch(suppressWarnings(
       refit_model_type(type_c, boot_data, n_classes, n_starts, use_cpp)),
       error = function(e) NULL)
@@ -599,7 +599,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                             ...) {
 
   method <- match.arg(method)
-  data <- validate_data_any(data)
+  data <- validate_data_any(data, allow_na = TRUE)
 
   # Optional first stage: if a range of class counts is supplied, select the
   # number of classes by BIC before the structural comparison. The structural
