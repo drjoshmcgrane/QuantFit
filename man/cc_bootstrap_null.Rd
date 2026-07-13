@@ -87,7 +87,16 @@ is the (one-sided) evidence against interval scaling.
 This uses a marginal parametric bootstrap (redrawing abilities) rather than
 Student & Read's fixed plug-in of person-parameter estimates; the marginal
 version includes the sampling variability of the latent distribution and is
-the more defensible parametric bootstrap of the Rasch model.
+the more defensible parametric bootstrap of the Rasch model. With the
+default \code{latent = "empirical"}, abilities are redrawn from the Bock-Aitkin
+empirical-histogram estimate of the latent distribution, which recovers the
+distribution-free character of Student & Read's plug-in (their fixed person
+estimates carry the observed ability distribution implicitly) while also
+realising the error correction they propose as a future direction: their
+plugged-in theta estimates carry measurement error that inflates the
+person-distribution variance, and the joint EM re-estimation of the latent
+weights with the item parameters deconvolves that error rather than
+shrinking it ad hoc.
 Because the observed and simulated datasets pass through the identical
 sum-score \code{\link[=PrepareChecks]{PrepareChecks()}} + \code{\link[=ConjointChecks]{ConjointChecks()}} pipeline, any baseline
 violation rate the pipeline induces on additive data (including the
