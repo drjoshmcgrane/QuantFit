@@ -461,14 +461,104 @@ em_rasch_mml <- function(data, n_quad = 61L, max_iter = 500L, tol = 1e-7,
        data = data, scores = rowSums(data), iterations = it, converged = conv)
 }
 
+# Re-estimate a fitted Rasch / partial-credit model with a FREE latent
+# distribution: the Bock-Aitkin empirical-histogram (semi-nonparametric MML)
+# refit. Nodes are fixed on an equally-spaced grid; the node weights are
+# re-estimated as posterior masses jointly with the item step parameters by
+# EM. Unlike a single posterior-mass pass at the normal-prior solution (which
+# is smeared by measurement error toward the prior), the joint iteration
+# deconvolves, so the recovered latent distribution reproduces bimodal,
+# skewed, or censored ability distributions. Returns a modified rm_fit whose
+# nodes / weights / delta / posteriors describe the empirical-latent solution.
+.rm_empirical_refit <- function(rm_fit, n_nodes = 41L, max_iter = 200L,
+                                tol = 1e-7, use_cpp = TRUE) {
+  data <- rm_fit$data
+  cat_counts <- rm_fit$cat_counts
+  J <- ncol(data); sumM <- sum(cat_counts)
+  idx <- split(seq_len(sumM), rep(seq_len(J), cat_counts))
+  unpack <- function(d) lapply(idx, function(ii) d[ii])
+  Rmats <- lapply(cat_counts, function(m) {
+    K <- m + 1L; R <- matrix(0, K, K); R[lower.tri(R, diag = TRUE)] <- 1; R
+  })
+  z <- seq(-4, 4, length.out = n_nodes) * rm_fit$sigma
+  w <- rep(1 / n_nodes, n_nodes)
+  dfree <- rm_fit$delta
+  ll_old <- -Inf
+  for (it in seq_len(max_iter)) {
+    ip <- compute_pcm_probs(z, unpack(dfree), use_cpp)
+    es <- poly_estep(data, ip, w, use_cpp)
+    if (is.finite(ll_old) &&
+        abs(es$loglik - ll_old) < tol * (abs(ll_old) + tol)) break
+    ll_old <- es$loglik
+    w <- pmax(colMeans(es$posteriors), 1e-10); w <- w / sum(w)
+    ec <- poly_expected_counts(data, es$posteriors, cat_counts, use_cpp)
+    negQ <- function(par) {
+      ip2 <- compute_pcm_probs(z, unpack(par), use_cpp)
+      -sum(vapply(seq_len(J), function(j)
+        sum(ec[[j]] * log(.bound(ip2[[j]]))), numeric(1)))
+    }
+    grQ <- function(par) {
+      ip2 <- compute_pcm_probs(z, unpack(par), use_cpp)
+      gd <- numeric(sumM)
+      for (j in seq_len(J)) {
+        P <- ip2[[j]]; ecj <- ec[[j]]; n_c <- rowSums(ecj)
+        resid <- (ecj %*% Rmats[[j]]) - (P %*% Rmats[[j]]) * n_c
+        gd[idx[[j]]] <- colSums(resid)[-1L]
+      }
+      gd
+    }
+    opt <- stats::optim(dfree, negQ, gr = grQ, method = "BFGS",
+                        control = list(maxit = 50L))
+    dfree <- opt$par
+  }
+  es <- poly_estep(data, compute_pcm_probs(z, unpack(dfree), use_cpp), w,
+                   use_cpp)
+  out <- rm_fit
+  out$nodes <- z; out$weights <- w; out$posteriors <- es$posteriors
+  out$delta <- dfree; out$delta_list <- unpack(dfree)
+  out$empirical_latent <- TRUE
+  out
+}
+
+# Draw person locations for a marginal parametric bootstrap from a fitted
+# Rasch / partial-credit model.
+#   latent = "normal":    theta ~ N(0, sigma^2), the parametric assumption.
+#   latent = "empirical": theta from the empirical-histogram latent
+#     distribution (see .rm_empirical_refit - the rm_fit passed in should be
+#     the refit object so the weights are deconvolved), sampled
+#     histogram-style with uniform jitter between node midpoints. This
+#     reproduces the observed ability distribution (bimodal, skewed, censored,
+#     ...) so the null matches the data's sum-score group structure, and any
+#     observed-vs-null difference is attributable to non-additivity rather
+#     than to population shape. Additive conjoint structure itself is
+#     distribution-free, so the latent shape is a nuisance here.
+.rm_draw_theta <- function(rm_fit, n, sigma, latent = "empirical") {
+  if (identical(latent, "normal") || is.null(rm_fit) ||
+      is.null(rm_fit$weights)) {
+    return(stats::rnorm(n, 0, sigma))
+  }
+  z <- rm_fit$nodes
+  w <- if (isTRUE(rm_fit$empirical_latent)) rm_fit$weights
+       else colMeans(rm_fit$posteriors)
+  w <- pmax(w, 0); w <- w / sum(w)
+  Q <- length(z)
+  mid <- c(z[1] - (z[2] - z[1]) / 2,
+           (z[-1] + z[-Q]) / 2,
+           z[Q] + (z[Q] - z[Q - 1]) / 2)          # histogram bin edges
+  idx <- sample.int(Q, n, replace = TRUE, prob = w)
+  stats::runif(n, mid[idx], mid[idx + 1L])
+}
+
 # Simulate polytomous responses from a fitted partial-credit model (our own
-# em_rasch_mml fit), drawing person locations theta ~ N(0, sigma^2) (marginal
-# parametric bootstrap). Used by the polytomous CC / Kara bootstrap nulls.
-.simulate_pcm <- function(rm_fit, n_obs, sigma, seed = NULL) {
+# em_rasch_mml fit) for a marginal parametric bootstrap. Person locations are
+# supplied via `theta` or drawn according to `latent` (see .rm_draw_theta).
+# Used by the polytomous CC / Kara bootstrap nulls.
+.simulate_pcm <- function(rm_fit, n_obs, sigma, seed = NULL, theta = NULL,
+                          latent = "normal") {
   if (!is.null(seed)) set.seed(seed)
   dl <- rm_fit$delta_list                        # per-item step parameters
   J <- length(dl)
-  theta <- stats::rnorm(n_obs, 0, sigma)
+  if (is.null(theta)) theta <- .rm_draw_theta(rm_fit, n_obs, sigma, latent)
   out <- matrix(0L, n_obs, J)
   for (j in seq_len(J)) {
     P <- cpp_pcm_probs(theta, dl[[j]])           # n_obs x (m+1)

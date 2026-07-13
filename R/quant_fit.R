@@ -137,26 +137,38 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   # -- CC route: bootstrapped null (Student & Read 2025) on the raw data ---
   # The Rasch-simulated null self-calibrates the sum-score pipeline, so this
   # runs on raw sum-score groups (not the bands) and needs no fixed threshold.
+  # Levels run SEQUENTIALLY in their logical order (single -> double -> triple),
+  # stopping at the first rejection: deeper cancellation conditions are only
+  # distinct requirements once the shallower ones hold, so the first failing
+  # level is where additivity breaks (`attribution`).
   if (verbose) cat("[CC]   bootstrapped cancellation checks (Student & Read)...\n")
   cc <- tryCatch({
-    dbl <- cc_bootstrap_null(data, check = "double", n.mat = cc_n_mat,
-                             B = cc_B, cutoff = cc_cutoff, mc.cores = mc.cores,
-                             seed = seed, verbose = FALSE)
-    res <- list(available = TRUE, double_rate = dbl$observed,
-                double_null_mean = mean(dbl$null),
-                double_percentile = dbl$percentile, double_p = dbl$p_value,
-                double_reject = dbl$reject)
-    if (triple) {
-      tri <- cc_bootstrap_null(data, check = "triple", n.mat = cc_n_mat,
-                               B = cc_B, cutoff = cc_cutoff, mc.cores = mc.cores,
-                               seed = if (!is.null(seed)) seed + 1L else NULL,
-                               verbose = FALSE)
+    hier <- cc_bootstrap_hierarchy(
+      data, levels = if (triple) c("single", "double", "triple")
+                     else c("single", "double"),
+      n.mat = cc_n_mat, B = cc_B, cutoff = cc_cutoff, mc.cores = mc.cores,
+      seed = seed, verbose = FALSE)
+    res <- list(available = TRUE, hierarchy = hier,
+                attribution = hier$attribution)
+    sng <- hier$levels$single
+    if (!is.null(sng)) {
+      res$single_rate <- sng$observed; res$single_percentile <- sng$percentile
+      res$single_p <- sng$p_value; res$single_reject <- sng$reject
+    }
+    dbl <- hier$levels$double
+    if (!is.null(dbl)) {
+      res$double_rate <- dbl$observed
+      res$double_null_mean <- mean(dbl$null)
+      res$double_percentile <- dbl$percentile; res$double_p <- dbl$p_value
+      res$double_reject <- dbl$reject
+    }
+    tri <- hier$levels$triple
+    if (!is.null(tri)) {
       res$triple_rate <- tri$observed; res$triple_percentile <- tri$percentile
       res$triple_p <- tri$p_value; res$triple_reject <- tri$reject
     }
-    # CC supports additivity when interval scaling is NOT rejected
-    res$supports_quant <- !isTRUE(res$double_reject) &&
-      (is.null(res$triple_reject) || !isTRUE(res$triple_reject))
+    # CC supports additivity when no tested level rejects
+    res$supports_quant <- hier$supports_quant
     res
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
@@ -238,12 +250,21 @@ print.quantverdict <- function(x, ...) {
 
   cat("[CC]   Cancellation checks vs Rasch bootstrap null (Student & Read)\n")
   if (isTRUE(x$cc$available)) {
-    cat(sprintf("       double: rate %.3f, %.0f%%ile of null (p = %.3f)%s   [%s]\n",
-                x$cc$double_rate, 100 * x$cc$double_percentile, x$cc$double_p,
-                if (!is.null(x$cc$triple_percentile))
-                  sprintf("; triple %.0f%%ile (p = %.3f)",
-                          100 * x$cc$triple_percentile, x$cc$triple_p) else "",
+    lvls <- character(0)
+    if (!is.null(x$cc$single_percentile))
+      lvls <- c(lvls, sprintf("single %.0f%%ile (p = %.3f)",
+                              100 * x$cc$single_percentile, x$cc$single_p))
+    if (!is.null(x$cc$double_percentile))
+      lvls <- c(lvls, sprintf("double %.0f%%ile (p = %.3f)",
+                              100 * x$cc$double_percentile, x$cc$double_p))
+    if (!is.null(x$cc$triple_percentile))
+      lvls <- c(lvls, sprintf("triple %.0f%%ile (p = %.3f)",
+                              100 * x$cc$triple_percentile, x$cc$triple_p))
+    cat(sprintf("       %s   [%s]\n", paste(lvls, collapse = "; "),
                 yn(x$cc$supports_quant)))
+    if (!identical(x$cc$attribution, "none"))
+      cat(sprintf("       additivity fails at the %s-cancellation level\n",
+                  x$cc$attribution))
   } else cat("       unavailable:", x$cc$msg, "\n")
 
   cat("[Kara] Karabatsos KL vs Rasch bootstrap null (banded)\n")

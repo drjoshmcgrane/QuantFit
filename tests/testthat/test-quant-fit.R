@@ -133,3 +133,28 @@ test_that("cc_bootstrap_null returns a well-formed ccnull object", {
   expect_identical(a$null, b$null)
   expect_identical(a$observed, b$observed)
 })
+
+test_that("cc_bootstrap_hierarchy attributes failure to the first rejecting level", {
+  skip_on_cran()
+  set.seed(1)
+  # Rasch data: no level should reject
+  n <- 1000; J <- 10
+  r <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n), seq(-1.5, 1.5, length.out = J), "-"))), n, J)
+  h <- suppressWarnings(cc_bootstrap_hierarchy(r, B = 12, n.mat = 12, seed = 3,
+                                               verbose = FALSE))
+  expect_s3_class(h, "cchier")
+  expect_identical(h$attribution, "none")
+  expect_true(h$supports_quant)
+  expect_named(h$levels, c("single", "double", "triple"))
+
+  # unstructured LCA data: fails, and at the single level (ordering breaks)
+  u <- simulate_responses("UN", n_persons = 1000, n_items = 10, n_classes = 3,
+                          seed = 5)
+  h2 <- suppressWarnings(cc_bootstrap_hierarchy(u, B = 12, n.mat = 12, seed = 3,
+                                                verbose = FALSE))
+  expect_false(h2$supports_quant)
+  expect_identical(h2$attribution, "single")
+  # sequential early stop: deeper levels not run after a rejection
+  expect_identical(names(h2$levels), "single")
+  expect_output(print(h2), "single-cancellation")
+})

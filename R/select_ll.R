@@ -112,7 +112,12 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
                            mc.cores = 1L, seed = NULL) {
   obs <- BIC(fit_lcr_obj) - BIC(fit_rm_obj)     # negative favours LCR
   n <- nrow(data); J <- ncol(data)
-  # marginal parametric bootstrap: redraw abilities from N(0, sigma^2)
+  # marginal parametric bootstrap: redraw abilities from N(0, sigma^2).
+  # Deliberately NORMAL (not the empirical latent density used by the CC/Kara
+  # nulls): this step tests continuous-normal (RM) against discrete (LCR)
+  # latent structure, so the latent distribution's shape IS the hypothesis
+  # under test, not a nuisance - an empirical density would absorb the very
+  # discreteness the test exists to detect.
   poly <- isTRUE(fit_rm_obj$polytomous)
   sigma <- sqrt(rasch_latent_var(fit_rm_obj))
   if (poly) {
@@ -352,6 +357,55 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
     ),
     class = "qleqtest"
   )
+}
+
+#' Reference distribution of the LR statistic under the GENERAL model
+#'
+#' Companion to [ll_equivalence_test()]: simulates from the fitted *general*
+#' model, refits both models to each replicate, and returns the resulting
+#' distribution of the LR statistic. This estimates the LR distribution at the
+#' fitted alternative - i.e. the test's power at the estimated departure from
+#' the constrained family. Because the models are nested, when the constrained
+#' model is true the unrestricted MLE lies essentially inside the constrained
+#' set and this distribution coincides with the null (no power, negligible
+#' effect size); when the truth is genuinely outside the constrained family it
+#' shifts right (noncentral). [select_model_ll()] uses the separation between
+#' the two distributions as an effect-size check on rejections.
+#'
+#' @param data Response matrix.
+#' @param fit_constrained,fit_general Fitted qlfit objects (the LR is
+#'   \eqn{2(\ell_g - \ell_c)} refitted on data simulated from `fit_general`).
+#' @param B,n_starts,seed,use_cpp,mc.cores As in [ll_equivalence_test()].
+#' @return Sorted numeric vector of LR draws (length <= B; failures dropped),
+#'   or `NULL` if every replicate failed.
+#' @keywords internal
+ll_general_null <- function(data, fit_constrained, fit_general,
+                            B = 99, n_starts = 3, seed = NULL,
+                            use_cpp = TRUE, mc.cores = 1L) {
+  n_obs <- nrow(data)
+  n_classes <- fit_constrained$n_classes
+  type_c <- fit_constrained$model_type
+  type_g <- fit_general$model_type
+  if (!is.null(seed)) set.seed(seed)
+  rep_seeds <- sample.int(.Machine$integer.max, B)
+  boot_one <- function(b) {
+    set.seed(rep_seeds[b])
+    boot_data <- simulate_from_qlfit(fit_general, n_obs)
+    fit_c_star <- tryCatch(suppressWarnings(
+      refit_model_type(type_c, boot_data, n_classes, n_starts, use_cpp)),
+      error = function(e) NULL)
+    fit_g_star <- tryCatch(suppressWarnings(
+      refit_model_type(type_g, boot_data, n_classes, n_starts, use_cpp)),
+      error = function(e) NULL)
+    if (is.null(fit_c_star) || is.null(fit_g_star)) return(NA_real_)
+    max(0, 2 * (fit_g_star$loglik - fit_c_star$loglik))
+  }
+  raw <- par_lapply(seq_len(B), boot_one, mc.cores)
+  lr_star <- vapply(raw, function(z)
+    if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
+  lr_star <- lr_star[!is.na(lr_star)]
+  if (length(lr_star) == 0L) return(NULL)
+  sort(lr_star)
 }
 
 #' Print method for qleqtest objects
@@ -620,11 +674,38 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.01,
   interpretation <- NULL
 
   # Run one edge test, record it, and return whether the constrained model
-  # is adequate (p > alpha). NULL fits yield NA (no test performed).
+  # is adequate. When the LR test rejects (p_c <= a), the rejection must also
+  # pass an estimated-power / effect-size check before the constrained model
+  # is demoted: the LR distribution is simulated under the FITTED GENERAL
+  # model as well. Because the models are nested, if the constrained model is
+  # true the unrestricted MLE lies (essentially) inside the constrained set,
+  # so this distribution coincides with the null; if the truth is genuinely
+  # outside the constrained family, the fitted general model sits at a
+  # detectable distance and the distribution shifts right (noncentral). When
+  # the two distributions are NOT separated, the test has no power at the
+  # estimated departure - the effect size is negligible and the rejection is
+  # an upper-tail draw on a null-sized effect (significance without severity)
+  # - so parsimony keeps the constrained model. This eliminates the dominant
+  # audit error mode (true constrained models demoted by unlucky tail draws)
+  # while leaving genuine violations, where the distributions separate
+  # decisively, untouched. Separation criterion: median of the general-model
+  # LR distribution exceeds the constrained null's 95th percentile.
+  # NULL fits yield NA (no test performed).
   test_adequate <- function(fit_c, fit_g, label, seed_offset, a = alpha) {
     if (is.null(fit_c) || is.null(fit_g)) return(NA)
     t <- run_test(fit_c, fit_g, seed_offset)
     ok <- t$p_value > a
+    if (!ok) {
+      g_null <- ll_general_null(
+        data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
+        seed = if (!is.null(seed)) seed + seed_offset + 500L else NULL,
+        use_cpp = use_cpp, mc.cores = mc.cores)
+      if (!is.null(g_null)) {
+        separated <- stats::median(g_null) >
+          stats::quantile(t$null_distribution, 0.95, names = FALSE)
+        if (!separated) ok <- TRUE   # models indistinguishable -> parsimony
+      }
+    }
     tests <<- add_test(tests, label, t, ok)
     ok
   }

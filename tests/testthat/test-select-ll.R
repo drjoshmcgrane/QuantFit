@@ -239,3 +239,22 @@ test_that("simulate_from_qlfit respects fitted probabilities", {
   expect_true(all(sim[, 2] == 0))
   expect_true(all(sim[, 3] == 1))
 })
+
+test_that("non-normal (bimodal) additive data is still classified quantitative", {
+  skip_on_cran()
+  # Additive conjoint structure is distribution-free: a bimodal continuous
+  # ability distribution must not push additive data out of the quantitative
+  # band. LCR's free class locations/weights absorb the population shape, and
+  # the quant gate compares LCR vs UN at the same C, so density-approximation
+  # error is common to both and cancels.
+  set.seed(11)
+  n <- 1200; J <- 10
+  theta <- c(rnorm(n / 2, -1.8, 0.5), rnorm(n / 2, 1.8, 0.5))
+  beta <- seq(-1.5, 1.5, length.out = J)
+  dat <- matrix(rbinom(n * J, 1, plogis(outer(theta, beta, "-"))), n, J)
+  sel <- suppressWarnings(
+    select_model_ll(dat, n_classes = 3, B = 19, n_starts = 3,
+                    boot_n_starts = 2, seed = 5))
+  expect_true(sel$selected %in% c("LCR", "RM"))
+  expect_match(sel$interpretation, "QUANTITATIVE")
+})

@@ -75,6 +75,41 @@ lines of work into one framework with a common, optimised C++ core.
   likewise now bootstrap-calibrated (the BIC difference against a Rasch null)
   rather than a raw BIC comparison, removing the last non-bootstrap criterion.
 
+* `cc_bootstrap_hierarchy()` - runs the calibrated cancellation checks in
+  their logical order (single, then double, then triple), stopping at the
+  first rejection. The cancellation axioms are hierarchical - double
+  cancellation is only a distinct requirement once the single-cancellation
+  orderings hold, and triple presupposes double - so the sequential procedure
+  adds *attribution*: it reports the level at which additivity breaks, and
+  deeper levels are not run (they would be uninformative given a shallower
+  failure). `quant_fit()`'s CC route now uses this and reports `attribution`.
+
+* Bootstrap nulls can now draw abilities from the *empirical* latent
+  distribution (`latent = "empirical"`, the new default for
+  `cc_bootstrap_null()`, `kara_bootstrap_null()`, and
+  `cc_bootstrap_hierarchy()`): a Bock-Aitkin empirical-histogram refit
+  re-estimates the latent distribution jointly with the item parameters, so
+  null replicates reproduce the observed ability distribution (bimodal,
+  skewed, censored samples) and its score-group structure. Additive conjoint
+  structure is distribution-free, so the latent shape is a nuisance parameter
+  here; making the null match it ensures rejections are attributable to
+  non-additivity rather than population shape. (The RM-vs-LCR step in
+  `select_model_ll()` deliberately keeps the normal density: there the shape
+  of the latent distribution - continuous versus discrete - is the hypothesis
+  being tested.) A type-I study on strongly bimodal additive data found the
+  CC route well calibrated under both settings (sum-score conditioning is
+  protected by Rasch sufficiency); the empirical default matters most for the
+  ability-banded Kara route, which has no such protection.
+
+* `select_model_ll()` rejections now pass an estimated-power / effect-size
+  check before a constrained model is demoted: the LR distribution is also
+  simulated under the fitted general model, and when it does not separate
+  from the constrained null the data cannot distinguish the two models - the
+  estimated departure is negligible - so parsimony keeps the constrained
+  model. This eliminates the dominant recovery-audit error mode (true models
+  demoted by unlucky upper-tail draws of their own null) while leaving
+  genuine violations, where the distributions separate decisively, untouched.
+
 * `cc_bootstrap_null()` - calibrates the [ConjointChecks()] violation rate
   against a null distribution simulated from the Rasch model fitted to the
   data, following Student & Read (2025). The raw violation rate is not

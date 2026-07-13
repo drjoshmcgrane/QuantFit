@@ -71,6 +71,10 @@ band_by_ability <- function(data, n_bands, theta = NULL) {
 #'   (default 0.95).
 #' @param S,N_synth Iterations and synthetic datasets for each [KaraChecks()]
 #'   run (defaults 10000, 100), used identically for the observed and null.
+#' @param latent How person abilities are drawn in the null replicates:
+#'   `"empirical"` (default) samples from the latent distribution estimated
+#'   from the data, `"normal"` draws theta ~ N(0, sigma^2). See
+#'   [cc_bootstrap_null()] for the rationale.
 #' @param mc.cores Cores for the bootstrap (default 1); replicates are seeded
 #'   independently so parallel and serial results agree.
 #' @param seed Optional integer seed.
@@ -99,8 +103,10 @@ band_by_ability <- function(data, n_bands, theta = NULL) {
 #' }
 #' @export
 kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
-                                S = 10000, N_synth = 100, mc.cores = 1L,
-                                seed = NULL, verbose = TRUE) {
+                                S = 10000, N_synth = 100,
+                                latent = c("empirical", "normal"),
+                                mc.cores = 1L, seed = NULL, verbose = TRUE) {
+  latent <- match.arg(latent)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
   data <- if (poly) .validate_poly(data) else validate_data(data)
@@ -149,13 +155,17 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   # 2. parameters for a marginal parametric bootstrap (redraw abilities from
   #    N(0, sigma^2) per replicate, not the fixed EAP estimates)
   sigma <- sqrt(rasch_latent_var(fit))
+  rmf <- attr(fit, "rm_fit")
+  if (latent == "empirical") {
+    # Bock-Aitkin empirical-histogram refit (see cc_bootstrap_null())
+    rmf <- .rm_empirical_refit(rmf)
+  }
+  beta <- unlist(rmf$delta_list)
   if (poly) {
-    rmf <- attr(fit, "rm_fit")
-    sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma)
+    sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma, latent = latent)
   } else {
-    beta <- fit$delta
     sim_fn <- function() {
-      theta <- rnorm(n_obs, 0, sigma)
+      theta <- .rm_draw_theta(rmf, n_obs, sigma, latent)
       matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
     }
   }

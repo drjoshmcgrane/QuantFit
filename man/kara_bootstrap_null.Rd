@@ -11,6 +11,7 @@ kara_bootstrap_null(
   cutoff = 0.95,
   S = 10000,
   N_synth = 100,
+  latent = c("empirical", "normal"),
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE
@@ -28,6 +29,11 @@ kara_bootstrap_null(
 
 \item{S, N_synth}{Iterations and synthetic datasets for each \code{\link[=KaraChecks]{KaraChecks()}}
 run (defaults 10000, 100), used identically for the observed and null.}
+
+\item{latent}{How person abilities are drawn in the null replicates:
+\code{"empirical"} (default) samples from the latent distribution estimated
+from the data, \code{"normal"} draws theta ~ N(0, sigma^2). See
+\code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} for the rationale.}
 
 \item{mc.cores}{Cores for the bootstrap (default 1); replicates are seeded
 independently so parallel and serial results agree.}

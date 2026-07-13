@@ -50,6 +50,16 @@
 #' @param cutoff Percentile of the null above which interval scaling is
 #'   rejected (default 0.95).
 #' @param ss.lower Minimum sum-score-group size passed to [PrepareChecks()].
+#' @param latent How person abilities are drawn in the null replicates.
+#'   `"empirical"` (default) samples from the latent distribution *estimated
+#'   from the data* (posterior mass at the quadrature nodes, the Bock-Aitkin
+#'   empirical histogram), so the null reproduces the observed ability
+#'   distribution - bimodal, skewed, or censored samples included - and its
+#'   sum-score group structure; any observed-vs-null excess is then
+#'   attributable to non-additivity rather than population shape (additive
+#'   conjoint structure is itself distribution-free, so the latent shape is a
+#'   nuisance parameter here). `"normal"` draws theta ~ N(0, sigma^2) with the
+#'   fitted latent variance.
 #' @param mc.cores Cores for the bootstrap (default 1). The `B` null datasets
 #'   are processed in parallel with [parallel::mclapply()] on non-Windows
 #'   platforms; each is seeded independently, so results are reproducible.
@@ -85,8 +95,10 @@
 #' }
 #' @export
 cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
-                              cutoff = 0.95, ss.lower = 10, mc.cores = 1L,
-                              seed = NULL, verbose = TRUE) {
+                              cutoff = 0.95, ss.lower = 10,
+                              latent = c("empirical", "normal"),
+                              mc.cores = 1L, seed = NULL, verbose = TRUE) {
+  latent <- match.arg(latent)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
   data <- if (poly) .validate_poly(data) else validate_data(data)
@@ -122,13 +134,19 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   #    redraw abilities from N(0, sigma^2) per replicate.
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))
   sigma <- sqrt(rasch_latent_var(fit))
+  rmf <- attr(fit, "rm_fit")
+  if (latent == "empirical") {
+    # Bock-Aitkin empirical-histogram refit: latent weights re-estimated
+    # jointly with the item parameters, so the null reproduces the observed
+    # ability distribution (and hence the sum-score group structure)
+    rmf <- .rm_empirical_refit(rmf)
+  }
+  beta <- unlist(rmf$delta_list)
   if (poly) {
-    rmf <- attr(fit, "rm_fit")
-    sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma)
+    sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma, latent = latent)
   } else {
-    beta <- fit$delta
     sim_fn <- function() {
-      theta <- rnorm(n_obs, 0, sigma)
+      theta <- .rm_draw_theta(rmf, n_obs, sigma, latent)
       matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
     }
   }
@@ -232,5 +250,97 @@ plot.ccnull <- function(x, ...) {
   graphics::legend("topright", bty = "n",
                    legend = c("observed", sprintf("%.0f%% cutoff", 100 * x$cutoff)),
                    col = c("firebrick", "grey40"), lwd = c(2, 1), lty = c(1, 2))
+  invisible(x)
+}
+
+#' Sequential hierarchy of calibrated cancellation checks
+#'
+#' Runs the calibrated cancellation checks in their logical order - single,
+#' then double, then triple - stopping at the first level that rejects. The
+#' cancellation axioms form a hierarchy: the double-cancellation condition is
+#' only a logically distinct requirement once the orderings tested by single
+#' cancellation hold, and triple likewise presupposes double. (Each individual
+#' [cc_bootstrap_null()] check already imposes the *joint* constraint set up to
+#' its level, so a deep check is always well-formed; what it cannot do is say
+#' *where* in the hierarchy additivity failed.) Testing sequentially therefore
+#' adds attribution: a rejection at the double level, reached only after single
+#' passed, is evidence against the genuinely double-cancellation part of
+#' additive structure rather than a re-detection of an ordering failure.
+#'
+#' Each level is calibrated exactly as in [cc_bootstrap_null()]: the observed
+#' violation rate is located in a null distribution from data simulated under
+#' the Rasch (or, for polytomous data, partial credit) model fitted to `data`,
+#' passed through the identical pipeline at the same level.
+#'
+#' @param data Response matrix (persons x items), dichotomous or polytomous.
+#' @param levels Which levels to run, in order (default
+#'   `c("single", "double", "triple")`).
+#' @param n.mat,B,cutoff,ss.lower,latent,mc.cores,seed,verbose As in
+#'   [cc_bootstrap_null()]; each level uses `seed`, `seed + 1L`, `seed + 2L`.
+#'
+#' @return An object of class `cchier`: a list with `levels` (the per-level
+#'   `ccnull` objects actually run), `attribution` (`"none"` when every level
+#'   passes, otherwise the first rejecting level), `stopped_at` (the last level
+#'   run), and `supports_quant` (`TRUE` iff no tested level rejects).
+#'
+#' @seealso [cc_bootstrap_null()], [quant_fit()]
+#' @export
+cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"),
+                                   n.mat = 50, B = 100, cutoff = 0.95,
+                                   ss.lower = 10,
+                                   latent = c("empirical", "normal"),
+                                   mc.cores = 1L, seed = NULL,
+                                   verbose = TRUE) {
+  levels <- match.arg(levels, c("single", "double", "triple"),
+                      several.ok = TRUE)
+  latent <- match.arg(latent)
+  out <- list(); attribution <- "none"; stopped_at <- NA_character_
+  for (k in seq_along(levels)) {
+    lv <- levels[k]
+    if (verbose) cat("Level", k, "of", length(levels), ":", lv,
+                     "cancellation...\n")
+    r <- cc_bootstrap_null(data, check = lv, n.mat = n.mat, B = B,
+                           cutoff = cutoff, ss.lower = ss.lower,
+                           latent = latent, mc.cores = mc.cores,
+                           seed = if (!is.null(seed)) seed + k - 1L else NULL,
+                           verbose = FALSE)
+    out[[lv]] <- r
+    stopped_at <- lv
+    if (isTRUE(r$reject)) {
+      attribution <- lv
+      if (verbose) cat("  rejected at the", lv, "level; deeper levels are ",
+                       "uninformative about additivity beyond this failure.\n")
+      break
+    }
+  }
+  structure(list(levels = out, attribution = attribution,
+                 stopped_at = stopped_at,
+                 supports_quant = identical(attribution, "none")),
+            class = "cchier")
+}
+
+#' Print method for cchier objects
+#'
+#' @param x A cchier object.
+#' @param ... Ignored.
+#' @return Invisibly returns x.
+#' @export
+print.cchier <- function(x, ...) {
+  cat("\nSequential calibrated cancellation checks\n")
+  cat("------------------------------------------\n")
+  for (lv in names(x$levels)) {
+    r <- x$levels[[lv]]
+    cat(sprintf("  %-7s rate = %.4f  pct = %5.1f%%  p = %.3f  %s\n",
+                lv, r$observed, 100 * r$percentile, r$p_value,
+                if (isTRUE(r$reject)) "REJECTED" else "not rejected"))
+  }
+  if (identical(x$attribution, "none")) {
+    cat("\nAll tested levels consistent with additive structure.\n")
+  } else {
+    cat(sprintf("\nAdditivity fails at the %s-cancellation level%s.\n",
+                x$attribution,
+                if (x$attribution == "triple") ""
+                else " (deeper levels not run: uninformative given this failure)"))
+  }
   invisible(x)
 }

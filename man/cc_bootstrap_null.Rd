@@ -11,6 +11,7 @@ cc_bootstrap_null(
   B = 100,
   cutoff = 0.95,
   ss.lower = 10,
+  latent = c("empirical", "normal"),
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE
@@ -31,6 +32,17 @@ cc_bootstrap_null(
 rejected (default 0.95).}
 
 \item{ss.lower}{Minimum sum-score-group size passed to \code{\link[=PrepareChecks]{PrepareChecks()}}.}
+
+\item{latent}{How person abilities are drawn in the null replicates.
+\code{"empirical"} (default) samples from the latent distribution \emph{estimated
+from the data} (posterior mass at the quadrature nodes, the Bock-Aitkin
+empirical histogram), so the null reproduces the observed ability
+distribution - bimodal, skewed, or censored samples included - and its
+sum-score group structure; any observed-vs-null excess is then
+attributable to non-additivity rather than population shape (additive
+conjoint structure is itself distribution-free, so the latent shape is a
+nuisance parameter here). \code{"normal"} draws theta ~ N(0, sigma^2) with the
+fitted latent variance.}
 
 \item{mc.cores}{Cores for the bootstrap (default 1). The \code{B} null datasets
 are processed in parallel with \code{\link[parallel:mclapply]{parallel::mclapply()}} on non-Windows
