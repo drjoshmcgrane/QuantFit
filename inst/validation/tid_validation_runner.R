@@ -6,6 +6,7 @@ suppressMessages(library(QuantFit))
 args <- commandArgs(trailingOnly = TRUE)
 partition <- if (length(args) >= 1) toupper(args[1]) else "ALL"   # A, B, or ALL
 n_cores <- if (length(args) >= 2) as.integer(args[2]) else max(1L, parallel::detectCores() - 2L)
+rep_cap <- if (length(args) >= 3) as.integer(args[3]) else 3L
 base <- Sys.getenv("TID_BASE", getwd())
 data_dir <- file.path(base, "tid_data")
 res_dir <- file.path(base, "tid_results")
@@ -21,7 +22,8 @@ scale_of <- c(UN = "nominal", MON = "ordinal", IIO = "ordinal",
 # stratified across models so snapshots stay balanced; contaminated after.
 set.seed(42)
 meta$clean <- meta$dCor == 0 & meta$nId2 == 0
-ord <- with(meta, order(!clean, ave(runif(nrow(meta)), genM, FUN = rank), runif(nrow(meta))))
+meta <- meta[meta$rep <= rep_cap, ]
+ord <- with(meta, order(!clean, nI, ave(runif(nrow(meta)), genM, FUN = rank), runif(nrow(meta))))
 ids <- meta$id[ord]
 # Two-machine split: A takes odd positions of the stratified order, B even -
 # both partitions stay clean-first and model-balanced, with zero overlap.
@@ -49,7 +51,7 @@ run_one <- function(id) {
   # LC route: package defaults (auto class count, alpha_quant 0.05, power check)
   t0 <- proc.time()[3]
   lc <- tryCatch(suppressWarnings(
-    select_model_ll(dat, n_classes = 1:6, B = 99, n_starts = 5,
+    select_model_ll(dat, n_classes = 1:6, B = 59, n_starts = 5,
                     boot_n_starts = 3, seed = 1, mc.cores = 1)),
     error = function(er) NULL)
   row$secs_lc <- round(proc.time()[3] - t0, 1)
