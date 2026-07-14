@@ -75,17 +75,23 @@ run_one <- function(id) {
     row$cc_p <- round(last$p_value, 4)
   } else row$err <- paste0(row$err, "cc;")
 
-  # Kara route: empirical latent null
+  # Kara route: empirical latent null. Run in a FORKED CHILD so the known
+  # timing-dependent heap-corruption segfault (under investigation) kills only
+  # the child, not this worker: mccollect returns NULL for a dead child and the
+  # dataset still gets its LC/CC results recorded.
   t0 <- proc.time()[3]
-  ka <- tryCatch(suppressWarnings(
+  kj <- parallel::mcparallel(tryCatch(suppressWarnings(
     kara_bootstrap_null(dat, B = 12, S = 3000, N_synth = 25, seed = 1,
                         mc.cores = 1, verbose = FALSE)),
-    error = function(er) NULL)
+    error = function(er) NULL), silent = TRUE)
+  ka <- tryCatch(parallel::mccollect(kj, wait = TRUE)[[1]],
+                 error = function(er) NULL)
+  if (inherits(ka, "try-error")) ka <- NULL
   row$secs_kara <- round(proc.time()[3] - t0, 1)
-  if (!is.null(ka)) {
+  if (!is.null(ka) && is.list(ka)) {
     row$kara_p <- round(ka$p_value, 4)
     row$kara_reject <- ka$reject
-  } else row$err <- paste0(row$err, "kara;")
+  } else row$err <- paste0(row$err, "kara-crash;")
 
   write.csv(row, out_file, row.names = FALSE)
   invisible()
