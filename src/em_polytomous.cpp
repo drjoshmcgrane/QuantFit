@@ -34,9 +34,32 @@ List cpp_poly_estep(const arma::imat& data, const List& item_probs,
   ll.each_row() = lcp;
 
   for (arma::uword j = 0; j < J; ++j) {
-    arma::mat P = as<arma::mat>(item_probs[j]);          // C x (m+1)
-    arma::mat lP = arma::log(arma::clamp(P, 1e-12, 1.0));
-    const arma::uword ncat = lP.n_cols;                  // categories the model provides
+    // Access the item's probability matrix WITHOUT touching its attributes.
+    // The per-iteration matrices from cpp_pcm_probs can lose their attribute
+    // chain to a GC-lifetime anomaly (dim pairlist collected while the data
+    // payload survives; see the segfault investigation in the TID validation).
+    // as<arma::mat> walks the dim attribute and segfaults on such a node, so
+    // we validate the header (safe reads) and index the column-major payload
+    // manually: element (c, x) of the C x (m+1) matrix lives at [x*C + c].
+    SEXP pj = item_probs[j];
+    if (TYPEOF(pj) != REALSXP)
+      stop("cpp_poly_estep: item_probs[%d] is not numeric (TYPEOF=%d)",
+           (int)j + 1, TYPEOF(pj));
+    const R_xlen_t len = Rf_xlength(pj);
+    if (len < (R_xlen_t)C || (len % (R_xlen_t)C) != 0)
+      stop("cpp_poly_estep: item_probs[%d] length %d not a multiple of n_classes %d",
+           (int)j + 1, (int)len, (int)C);
+    const arma::uword ncat = (arma::uword)(len / (R_xlen_t)C);
+    const double* P = REAL(pj);
+    // per-column logs, computed once
+    arma::mat lP(C, ncat);
+    for (arma::uword x = 0; x < ncat; ++x)
+      for (arma::uword c = 0; c < C; ++c) {
+        double p = P[x * C + c];
+        if (!(p > 1e-12)) p = 1e-12;   // clamp; also maps NaN to floor
+        if (p > 1.0) p = 1.0;
+        lP(c, x) = std::log(p);
+      }
     for (arma::uword i = 0; i < n; ++i) {
       const int x = data(i, j);
       // NA (INT_MIN) / negative codes, or a category beyond what this item's
@@ -62,9 +85,19 @@ List cpp_poly_estep(const arma::imat& data, const List& item_probs,
 //' @noRd
 // [[Rcpp::export]]
 List cpp_poly_expected_counts(const arma::imat& data,
-                              const arma::mat& posteriors,
+                              const NumericVector& posteriors,
                               const IntegerVector& cat_counts) {
-  const arma::uword n = data.n_rows, J = data.n_cols, C = posteriors.n_cols;
+  // posteriors is the n x C posterior matrix, taken as a plain NumericVector
+  // so the conversion never reads its dim attribute (same GC-lifetime
+  // anomaly guard as cpp_poly_estep; the matrix is recreated every EM
+  // iteration and its attribute chain can be lost). Column-major: (i, c) is
+  // posteriors[c * n + i].
+  const arma::uword n = data.n_rows, J = data.n_cols;
+  if (n == 0 || (posteriors.size() % (R_xlen_t)n) != 0)
+    stop("cpp_poly_expected_counts: posteriors length %d not a multiple of n %d",
+         (int)posteriors.size(), (int)n);
+  const arma::uword C = (arma::uword)(posteriors.size() / (R_xlen_t)n);
+  const double* post = posteriors.begin();
   List out(J);
   for (arma::uword j = 0; j < J; ++j) {
     const int m = cat_counts[j];
@@ -74,7 +107,7 @@ List cpp_poly_expected_counts(const arma::imat& data,
       // missing, or a category beyond the m_j this item was set up for: skip
       // (mirrors the bounds guard in cpp_poly_estep to avoid out-of-range col).
       if (x < 0 || x > m) continue;
-      ec.col(x) += posteriors.row(i).t();
+      for (arma::uword c = 0; c < C; ++c) ec(c, x) += post[c * n + i];
     }
     out[j] = ec;
   }

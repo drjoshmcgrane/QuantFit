@@ -230,13 +230,13 @@ BEGIN_RCPP
 END_RCPP
 }
 // cpp_poly_expected_counts
-List cpp_poly_expected_counts(const arma::imat& data, const arma::mat& posteriors, const IntegerVector& cat_counts);
+List cpp_poly_expected_counts(const arma::imat& data, const NumericVector& posteriors, const IntegerVector& cat_counts);
 RcppExport SEXP _QuantFit_cpp_poly_expected_counts(SEXP dataSEXP, SEXP posteriorsSEXP, SEXP cat_countsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< const arma::imat& >::type data(dataSEXP);
-    Rcpp::traits::input_parameter< const arma::mat& >::type posteriors(posteriorsSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type posteriors(posteriorsSEXP);
     Rcpp::traits::input_parameter< const IntegerVector& >::type cat_counts(cat_countsSEXP);
     rcpp_result_gen = Rcpp::wrap(cpp_poly_expected_counts(data, posteriors, cat_counts));
     return rcpp_result_gen;
