@@ -222,8 +222,6 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
 #' @param x A ccnull object.
 #' @param ... Additional arguments (ignored).
 #' @return Invisibly returns x.
-`%||%` <- function(a, b) if (is.null(a)) b else a
-
 #' @export
 print.ccnull <- function(x, ...) {
   is_kara <- identical(x$check, "kara-KL")
@@ -258,7 +256,8 @@ print.ccnull <- function(x, ...) {
       idx <- order(tb[ok], decreasing = TRUE)[seq_len(min(3, sum(ok)))]
       cells <- which(ok, arr.ind = TRUE)[idx, , drop = FALSE]
       lab <- apply(cells, 1L, function(rc) sprintf("band %s x item %s (%.0f%%)",
-        rownames(tb)[rc[1]] %||% rc[1], colnames(tb)[rc[2]] %||% rc[2],
+        if (is.null(rownames(tb))) rc[1] else rownames(tb)[rc[1]],
+        if (is.null(colnames(tb))) rc[2] else colnames(tb)[rc[2]],
         100 * tb[rc[1], rc[2]]))
       cat("Worst cells      :", paste(lab, collapse = ", "), "\n")
     }

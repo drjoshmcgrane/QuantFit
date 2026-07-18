@@ -44,14 +44,24 @@ test_that("masked RM matches mirt's native NA handling", {
   expect_error(rm_scores(ours, "ML"), "complete")
 })
 
-test_that("count matrices weight cells by observations under NA", {
+test_that("person_order ladder governs missing-data conditioning", {
   d <- gen_rasch_na(1000, 8, 0.15, seed = 3)
-  p <- PrepareChecks(d, ss.lower = 10)
+  # default = complete-case: incomplete respondents dropped (with a message),
+  # so every score-group row has constant N (the assumption-free frame)
+  expect_message(p <- PrepareChecks(d, ss.lower = 10), "incomplete")
   expect_true(all(p$n <= p$N))
-  expect_true(any(apply(p$N, 1, function(r) length(unique(r)) > 1)))
-  # complete-data behaviour unchanged: constant N per score group
+  expect_true(all(apply(p$N, 1, function(r) length(unique(r)) == 1)))
+  # facility / adjusted keep everyone: cells weighted by observations,
+  # so N varies within rows
+  for (po in c("facility", "adjusted")) {
+    pk <- PrepareChecks(d, ss.lower = 10, person_order = po)
+    expect_true(all(pk$n <= pk$N))
+    expect_true(any(apply(pk$N, 1, function(r) length(unique(r)) > 1)))
+    expect_gte(nrow(pk$N), 3L)
+  }
+  # complete-data behaviour unchanged: constant N per score group, no message
   dc <- gen_rasch_na(1000, 8, 0, seed = 3)
-  pc <- PrepareChecks(dc, ss.lower = 10)
+  expect_silent(pc <- PrepareChecks(dc, ss.lower = 10))
   expect_true(all(apply(pc$N, 1, function(r) length(unique(r)) == 1)))
 })
 
