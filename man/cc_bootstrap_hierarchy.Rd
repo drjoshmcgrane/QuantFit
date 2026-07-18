@@ -12,6 +12,7 @@ cc_bootstrap_hierarchy(
   cutoff = 0.95,
   ss.lower = 10,
   latent = c("empirical", "normal"),
+  person_order = c("complete", "facility", "adjusted"),
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE

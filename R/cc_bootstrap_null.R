@@ -59,6 +59,10 @@
 #' @param cutoff Percentile of the null above which interval scaling is
 #'   rejected (default 0.95).
 #' @param ss.lower Minimum sum-score-group size passed to [PrepareChecks()].
+#' @param person_order Person ordering for score grouping when responses are
+#'   missing (see [PrepareChecks()]): `"complete"` (default) uses complete
+#'   cases only; `"facility"`/`"adjusted"` keep all respondents at the cost of
+#'   an extra-ordinal commensuration assumption. Identical on complete data.
 #' @param latent How person abilities are drawn in the null replicates.
 #'   `"empirical"` (default) samples from the latent distribution *estimated
 #'   from the data* (posterior mass at the quadrature nodes, the Bock-Aitkin
@@ -106,8 +110,10 @@
 cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
                               cutoff = 0.95, ss.lower = 10,
                               latent = c("empirical", "normal"),
+                              person_order = c("complete", "facility", "adjusted"),
                               mc.cores = 1L, seed = NULL, verbose = TRUE) {
   latent <- match.arg(latent)
+  person_order <- match.arg(person_order)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
   data <- if (poly || anyNA(data)) .validate_poly(data, allow_na = TRUE)
@@ -127,18 +133,24 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   prep_fn <- if (poly) {
     function(d) prepare_polytomous(d, ss.lower = ss.lower)
   } else {
-    function(d) PrepareChecks(d, ss.lower = ss.lower)
+    function(d) PrepareChecks(d, ss.lower = ss.lower,
+                              person_order = person_order)
   }
 
   # 1. observed violation rate (mc.cores = 1 and seeded so the random
   #    submatrix sampling is reproducible; mclapply would not control it)
   if (verbose) cat("Computing observed violation rate...\n")
   if (!is.null(seed)) set.seed(seed)
-  obs <- {
-    prep <- prep_fn(data)
-    ConjointChecks(prep$N, prep$n, n.mat = n.mat, check = check,
-                   mc.cores = 1L)@means$weighted
-  }
+  prep <- prep_fn(data)
+  obs_obj <- ConjointChecks(prep$N, prep$n, n.mat = n.mat, check = check,
+                            mc.cores = 1L)
+  obs <- obs_obj@means$weighted
+  # retain the observed violation topography: with observable score bands the
+  # cell map reads directly as "cancellation fails for band X on item Y"
+  obs_tab <- obs_obj@tab
+  obs_counts <- obs_obj@check.counts
+  dimnames(obs_tab) <- dimnames(obs_counts) <-
+    list(band = rownames(prep$N), item = colnames(prep$N))
 
   # 2. fit the (partial-credit) Rasch model for a marginal parametric bootstrap:
   #    redraw abilities from N(0, sigma^2) per replicate.
@@ -199,7 +211,9 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
                  percentile = percentile, p_value = p_value,
                  reject = percentile >= cutoff, cutoff = cutoff,
                  check = check, N = n_obs, J = J, B = length(null),
-                 n_failed = n_failed),
+                 n_failed = n_failed,
+                 obs_tab = obs_tab, obs_counts = obs_counts,
+                 obs_checks = obs_obj@Checks),
             class = "ccnull")
 }
 
@@ -208,6 +222,8 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
 #' @param x A ccnull object.
 #' @param ... Additional arguments (ignored).
 #' @return Invisibly returns x.
+`%||%` <- function(a, b) if (is.null(a)) b else a
+
 #' @export
 print.ccnull <- function(x, ...) {
   is_kara <- identical(x$check, "kara-KL")
@@ -234,6 +250,19 @@ print.ccnull <- function(x, ...) {
               100 * x$percentile, x$p_value))
   cat(sprintf("Interval scaling : %s at the %.0f%% cutoff\n",
               if (x$reject) "REJECTED" else "not rejected", 100 * x$cutoff))
+  if (x$reject && !is.null(x$obs_tab)) {
+    # name the worst cells (min 2 checks so a single draw can't dominate)
+    tb <- x$obs_tab; ct <- x$obs_counts
+    ok <- !is.na(tb) & !is.na(ct) & ct >= 2
+    if (any(ok)) {
+      idx <- order(tb[ok], decreasing = TRUE)[seq_len(min(3, sum(ok)))]
+      cells <- which(ok, arr.ind = TRUE)[idx, , drop = FALSE]
+      lab <- apply(cells, 1L, function(rc) sprintf("band %s x item %s (%.0f%%)",
+        rownames(tb)[rc[1]] %||% rc[1], colnames(tb)[rc[2]] %||% rc[2],
+        100 * tb[rc[1], rc[2]]))
+      cat("Worst cells      :", paste(lab, collapse = ", "), "\n")
+    }
+  }
   invisible(x)
 }
 
@@ -299,8 +328,10 @@ cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"
                                    n.mat = 50, B = 100, cutoff = 0.95,
                                    ss.lower = 10,
                                    latent = c("empirical", "normal"),
+                                   person_order = c("complete", "facility", "adjusted"),
                                    mc.cores = 1L, seed = NULL,
                                    verbose = TRUE) {
+  person_order <- match.arg(person_order)
   levels <- match.arg(levels, c("single", "double", "triple"),
                       several.ok = TRUE)
   latent <- match.arg(latent)
@@ -311,7 +342,8 @@ cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"
                      "cancellation...\n")
     r <- cc_bootstrap_null(data, check = lv, n.mat = n.mat, B = B,
                            cutoff = cutoff, ss.lower = ss.lower,
-                           latent = latent, mc.cores = mc.cores,
+                           latent = latent, person_order = person_order,
+                           mc.cores = mc.cores,
                            seed = if (!is.null(seed)) seed + k - 1L else NULL,
                            verbose = FALSE)
     out[[lv]] <- r

@@ -4,7 +4,12 @@
 \alias{PrepareChecks}
 \title{Prepare raw response data for ConjointChecks}
 \usage{
-PrepareChecks(resp, ss.lower = 10, collapse.columns = FALSE)
+PrepareChecks(
+  resp,
+  ss.lower = 10,
+  collapse.columns = FALSE,
+  person_order = c("complete", "facility", "adjusted")
+)
 }
 \arguments{
 \item{resp}{Raw dichotomously coded response data. Columns represent items
@@ -15,6 +20,15 @@ individuals with that sum score will be used.}
 
 \item{collapse.columns}{Sum over columns (items) that have the same total
 score.}
+
+\item{person_order}{How respondents are ordered/grouped when responses are
+missing. \code{"complete"} (default) drops incomplete respondents - the
+assumption-free frame. \code{"facility"} keeps everyone, grouping by
+proportion correct among answered items (difficulty-blind).
+\code{"adjusted"} groups by the observed count standardized against the
+facility-implied expectation for the answered items (difficulty-aware,
+imports a metric commensuration). Complete data are identical under all
+three; groups never split tied respondents.}
 }
 \value{
 Returns a list with elements \code{N} and \code{n}, containing respectively

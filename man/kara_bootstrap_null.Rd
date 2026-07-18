@@ -12,6 +12,7 @@ kara_bootstrap_null(
   S = 10000,
   N_synth = 100,
   latent = c("empirical", "normal"),
+  person_order = c("complete", "facility", "adjusted"),
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE
@@ -34,6 +35,12 @@ run (defaults 10000, 100), used identically for the observed and null.}
 \code{"empirical"} (default) samples from the latent distribution estimated
 from the data, \code{"normal"} draws theta ~ N(0, sigma^2). See
 \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} for the rationale.}
+
+\item{person_order}{Person ordering used for score banding when responses
+are missing; see \code{\link[=band_by_score]{band_by_score()}}. \code{"complete"} (default) bands complete
+cases only; \code{"facility"} and \code{"adjusted"} keep all persons at the cost of
+an extra-ordinal commensuration assumption. Complete data are identical
+under all three.}
 
 \item{mc.cores}{Cores for the bootstrap (default 1); replicates are seeded
 independently so parallel and serial results agree.}
@@ -59,8 +66,9 @@ a Rasch null distribution gives an interpretable, per-dataset percentile
 p-value instead.
 }
 \details{
-The observed global KL is computed on an ability-banded matrix (see
-\code{\link[=band_by_ability]{band_by_ability()}}); \code{B} datasets are then simulated under the fitted
+The observed global KL is computed on a sum-score-banded matrix (see
+\code{\link[=band_by_score]{band_by_score()}} - conditioning is on the observable score ordering, never
+on a fitted ability); \code{B} datasets are then simulated under the fitted
 \emph{marginal} Rasch model - abilities redrawn from N(0, sigma^2) per replicate,
 with the estimated item difficulties - each is re-fitted, re-banded, and
 passed through \code{\link[=KaraChecks]{KaraChecks()}} at the same \code{S}, and the observed global KL is

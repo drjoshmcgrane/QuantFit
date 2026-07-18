@@ -12,6 +12,7 @@ cc_bootstrap_null(
   cutoff = 0.95,
   ss.lower = 10,
   latent = c("empirical", "normal"),
+  person_order = c("complete", "facility", "adjusted"),
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE
@@ -43,6 +44,11 @@ attributable to non-additivity rather than population shape (additive
 conjoint structure is itself distribution-free, so the latent shape is a
 nuisance parameter here). \code{"normal"} draws theta ~ N(0, sigma^2) with the
 fitted latent variance.}
+
+\item{person_order}{Person ordering for score grouping when responses are
+missing (see \code{\link[=PrepareChecks]{PrepareChecks()}}): \code{"complete"} (default) uses complete
+cases only; \code{"facility"}/\code{"adjusted"} keep all respondents at the cost of
+an extra-ordinal commensuration assumption. Identical on complete data.}
 
 \item{mc.cores}{Cores for the bootstrap (default 1). The \code{B} null datasets
 are processed in parallel with \code{\link[parallel:mclapply]{parallel::mclapply()}} on non-Windows
