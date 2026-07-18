@@ -224,9 +224,9 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
 #' @return Invisibly returns x.
 #' @export
 print.ccnull <- function(x, ...) {
-  is_kara <- identical(x$check, "kara-KL")
+  is_kara <- x$check %in% c("omni-KL", "kara-KL")
   if (is_kara) {
-    cat("\nBootstrapped Karabatsos global-KL null (Rasch)\n")
+    cat("\nOmnibus cancellation-hierarchy test (Karabatsos KL, Rasch null)\n")
     cat("---------------------------------------------\n")
     cat("Statistic        : Karabatsos global KL (banded)\n")
     cat(sprintf("Observed KL      : %.4f\n", x$observed))
@@ -274,7 +274,7 @@ print.ccnull <- function(x, ...) {
 #' @return Invisibly returns x.
 #' @export
 plot.ccnull <- function(x, ...) {
-  is_kara <- identical(x$check, "kara-KL")
+  is_kara <- x$check %in% c("omni-KL", "kara-KL")
   rng <- range(c(x$null, x$observed))
   graphics::hist(x$null, breaks = "FD", col = "grey85", border = "white",
                  xlim = rng,

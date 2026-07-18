@@ -13,9 +13,9 @@
 #'     double (and optionally triple), calibrated against a Rasch bootstrap
 #'     null via [cc_bootstrap_null()] (Student & Read, 2025): is the observed
 #'     violation rate higher than expected under interval scaling?
-#'   \item \strong{Kara} - the Karabatsos (2018) synthetic-likelihood global
-#'     KL statistic ([KaraChecks()]) on an ability-banded matrix, calibrated
-#'     against its own Rasch bootstrap null ([kara_bootstrap_null()]): is the
+#'   \item \strong{Omni} - the Karabatsos (2018) synthetic-likelihood global
+#'     KL statistic ([KaraChecks()]) on a score-banded matrix, calibrated
+#'     against its own Rasch bootstrap null ([omni_bootstrap_null()]): is the
 #'     KL departure from additivity higher than expected under interval
 #'     scaling?
 #' }
@@ -27,13 +27,13 @@
 #' \strong{LC} bootstraps the likelihood-ratio statistic against its
 #' chi-bar-squared null (simulating from the fitted constrained model);
 #' \strong{CC} bootstraps the [ConjointChecks()] violation rate against a Rasch
-#' null (Student & Read, 2025); \strong{Kara} bootstraps the Karabatsos global
+#' null (Student & Read, 2025); \strong{Omni} bootstraps the Karabatsos global
 #' KL against a Rasch null. This makes the three routes statistically
 #' consistent and their p-values comparable, and removes every fixed threshold.
 #'
 #' \strong{CC} runs on raw sum-score groups: because observed and null data
 #' share the pipeline, the null self-calibrates the baseline, so no ability
-#' banding is needed. \strong{Kara} does need banding - the KL test on raw
+#' banding is needed. \strong{Omni} does need banding - the KL test on raw
 #' sum-score groups reads genuinely additive (Rasch) data as non-additive (a
 #' sum-score-to-ability nonlinearity) - so persons are grouped into `n_bands`
 #' ability bands by their Rasch ability estimate, with each band's mean ability
@@ -49,9 +49,9 @@
 #' Two limitations are worth stating. First, the axiom procedures are
 #' under-powered below roughly 1000 examinees (Student & Read, 2025): at small
 #' \eqn{N} a non-rejection may reflect low power rather than interval
-#' scalability, and a note is printed. Second, Kara's ability banding is
+#' scalability, and a note is printed. Second, Omni's score banding is
 #' unidimensional, so it can wash out \emph{multidimensional} departures from
-#' additivity - read a low Kara statistic as within-scale additivity, not a
+#' additivity - read a low Omni statistic as within-scale additivity, not a
 #' guarantee of unidimensionality.
 #'
 #' A quantitative reading is best supported when the model route selects
@@ -67,13 +67,13 @@
 #'   Rasch bootstrap null (default TRUE).
 #' @param cc_B Number of Rasch-simulated null datasets for the CC route
 #'   (default 100, passed to [cc_bootstrap_null()]).
-#' @param cc_cutoff Null percentile above which the CC \emph{and} Kara routes
+#' @param cc_cutoff Null percentile above which the CC \emph{and} Omni routes
 #'   reject interval scaling (default 0.95); it is passed as the `cutoff` to
-#'   both [cc_bootstrap_null()] and [kara_bootstrap_null()].
-#' @param kara_S,kara_N_synth Iterations and synthetic datasets for each
+#'   both [cc_bootstrap_null()] and [omni_bootstrap_null()].
+#' @param omni_S,omni_N_synth Iterations and synthetic datasets for each
 #'   [KaraChecks()] run (defaults 10000, 100), used identically for the
 #'   observed statistic and every bootstrap replicate.
-#' @param kara_B Number of Rasch-simulated null datasets for the Kara route
+#' @param omni_B Number of Rasch-simulated null datasets for the Omni route
 #'   (default 50; each is a full [KaraChecks()] run, so this is the most
 #'   expensive step - raise it for a final analysis).
 #' @param B Bootstrap replicates for the LC route (default 99).
@@ -85,7 +85,7 @@
 #' @return An object of class `quantverdict`: a list with `verdict`
 #'   (character), `support` (routes supporting a quantitative reading),
 #'   `n_available` (routes that returned a result), per-route sub-lists `lc`,
-#'   `cc`, `kara`, `n_bands`, `N` (sample size), and `thresholds`.
+#'   `cc`, `omni` (alias `kara`), `n_bands`, `N` (sample size), and `thresholds`.
 #'
 #' @references
 #' Karabatsos, G. (2018). On Bayesian testing of additive conjoint measurement
@@ -113,8 +113,8 @@
 quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
                                 cc_n_mat = 50, triple = TRUE, cc_B = 100,
                                 cc_cutoff = 0.95,
-                                kara_S = 10000, kara_N_synth = 100,
-                                kara_B = 50, B = 99,
+                                omni_S = 10000, omni_N_synth = 100,
+                                omni_B = 50, B = 99,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE,
                                 ...) {
 
@@ -173,14 +173,14 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
 
-  # -- Kara route: bootstrapped null for the global KL --------------------
+  # -- Omni route: bootstrapped null for the global KL --------------------
   # Same per-dataset parametric-bootstrap logic as CC, applied to Karabatsos's
-  # global KL on the ability-banded matrix (see kara_bootstrap_null()).
+  # global KL on the ability-banded matrix (see omni_bootstrap_null()).
   if (verbose) cat("[Kara] bootstrapped Karabatsos KL test (banded)...\n")
-  kara <- tryCatch({
-    kn <- kara_bootstrap_null(data, n_bands = n_bands, B = kara_B,
-                              cutoff = cc_cutoff, S = kara_S,
-                              N_synth = kara_N_synth, mc.cores = mc.cores,
+  omni <- tryCatch({
+    kn <- omni_bootstrap_null(data, n_bands = n_bands, B = omni_B,
+                              cutoff = cc_cutoff, S = omni_S,
+                              N_synth = omni_N_synth, mc.cores = mc.cores,
                               seed = if (!is.null(seed)) seed + 2L else NULL,
                               verbose = FALSE)
     list(available = TRUE, global_KL = kn$observed,
@@ -192,11 +192,11 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
                               supports_quant = NA))
 
   # -- synthesise ---------------------------------------------------------
-  votes <- c(lc$supports_quant, cc$supports_quant, kara$supports_quant)
+  votes <- c(lc$supports_quant, cc$supports_quant, omni$supports_quant)
   support <- sum(votes, na.rm = TRUE)
   n_avail <- sum(!is.na(votes))
-  axiom_ok <- sum(c(cc$supports_quant, kara$supports_quant), na.rm = TRUE)
-  axiom_avail <- sum(!is.na(c(cc$supports_quant, kara$supports_quant)))
+  axiom_ok <- sum(c(cc$supports_quant, omni$supports_quant), na.rm = TRUE)
+  axiom_avail <- sum(!is.na(c(cc$supports_quant, omni$supports_quant)))
   lc_scale <- if (isTRUE(lc$available)) lc$scale else NA_character_
 
   verdict <- if (n_avail == 0) {
@@ -222,7 +222,7 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   }
 
   structure(list(verdict = verdict, support = support, n_available = n_avail,
-                 lc = lc, cc = cc, kara = kara, n_bands = n_bands, N = nrow(data),
+                 lc = lc, cc = cc, omni = omni, kara = omni, n_bands = n_bands, N = nrow(data),
                  thresholds = c(cc_cutoff = cc_cutoff)),
             class = "quantverdict")
 }
@@ -267,22 +267,22 @@ print.quantverdict <- function(x, ...) {
                   x$cc$attribution))
   } else cat("       unavailable:", x$cc$msg, "\n")
 
-  cat("[Kara] Karabatsos KL vs Rasch bootstrap null (banded)\n")
-  if (isTRUE(x$kara$available)) {
+  cat("[Omni] omnibus hierarchy test: Karabatsos KL vs Rasch bootstrap null\n")
+  if (isTRUE(x$omni$available)) {
     cat(sprintf("       global KL %.3f, %.0f%%ile of null (p = %.3f)   [%s]\n",
-                x$kara$global_KL, 100 * x$kara$percentile, x$kara$p_value,
-                yn(x$kara$supports_quant)))
+                x$omni$global_KL, 100 * x$omni$percentile, x$omni$p_value,
+                yn(x$omni$supports_quant)))
     cat(sprintf("       per-cell KL median %.3f, Q3 %.3f, 90%% %.3f, max %.3f\n",
-                x$kara$kl_median, x$kara$kl_q3, x$kara$kl_p90, x$kara$kl_max))
-  } else cat("       unavailable:", x$kara$msg, "\n")
+                x$omni$kl_median, x$omni$kl_q3, x$omni$kl_p90, x$omni$kl_max))
+  } else cat("       unavailable:", x$omni$msg, "\n")
 
   cat(sprintf("\nAll three routes are bootstrap-calibrated (reject > %.0f%%ile of the null):",
               100 * x$thresholds["cc_cutoff"]),
-      "\nLC by a chi-bar-squared LR bootstrap, CC and Kara by Rasch bootstrap nulls.")
+      "\nLC by a chi-bar-squared LR bootstrap, CC and Omni by Rasch bootstrap nulls.")
   if (!is.null(x$N) && x$N < 1000) {
     cat(sprintf("\nNote: N = %d; the axiom procedures are under-powered below ~1000 (Student & Read 2025).", x$N))
   }
-  cat("\nAxiom banding (Kara) is unidimensional, so it can miss multidimensional",
+  cat("\nAxiom banding (Omni) is unidimensional, so it can miss multidimensional",
       "\ndepartures - read a low violation rate as within-scale additivity.\n")
   invisible(x)
 }

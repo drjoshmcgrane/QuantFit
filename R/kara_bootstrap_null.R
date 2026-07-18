@@ -80,7 +80,7 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
   }, error = function(e) NULL)
 }
 
-#' Bootstrapped null distribution for the Karabatsos global KL
+#' Omnibus cancellation-hierarchy test (Karabatsos KL, bootstrapped null)
 #'
 #' Calibrates the Karabatsos (2018) global Kullback-Leibler additivity
 #' statistic against a null distribution simulated from the Rasch model fitted
@@ -109,7 +109,7 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #' cheaper CC bootstrap; increase them for a final analysis.
 #'
 #' @param data Binary response matrix (persons x items).
-#' @param n_bands Number of ability bands (default 6).
+#' @param n_bands Maximum number of score bands (default 6).
 #' @param B Number of Rasch-simulated null datasets (default 50).
 #' @param cutoff Null percentile above which interval scaling is rejected
 #'   (default 0.95).
@@ -131,7 +131,7 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #'
 #' @return An object of class `ccnull` (shared with [cc_bootstrap_null()]):
 #'   `observed` (global KL), `null`, `percentile`, `p_value`, `reject`, and
-#'   settings. Its `check` field is `"kara-KL"`.
+#'   settings. Its `check` field is `"omni-KL"`.
 #'
 #' @references
 #' Karabatsos, G. (2018). On Bayesian testing of additive conjoint measurement
@@ -151,7 +151,7 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #' kara_bootstrap_null(dat, B = 40, mc.cores = 4, seed = 1)
 #' }
 #' @export
-kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
+omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
                                 S = 10000, N_synth = 100,
                                 latent = c("empirical", "normal"),
                                 person_order = c("complete", "facility", "adjusted"),
@@ -195,8 +195,8 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   # 1. observed global KL + per-cell KL quantiles; seeded so the KaraChecks
   #    sampler is reproducible (it runs at mc.cores = 1 inside)
   if (verbose) cat("Computing observed Karabatsos global KL...\n")
+  if (!is.null(seed)) set.seed(seed)   # covers the null-generator fit's starts
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))  # null generator only
-  if (!is.null(seed)) set.seed(seed)
   kc_obs <- kara_of(data)
   if (is.null(kc_obs)) stop("Observed KaraChecks failed")
   obs <- kc_obs$global_KL
@@ -246,7 +246,11 @@ kara_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
                  percentile = percentile, p_value = p_value,
                  reject = percentile >= cutoff, cutoff = cutoff,
                  kl_median = kl_q[1], kl_q3 = kl_q[2], kl_p90 = kl_q[3],
-                 kl_max = kl_q[4], check = "kara-KL", N = n_obs, J = J,
+                 kl_max = kl_q[4], check = "omni-KL", N = n_obs, J = J,
                  B = length(null), n_failed = n_failed),
             class = "ccnull")
 }
+
+#' @rdname omni_bootstrap_null
+#' @export
+kara_bootstrap_null <- function(...) omni_bootstrap_null(...)

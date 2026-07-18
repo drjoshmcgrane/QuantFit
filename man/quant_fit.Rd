@@ -13,9 +13,9 @@ quant_fit(
   triple = TRUE,
   cc_B = 100,
   cc_cutoff = 0.95,
-  kara_S = 10000,
-  kara_N_synth = 100,
-  kara_B = 50,
+  omni_S = 10000,
+  omni_N_synth = 100,
+  omni_B = 50,
   B = 99,
   mc.cores = 1L,
   seed = NULL,
@@ -42,15 +42,15 @@ Rasch bootstrap null (default TRUE).}
 \item{cc_B}{Number of Rasch-simulated null datasets for the CC route
 (default 100, passed to \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}).}
 
-\item{cc_cutoff}{Null percentile above which the CC \emph{and} Kara routes
+\item{cc_cutoff}{Null percentile above which the CC \emph{and} Omni routes
 reject interval scaling (default 0.95); it is passed as the \code{cutoff} to
-both \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} and \code{\link[=kara_bootstrap_null]{kara_bootstrap_null()}}.}
+both \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} and \code{\link[=omni_bootstrap_null]{omni_bootstrap_null()}}.}
 
-\item{kara_S, kara_N_synth}{Iterations and synthetic datasets for each
+\item{omni_S, omni_N_synth}{Iterations and synthetic datasets for each
 \code{\link[=KaraChecks]{KaraChecks()}} run (defaults 10000, 100), used identically for the
 observed statistic and every bootstrap replicate.}
 
-\item{kara_B}{Number of Rasch-simulated null datasets for the Kara route
+\item{omni_B}{Number of Rasch-simulated null datasets for the Omni route
 (default 50; each is a full \code{\link[=KaraChecks]{KaraChecks()}} run, so this is the most
 expensive step - raise it for a final analysis).}
 
@@ -68,7 +68,7 @@ expensive step - raise it for a final analysis).}
 An object of class \code{quantverdict}: a list with \code{verdict}
 (character), \code{support} (routes supporting a quantitative reading),
 \code{n_available} (routes that returned a result), per-route sub-lists \code{lc},
-\code{cc}, \code{kara}, \code{n_bands}, \code{N} (sample size), and \code{thresholds}.
+\code{cc}, \code{omni} (alias \code{kara}), \code{n_bands}, \code{N} (sample size), and \code{thresholds}.
 }
 \description{
 Combines the three routes QuantFit offers to the question \emph{do these data
@@ -85,9 +85,9 @@ alternatives?
 double (and optionally triple), calibrated against a Rasch bootstrap
 null via \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} (Student & Read, 2025): is the observed
 violation rate higher than expected under interval scaling?
-\item \strong{Kara} - the Karabatsos (2018) synthetic-likelihood global
-KL statistic (\code{\link[=KaraChecks]{KaraChecks()}}) on an ability-banded matrix, calibrated
-against its own Rasch bootstrap null (\code{\link[=kara_bootstrap_null]{kara_bootstrap_null()}}): is the
+\item \strong{Omni} - the Karabatsos (2018) synthetic-likelihood global
+KL statistic (\code{\link[=KaraChecks]{KaraChecks()}}) on a score-banded matrix, calibrated
+against its own Rasch bootstrap null (\code{\link[=omni_bootstrap_null]{omni_bootstrap_null()}}): is the
 KL departure from additivity higher than expected under interval
 scaling?
 }
@@ -98,13 +98,13 @@ scaling / the constrained model rejected above the \code{cc_cutoff} percentile.
 \strong{LC} bootstraps the likelihood-ratio statistic against its
 chi-bar-squared null (simulating from the fitted constrained model);
 \strong{CC} bootstraps the \code{\link[=ConjointChecks]{ConjointChecks()}} violation rate against a Rasch
-null (Student & Read, 2025); \strong{Kara} bootstraps the Karabatsos global
+null (Student & Read, 2025); \strong{Omni} bootstraps the Karabatsos global
 KL against a Rasch null. This makes the three routes statistically
 consistent and their p-values comparable, and removes every fixed threshold.
 
 \strong{CC} runs on raw sum-score groups: because observed and null data
 share the pipeline, the null self-calibrates the baseline, so no ability
-banding is needed. \strong{Kara} does need banding - the KL test on raw
+banding is needed. \strong{Omni} does need banding - the KL test on raw
 sum-score groups reads genuinely additive (Rasch) data as non-additive (a
 sum-score-to-ability nonlinearity) - so persons are grouped into \code{n_bands}
 ability bands by their Rasch ability estimate, with each band's mean ability
@@ -120,9 +120,9 @@ accept/reject decision is a bootstrap percentile.
 Two limitations are worth stating. First, the axiom procedures are
 under-powered below roughly 1000 examinees (Student & Read, 2025): at small
 \eqn{N} a non-rejection may reflect low power rather than interval
-scalability, and a note is printed. Second, Kara's ability banding is
+scalability, and a note is printed. Second, Omni's score banding is
 unidimensional, so it can wash out \emph{multidimensional} departures from
-additivity - read a low Kara statistic as within-scale additivity, not a
+additivity - read a low Omni statistic as within-scale additivity, not a
 guarantee of unidimensionality.
 
 A quantitative reading is best supported when the model route selects

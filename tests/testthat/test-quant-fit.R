@@ -6,8 +6,8 @@ test_that("quant_fit returns a well-formed triangulated verdict", {
                        seq(-1.8, 1.8, length.out = J), "-"))), n, J)
 
   # N < 1000 trips the CC under-power warning; not the object under test here
-  v <- suppressWarnings(quant_fit(dat, n_bands = 5, cc_B = 10, kara_B = 8,
-                           kara_S = 1500, kara_N_synth = 15, cc_n_mat = 8,
+  v <- suppressWarnings(quant_fit(dat, n_bands = 5, cc_B = 10, omni_B = 8,
+                           omni_S = 1500, omni_N_synth = 15, cc_n_mat = 8,
                            B = 19, mc.cores = 2, seed = 1, verbose = FALSE))
 
   expect_s3_class(v, "quantverdict")
@@ -35,7 +35,7 @@ test_that("quant_fit respects triple = FALSE", {
   dat <- matrix(rbinom(n * J, 1, plogis(outer(rnorm(n),
                        seq(-1.5, 1.5, length.out = J), "-"))), n, J)
   v <- suppressWarnings(quant_fit(dat, n_bands = 5, triple = FALSE, cc_B = 8,
-                           kara_B = 6, kara_S = 1200, kara_N_synth = 12,
+                           omni_B = 6, omni_S = 1200, omni_N_synth = 12,
                            cc_n_mat = 8, B = 19, mc.cores = 2, seed = 2,
                            verbose = FALSE))
   expect_s3_class(v, "quantverdict")
@@ -69,8 +69,8 @@ test_that("assess_quantitative() is a deprecated alias for quant_fit()", {
   # capture the return value, which expect_warning() would not hand back.
   saw_deprecation <- FALSE
   v <- withCallingHandlers(
-    assess_quantitative(dat, n_bands = 5, cc_B = 6, kara_B = 4,
-                        kara_S = 1000, kara_N_synth = 10, cc_n_mat = 6,
+    assess_quantitative(dat, n_bands = 5, cc_B = 6, omni_B = 4,
+                        omni_S = 1000, omni_N_synth = 10, cc_n_mat = 6,
                         B = 15, mc.cores = 2, seed = 1, verbose = FALSE),
     warning = function(w) {
       if (grepl("deprecat", conditionMessage(w))) saw_deprecation <<- TRUE
