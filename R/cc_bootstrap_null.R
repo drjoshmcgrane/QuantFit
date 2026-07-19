@@ -59,6 +59,12 @@
 #' @param cutoff Percentile of the null above which interval scaling is
 #'   rejected (default 0.95).
 #' @param ss.lower Minimum sum-score-group size passed to [PrepareChecks()].
+#' @param propagate_item_error Draw fresh item difficulties per replicate by
+#'   refitting a provisional Rasch draw (full parametric bootstrap of the item
+#'   parameters), so the null reflects item-estimation error rather than
+#'   treating the plug-in estimates as exact. Costs one extra [fit_rm()] per
+#'   replicate. Dichotomous data only (ignored, with a warning, for
+#'   polytomous). Default `FALSE` (Student & Read's plug-in convention).
 #' @param person_order Person ordering for score grouping when responses are
 #'   missing (see [PrepareChecks()]): `"complete"` (default) uses complete
 #'   cases only; `"facility"`/`"adjusted"` keep all respondents at the cost of
@@ -106,11 +112,30 @@
 #' res
 #' plot(res)
 #' }
+#' @section Relation to Student & Read (2025):
+#' The design follows Student & Read: a per-dataset Rasch parametric
+#' bootstrap of the [ConjointChecks()] weighted mean violation rate, observed
+#' and null sharing an identical pipeline, judged by null percentile at a 95%
+#' cutoff (B defaults to their 100). Two deliberate departures. First, they
+#' hold each person's estimated ability fixed across replicates and note that
+#' "estimated ... parameters ... inevitably contain random measurement error
+#' that inflates the variance of both distributions", suggesting shrinkage as
+#' a remedy; here abilities are REDRAWN each replicate from the
+#' Bock-Aitkin empirical-histogram latent density (`latent = "empirical"`), a
+#' deconvolution that removes exactly that inflation. Second, they estimate
+#' items by CML for its distribution-free character; here items come from MML,
+#' with the empirical latent default preserving the distribution-free spirit -
+#' `latent = "normal"` departs from it and is not the faithful choice. Their
+#' n.mat is 5000; the default here is 500 (calibration is unaffected by n.mat,
+#' which observed and null share, but the statistic stabilises as it grows -
+#' runtime scales linearly).
+#'
 #' @export
-cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
+cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
                               cutoff = 0.95, ss.lower = 10,
                               latent = c("empirical", "normal"),
                               person_order = c("complete", "facility", "adjusted"),
+                              propagate_item_error = FALSE,
                               mc.cores = 1L, seed = NULL, verbose = TRUE) {
   latent <- match.arg(latent)
   person_order <- match.arg(person_order)
@@ -131,7 +156,8 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   # PrepareChecks() directly.
   min_rows <- if (check == "triple") 4 else 3
   prep_fn <- if (poly) {
-    function(d) prepare_polytomous(d, ss.lower = ss.lower)
+    function(d) prepare_polytomous(d, ss.lower = ss.lower,
+                                   person_order = person_order)
   } else {
     function(d) PrepareChecks(d, ss.lower = ss.lower,
                               person_order = person_order)
@@ -165,11 +191,26 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 50, B = 100,
   }
   beta <- unlist(rmf$delta_list)
   if (poly) {
+    if (propagate_item_error)
+      warning("propagate_item_error is not implemented for polytomous data; ignored")
     sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma, latent = latent)
   } else {
     sim_fn <- function() {
+      b <- beta
+      if (propagate_item_error) {
+        # full parametric bootstrap of the item parameters: draw beta* with
+        # its sampling variability by refitting a provisional Rasch draw,
+        # so the null width reflects item-estimation error (plug-in betas
+        # understate it, increasingly with J)
+        d0 <- matrix(rbinom(n_obs * J, 1,
+              plogis(outer(.rm_draw_theta(rmf, n_obs, sigma, latent), beta, "-"))),
+              n_obs, J)
+        f0 <- tryCatch(suppressWarnings(fit_rm(d0, verbose = FALSE)),
+                       error = function(e) NULL)
+        if (!is.null(f0)) b <- unlist(attr(f0, "rm_fit")$delta_list)
+      }
       theta <- .rm_draw_theta(rmf, n_obs, sigma, latent)
-      matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
+      matrix(rbinom(n_obs * J, 1, plogis(outer(theta, b, "-"))), n_obs, J)
     }
   }
 

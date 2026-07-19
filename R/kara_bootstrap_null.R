@@ -124,6 +124,8 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #'   cases only; `"facility"` and `"adjusted"` keep all persons at the cost of
 #'   an extra-ordinal commensuration assumption. Complete data are identical
 #'   under all three.
+#' @param propagate_item_error As in [cc_bootstrap_null()]: bootstrap the item
+#'   difficulties per replicate instead of treating plug-ins as exact.
 #' @param mc.cores Cores for the bootstrap (default 1); replicates are seeded
 #'   independently so parallel and serial results agree.
 #' @param seed Optional integer seed.
@@ -155,6 +157,7 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
                                 S = 10000, N_synth = 100,
                                 latent = c("empirical", "normal"),
                                 person_order = c("complete", "facility", "adjusted"),
+                                propagate_item_error = FALSE,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE) {
   latent <- match.arg(latent)
   person_order <- match.arg(person_order)
@@ -175,7 +178,8 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   # conditioned matrix (prepare_polytomous), using score groups as the person
   # factor and sub-items as the item factor.
   run_kara_poly <- function(d) {
-    prep <- tryCatch(prepare_polytomous(d, ss.lower = 10), error = function(e) NULL)
+    prep <- tryCatch(prepare_polytomous(d, ss.lower = 10, person_order = person_order),
+                     error = function(e) NULL)
     if (is.null(prep)) return(NULL)
     nr <- nrow(prep$N); nc <- ncol(prep$N)
     KaraChecks(as.vector(prep$N), as.vector(prep$n), S = S,
@@ -213,11 +217,23 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   }
   beta <- unlist(rmf$delta_list)
   if (poly) {
+    if (propagate_item_error)
+      warning("propagate_item_error is not implemented for polytomous data; ignored")
     sim_fn <- function() .simulate_pcm(rmf, n_obs, sigma, latent = latent)
   } else {
     sim_fn <- function() {
+      b <- beta
+      if (propagate_item_error) {
+        # parametric bootstrap of item difficulties (see cc_bootstrap_null)
+        d0 <- matrix(rbinom(n_obs * J, 1,
+              plogis(outer(.rm_draw_theta(rmf, n_obs, sigma, latent), beta, "-"))),
+              n_obs, J)
+        f0 <- tryCatch(suppressWarnings(fit_rm(d0, verbose = FALSE)),
+                       error = function(e) NULL)
+        if (!is.null(f0)) b <- unlist(attr(f0, "rm_fit")$delta_list)
+      }
       theta <- .rm_draw_theta(rmf, n_obs, sigma, latent)
-      matrix(rbinom(n_obs * J, 1, plogis(outer(theta, beta, "-"))), n_obs, J)
+      matrix(rbinom(n_obs * J, 1, plogis(outer(theta, b, "-"))), n_obs, J)
     }
   }
 

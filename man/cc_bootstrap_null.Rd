@@ -7,12 +7,13 @@
 cc_bootstrap_null(
   data,
   check = "double",
-  n.mat = 50,
+  n.mat = 500,
   B = 100,
   cutoff = 0.95,
   ss.lower = 10,
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),
+  propagate_item_error = FALSE,
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE
@@ -49,6 +50,13 @@ fitted latent variance.}
 missing (see \code{\link[=PrepareChecks]{PrepareChecks()}}): \code{"complete"} (default) uses complete
 cases only; \code{"facility"}/\code{"adjusted"} keep all respondents at the cost of
 an extra-ordinal commensuration assumption. Identical on complete data.}
+
+\item{propagate_item_error}{Draw fresh item difficulties per replicate by
+refitting a provisional Rasch draw (full parametric bootstrap of the item
+parameters), so the null reflects item-estimation error rather than
+treating the plug-in estimates as exact. Costs one extra \code{\link[=fit_rm]{fit_rm()}} per
+replicate. Dichotomous data only (ignored, with a warning, for
+polytomous). Default \code{FALSE} (Student & Read's plug-in convention).}
 
 \item{mc.cores}{Cores for the bootstrap (default 1). The \code{B} null datasets
 are processed in parallel with \code{\link[parallel:mclapply]{parallel::mclapply()}} on non-Windows
@@ -116,6 +124,26 @@ simulation at your own \eqn{N} and parameter distribution, that the
 procedure can detect the violations you care about before trusting a
 non-rejection.
 }
+\section{Relation to Student & Read (2025)}{
+
+The design follows Student & Read: a per-dataset Rasch parametric
+bootstrap of the \code{\link[=ConjointChecks]{ConjointChecks()}} weighted mean violation rate, observed
+and null sharing an identical pipeline, judged by null percentile at a 95\%
+cutoff (B defaults to their 100). Two deliberate departures. First, they
+hold each person's estimated ability fixed across replicates and note that
+"estimated ... parameters ... inevitably contain random measurement error
+that inflates the variance of both distributions", suggesting shrinkage as
+a remedy; here abilities are REDRAWN each replicate from the
+Bock-Aitkin empirical-histogram latent density (\code{latent = "empirical"}), a
+deconvolution that removes exactly that inflation. Second, they estimate
+items by CML for its distribution-free character; here items come from MML,
+with the empirical latent default preserving the distribution-free spirit -
+\code{latent = "normal"} departs from it and is not the faithful choice. Their
+n.mat is 5000; the default here is 500 (calibration is unaffected by n.mat,
+which observed and null share, but the statistic stabilises as it grows -
+runtime scales linearly).
+}
+
 \examples{
 \dontrun{
 set.seed(1)

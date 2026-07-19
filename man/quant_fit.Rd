@@ -9,7 +9,7 @@ quant_fit(
   data,
   n_classes = 1:6,
   n_bands = 6L,
-  cc_n_mat = 50,
+  cc_n_mat = 500,
   triple = TRUE,
   cc_B = 100,
   cc_cutoff = 0.95,
@@ -34,7 +34,8 @@ assess_quantitative(...)
 more bands re-introduce the sparse-extreme problem, fewer lose
 resolution).}
 
-\item{cc_n_mat}{Submatrices sampled per \code{\link[=ConjointChecks]{ConjointChecks()}} run (default 50).}
+\item{cc_n_mat}{Submatrices sampled per \code{\link[=ConjointChecks]{ConjointChecks()}} run (default
+500; Student & Read use 5000 - runtime scales linearly).}
 
 \item{triple}{Also calibrate the triple-cancellation check against its own
 Rasch bootstrap null (default TRUE).}

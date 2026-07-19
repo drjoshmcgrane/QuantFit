@@ -62,7 +62,8 @@
 #' @param n_bands Number of ability bands for the axiom routes (default 6;
 #'   more bands re-introduce the sparse-extreme problem, fewer lose
 #'   resolution).
-#' @param cc_n_mat Submatrices sampled per [ConjointChecks()] run (default 50).
+#' @param cc_n_mat Submatrices sampled per [ConjointChecks()] run (default
+#'   500; Student & Read use 5000 - runtime scales linearly).
 #' @param triple Also calibrate the triple-cancellation check against its own
 #'   Rasch bootstrap null (default TRUE).
 #' @param cc_B Number of Rasch-simulated null datasets for the CC route
@@ -111,7 +112,7 @@
 #' }
 #' @export
 quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
-                                cc_n_mat = 50, triple = TRUE, cc_B = 100,
+                                cc_n_mat = 500, triple = TRUE, cc_B = 100,
                                 cc_cutoff = 0.95,
                                 omni_S = 10000, omni_N_synth = 100,
                                 omni_B = 50, B = 99,

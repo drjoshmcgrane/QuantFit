@@ -93,6 +93,9 @@ recode_adjacent <- function(resp) {
 #' @param cell.lower Minimum number of in-play respondents required in every
 #'   retained cell. Cells with fewer are pruned away; larger values give a
 #'   smaller but more stably estimated matrix.
+#' @param person_order As in [PrepareChecks()]: `"complete"` (default) uses
+#'   complete cases; `"facility"`/`"adjusted"` keep all respondents at the
+#'   cost of an extra-ordinal commensuration. Identical on complete data.
 #' @param order.columns If `TRUE` (default) the retained sub-items are ordered
 #'   by ascending overall proportion (`sum(n)/sum(N)`), mirroring the
 #'   difficulty ordering [PrepareChecks()] applies to items.
@@ -125,34 +128,80 @@ recode_adjacent <- function(resp) {
 #'
 #' @export
 prepare_polytomous <- function(resp, ss.lower = 10, cell.lower = 5,
-                               order.columns = TRUE) {
+                               order.columns = TRUE,
+                               person_order = c("complete","facility","adjusted")) {
+  person_order <- match.arg(person_order)
   resp <- as.matrix(resp)
-  # Missing responses are allowed: the conditioning score is the total over
-  # OBSERVED responses, and every (score-group, sub-item) cell already counts
-  # only in-play respondents - a missing item simply removes that person from
-  # all of the item's sub-item cells, the same observation-weighting that
-  # handles structural out-of-play. Valid under MAR; the bootstrap null must
-  # impose the same missingness pattern so the grouping impurity of
-  # observed-total conditioning cancels in the calibration.
+  # Missing responses: same person_order ladder as PrepareChecks(). The
+  # DEFAULT conditioning frame is complete cases (totals over different
+  # answered item sets are incomparable without extra-ordinal assumptions);
+  # "facility" (mean observed category score; difficulty-blind) and
+  # "adjusted" (observed total standardized against the item-mean-implied
+  # expectation for the answered set) keep everyone as documented
+  # approximations. Cells stay observation-weighted throughout (a missing
+  # item removes that person from the item's sub-item cells only - the same
+  # weighting that handles structural out-of-play). Valid under MAR; the
+  # bootstrap null must impose the same missingness pattern so pipeline
+  # effects cancel in the calibration.
   if (ss.lower < 2) {
     message("ss.lower must be greater than 1, setting to 2.")
     ss.lower <- 2
   }
   if (cell.lower < 1) cell.lower <- 1
 
-  score <- rowSums(resp, na.rm = TRUE)             # total over observed items
+  if (anyNA(resp) && person_order == "complete") {
+    cc <- stats::complete.cases(resp)
+    message("prepare_polytomous: dropping ", sum(!cc), " of ", nrow(resp),
+            " incomplete respondents (person_order=\"complete\"); use ",
+            "person_order=\"facility\" or \"adjusted\" to keep them.")
+    resp <- resp[cc, , drop = FALSE]
+    if (nrow(resp) < 3L * ss.lower)
+      stop("Too few complete cases; consider person_order=\"facility\"/\"adjusted\".")
+  }
+  has_na <- anyNA(resp)
+  score <- if (!has_na) {
+    rowSums(resp)                                  # total score (comparable)
+  } else if (person_order == "facility") {
+    rowMeans(resp, na.rm = TRUE)                   # mean observed category score
+  } else {                                         # adjusted
+    mu <- colMeans(resp, na.rm = TRUE)
+    v  <- apply(resp, 2, stats::var, na.rm = TRUE)
+    obs <- !is.na(resp)
+    e <- as.vector(obs %*% mu)
+    vv <- as.vector(obs %*% v)
+    (rowSums(resp, na.rm = TRUE) - e) / sqrt(pmax(vv, 1e-12))
+  }
   rec <- recode_adjacent(resp)                     # persons x sub-items (w/ NA)
 
-  tab <- table(score)
-  lev <- as.numeric(names(tab))[tab >= ss.lower]
+  if (!has_na) {
+    tab <- table(score)
+    lev <- as.numeric(names(tab))[tab >= ss.lower]
+    grp <- score; glab <- as.character(lev)
+  } else {
+    # continuous ordering: tie-preserving adjacent value-bands at
+    # total-score-like granularity (see PrepareChecks)
+    vals <- sort(unique(score)); cnt <- as.integer(table(factor(score, levels = vals)))
+    n_score_groups <- length(unique(rowSums(resp, na.rm = TRUE)))
+    tgt <- max(ss.lower, ceiling(sum(cnt) / max(3L, n_score_groups)))
+    gid <- integer(length(vals)); g <- 1L; acc <- 0L
+    for (k in seq_along(vals)) {
+      gid[k] <- g; acc <- acc + cnt[k]
+      if (acc >= tgt && k < length(vals)) { g <- g + 1L; acc <- 0L }
+    }
+    if (acc < tgt && acc > 0L && g > 1L) gid[gid == g] <- g - 1L
+    grp <- gid[match(score, vals)]
+    lev <- sort(unique(grp))
+    glab <- vapply(lev, function(sv) as.character(round(mean(score[grp == sv]), 4)),
+                   character(1))
+  }
   if (length(lev) < 3) {
     stop("Fewer than three total-score groups have at least ss.lower = ",
          ss.lower, " respondents; cannot form a conjoint matrix.")
   }
   Nl <- nl <- vector("list", length(lev))
-  names(Nl) <- names(nl) <- as.character(lev)
+  names(Nl) <- names(nl) <- glab
   for (i in seq_along(lev)) {
-    sub <- rec[score == lev[i], , drop = FALSE]
+    sub <- rec[grp == lev[i], , drop = FALSE]
     Nl[[i]] <- colSums(!is.na(sub))
     nl[[i]] <- colSums(sub == 1, na.rm = TRUE)
   }

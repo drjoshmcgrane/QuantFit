@@ -4,7 +4,13 @@
 \alias{prepare_polytomous}
 \title{Prepare polytomous data for the conjoint checks}
 \usage{
-prepare_polytomous(resp, ss.lower = 10, cell.lower = 5, order.columns = TRUE)
+prepare_polytomous(
+  resp,
+  ss.lower = 10,
+  cell.lower = 5,
+  order.columns = TRUE,
+  person_order = c("complete", "facility", "adjusted")
+)
 }
 \arguments{
 \item{resp}{Integer matrix or data frame of polytomous responses (persons in
@@ -21,6 +27,10 @@ smaller but more stably estimated matrix.}
 \item{order.columns}{If \code{TRUE} (default) the retained sub-items are ordered
 by ascending overall proportion (\code{sum(n)/sum(N)}), mirroring the
 difficulty ordering \code{\link[=PrepareChecks]{PrepareChecks()}} applies to items.}
+
+\item{person_order}{As in \code{\link[=PrepareChecks]{PrepareChecks()}}: \code{"complete"} (default) uses
+complete cases; \code{"facility"}/\code{"adjusted"} keep all respondents at the
+cost of an extra-ordinal commensuration. Identical on complete data.}
 }
 \value{
 A list with elements \code{N} and \code{n} -- the number of in-play responses

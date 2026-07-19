@@ -14,6 +14,7 @@ omni_bootstrap_null(
   N_synth = 100,
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),
+  propagate_item_error = FALSE,
   mc.cores = 1L,
   seed = NULL,
   verbose = TRUE
@@ -44,6 +45,9 @@ are missing; see \code{\link[=band_by_score]{band_by_score()}}. \code{"complete"
 cases only; \code{"facility"} and \code{"adjusted"} keep all persons at the cost of
 an extra-ordinal commensuration assumption. Complete data are identical
 under all three.}
+
+\item{propagate_item_error}{As in \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}: bootstrap the item
+difficulties per replicate instead of treating plug-ins as exact.}
 
 \item{mc.cores}{Cores for the bootstrap (default 1); replicates are seeded
 independently so parallel and serial results agree.}
