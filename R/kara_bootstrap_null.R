@@ -267,6 +267,7 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
             class = "ccnull")
 }
 
+#' @param ... Arguments passed to [omni_bootstrap_null()].
 #' @rdname omni_bootstrap_null
 #' @export
 kara_bootstrap_null <- function(...) omni_bootstrap_null(...)

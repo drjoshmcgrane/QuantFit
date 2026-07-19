@@ -55,6 +55,8 @@ independently so parallel and serial results agree.}
 \item{seed}{Optional integer seed.}
 
 \item{verbose}{Print progress (default TRUE).}
+
+\item{...}{Arguments passed to \code{\link[=omni_bootstrap_null]{omni_bootstrap_null()}}.}
 }
 \value{
 An object of class \code{ccnull} (shared with \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}):

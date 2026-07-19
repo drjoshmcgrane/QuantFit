@@ -51,11 +51,11 @@ test_that("kara_bootstrap_null returns a well-formed ccnull object", {
   res <- kara_bootstrap_null(dat, n_bands = 5, B = 8, S = 1500, N_synth = 15,
                              mc.cores = 2, seed = 1, verbose = FALSE)
   expect_s3_class(res, "ccnull")
-  expect_identical(res$check, "kara-KL")
+  expect_identical(res$check, "omni-KL")
   expect_true(res$observed >= 0)
   expect_true(res$percentile >= 0 && res$percentile <= 1)
   expect_true(all(c("kl_median", "kl_max") %in% names(res)))
-  expect_output(print(res), "Karabatsos global-KL")
+  expect_output(print(res), "Omnibus cancellation-hierarchy")
 })
 
 test_that("assess_quantitative() is a deprecated alias for quant_fit()", {
