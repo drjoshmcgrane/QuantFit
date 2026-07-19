@@ -459,7 +459,21 @@ em_rasch_mml <- function(data, n_quad = 61L, max_iter = 500L, tol = 1e-7,
   Rmats <- lapply(cat_counts, function(m) {
     K <- m + 1L; R <- matrix(0, K, K); R[lower.tri(R, diag = TRUE)] <- 1; R
   })
-  sigma <- 1; dfree <- stats::rnorm(sumM, 0, 0.3)
+  # Method-of-moments start for sigma: score variance = conditional (binomial/
+  # multinomial) variance + sigma^2 * (score information)^2 at the centre.
+  # A data-informed start plus box bounds keeps the optimiser away from the
+  # sigma = 0 EM trap: at sigma = 0 the E-step posteriors are identical for
+  # everyone, the sigma-gradient vanishes, and the iteration absorbs there
+  # regardless of the data (observed on true-Rasch data with small latent
+  # variance, e.g. slope-0.5 simulations).
+  sc <- rowSums(data, na.rm = TRUE)
+  pbar <- colMeans(data, na.rm = TRUE) / cat_counts       # mean category prop
+  cond_var <- sum(cat_counts^2 * pmax(pbar * (1 - pbar), 1e-6))
+  info <- sum(cat_counts * pmax(pbar * (1 - pbar), 1e-6))
+  sigma_mom <- sqrt(max(stats::var(sc) - cond_var, 0.01)) / max(info, 1e-6)
+  sigma <- min(max(sigma_mom, 0.2), 5)
+  dfree <- stats::rnorm(sumM, 0, 0.3)
+  s_lo <- log(0.02); s_hi <- log(20)
   ll_old <- -Inf; conv <- FALSE; it <- 0L
   for (it in seq_len(max_iter)) {
     ip <- compute_pcm_probs(sigma * z, unpack(dfree), use_cpp)
@@ -488,9 +502,17 @@ em_rasch_mml <- function(data, n_quad = 61L, max_iter = 500L, tol = 1e-7,
       }
       c(-s * sum(z * g_theta), g_delta)
     }
-    opt <- stats::optim(c(log(sigma), dfree), negQ, gr = grQ, method = "BFGS",
+    opt <- stats::optim(c(log(sigma), dfree), negQ, gr = grQ,
+                        method = "L-BFGS-B",
+                        lower = c(s_lo, rep(-30, sumM)),
+                        upper = c(s_hi, rep(30, sumM)),
                         control = list(maxit = 50L))
     sigma <- exp(opt$par[1L]); dfree <- opt$par[-1L]
+  }
+  if (sigma <= 0.03 && sigma_mom > 0.15) {
+    warning("em_rasch_mml: sigma collapsed to the lower bound (",
+            signif(sigma, 3), ") despite moment estimate ",
+            signif(sigma_mom, 3), "; fit may be a degenerate local optimum")
   }
   ip <- compute_pcm_probs(sigma * z, unpack(dfree), use_cpp)
   es <- poly_estep(data, ip, w, use_cpp)
