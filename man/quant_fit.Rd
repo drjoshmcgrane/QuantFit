@@ -12,6 +12,8 @@ quant_fit(
   cc_n_mat = 500,
   triple = TRUE,
   cc_B = 100,
+  alpha = 0.05,
+  null_method = c("conditional_cml", "empirical_mml"),
   cc_cutoff = 0.95,
   omni_S = 10000,
   omni_N_synth = 100,
@@ -42,6 +44,12 @@ Rasch bootstrap null (default TRUE).}
 
 \item{cc_B}{Number of Rasch-simulated null datasets for the CC route
 (default 100, passed to \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}).}
+
+\item{alpha}{Significance level used by ALL routes (LC edge tests, CC
+Holm-adjusted family, Omni): decisions are \code{p <= alpha}.}
+
+\item{null_method}{Null generator for CC and Omni: \code{"conditional_cml"}
+(default) or \code{"empirical_mml"}; see \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}.}
 
 \item{cc_cutoff}{Display-only null percentile reference for the CC and Omni
 reject interval scaling (default 0.95); it is passed as the \code{cutoff} to

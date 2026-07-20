@@ -65,6 +65,10 @@
 #' @param n_bands Number of ability bands for the axiom routes (default 6;
 #'   more bands re-introduce the sparse-extreme problem, fewer lose
 #'   resolution).
+#' @param alpha Significance level used by ALL routes (LC edge tests, CC
+#'   Holm-adjusted family, Omni): decisions are `p <= alpha`.
+#' @param null_method Null generator for CC and Omni: `"conditional_cml"`
+#'   (default) or `"empirical_mml"`; see [cc_bootstrap_null()].
 #' @param cc_n_mat Submatrices sampled per [ConjointChecks()] run (default
 #'   500; Student & Read use 5000 - runtime scales linearly).
 #' @param triple Also calibrate the triple-cancellation check against its own
@@ -130,6 +134,7 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   if (verbose) cat("[LC]   latent-structure model selection...\n")
   lc <- tryCatch({
     sel <- select_model_ll(data, n_classes = n_classes, B = B,
+                           alpha = alpha,
                            mc.cores = mc.cores, seed = seed, verbose = FALSE,
                            ...)
     list(available = TRUE, selected = sel$selected,
@@ -152,26 +157,29 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
     hier <- cc_bootstrap_hierarchy(
       data, levels = if (triple) c("single", "double", "triple")
                      else c("single", "double"),
-      n.mat = cc_n_mat, B = cc_B, cutoff = cc_cutoff, mc.cores = mc.cores,
+      n.mat = cc_n_mat, B = cc_B, cutoff = cc_cutoff,
+      alpha = alpha, null_method = null_method, mc.cores = mc.cores,
       seed = seed, verbose = FALSE)
     res <- list(available = TRUE, hierarchy = hier,
                 attribution = hier$attribution)
     sng <- hier$levels$single
     if (!is.null(sng)) {
       res$single_rate <- sng$observed; res$single_percentile <- sng$percentile
-      res$single_p <- sng$p_value; res$single_reject <- sng$reject
+      res$single_p <- sng$p_value; res$single_p_adj <- sng$p_adjusted
+      res$single_reject <- sng$reject
     }
     dbl <- hier$levels$double
     if (!is.null(dbl)) {
       res$double_rate <- dbl$observed
       res$double_null_mean <- mean(dbl$null)
       res$double_percentile <- dbl$percentile; res$double_p <- dbl$p_value
-      res$double_reject <- dbl$reject
+      res$double_p_adj <- dbl$p_adjusted; res$double_reject <- dbl$reject
     }
     tri <- hier$levels$triple
     if (!is.null(tri)) {
       res$triple_rate <- tri$observed; res$triple_percentile <- tri$percentile
-      res$triple_p <- tri$p_value; res$triple_reject <- tri$reject
+      res$triple_p <- tri$p_value; res$triple_p_adj <- tri$p_adjusted
+      res$triple_reject <- tri$reject
     }
     # CC supports additivity when no tested level rejects
     res$supports_quant <- hier$supports_quant
@@ -195,7 +203,12 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
          null_mean = mean(kn$null), percentile = kn$percentile,
          p_value = kn$p_value, reject = kn$reject,
          kl_median = kn$kl_median, kl_q3 = kn$kl_q3, kl_p90 = kn$kl_p90,
-         kl_max = kn$kl_max, supports_quant = !kn$reject)
+         kl_max = kn$kl_max,
+         ess_min = kn$ess_min, ess_median = kn$ess_median,
+         null_ess_median = kn$null_ess_median,
+         null_ess_low_n = kn$null_ess_low_n,
+         B_effective = kn$B, n_failed = kn$n_failed,
+         supports_quant = !kn$reject)
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
 

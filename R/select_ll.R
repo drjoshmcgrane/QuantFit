@@ -299,6 +299,7 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 ll_equivalence_test <- function(data, fit_constrained, fit_un,
                                 B = 99, n_starts = 3, seed = NULL,
                                 use_cpp = TRUE, mc.cores = 1L,
+                                reselect_C_range = NULL,
                                 verbose = FALSE) {
 
   if (!inherits(fit_constrained, "qlfit") || !inherits(fit_un, "qlfit")) {
@@ -340,13 +341,35 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
     set.seed(rep_seeds[b])
     boot_data <- .impose_mask(simulate_from_qlfit(fit_constrained, n_obs), data)
 
+    C_b <- n_classes
+    fit_g_star <- NULL
+    if (!is.null(reselect_C_range) && length(reselect_C_range) > 1L) {
+      # POST-SELECTION CALIBRATION (external review): the observed statistic
+      # is two-stage - C selected by UN BIC on the observed data, then the
+      # LR computed at that C. Repeat the SAME selection inside every
+      # replicate so the null carries the selection variability; holding the
+      # observed C fixed made the null too favourable to the general model
+      # (the RM->DM leak at the quantitative gate).
+      g_fits <- lapply(reselect_C_range, function(C) tryCatch(
+        suppressWarnings(refit_model_type(type_g, boot_data, C,
+                                          n_starts, use_cpp)),
+        error = function(e) NULL))
+      g_bics <- vapply(g_fits, function(f)
+        if (is.null(f)) NA_real_ else BIC(f), numeric(1))
+      usable <- which(is.finite(g_bics) & reselect_C_range >= 2L)
+      if (length(usable)) {
+        pick <- usable[which.min(g_bics[usable])]
+        C_b <- reselect_C_range[pick]
+        fit_g_star <- g_fits[[pick]]
+      }
+    }
     fit_c_star <- tryCatch(
       suppressWarnings(
-        refit_model_type(type_c, boot_data, n_classes, n_starts, use_cpp)),
+        refit_model_type(type_c, boot_data, C_b, n_starts, use_cpp)),
       error = function(e) NULL)
-    fit_g_star <- tryCatch(
+    if (is.null(fit_g_star)) fit_g_star <- tryCatch(
       suppressWarnings(
-        refit_model_type(type_g, boot_data, n_classes, n_starts, use_cpp)),
+        refit_model_type(type_g, boot_data, C_b, n_starts, use_cpp)),
       error = function(e) NULL)
 
     if (verbose && mc.cores == 1L && b %% 10 == 0) {
@@ -413,7 +436,8 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
 #' @keywords internal
 ll_general_null <- function(data, fit_constrained, fit_general,
                             B = 99, n_starts = 3, seed = NULL,
-                            use_cpp = TRUE, mc.cores = 1L) {
+                            use_cpp = TRUE, mc.cores = 1L,
+                            reselect_C_range = NULL) {
   n_obs <- nrow(data)
   n_classes <- fit_constrained$n_classes
   type_c <- fit_constrained$model_type
@@ -423,6 +447,27 @@ ll_general_null <- function(data, fit_constrained, fit_general,
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
     boot_data <- .impose_mask(simulate_from_qlfit(fit_general, n_obs), data)
+    # the severity comparison must use the SAME statistic as the primary
+    # null: when the gate reselects C per replicate, so must this
+    if (!is.null(reselect_C_range) && length(reselect_C_range) > 1L) {
+      g_fits <- lapply(reselect_C_range, function(C) tryCatch(
+        suppressWarnings(refit_model_type(type_g, boot_data, C,
+                                          n_starts, use_cpp)),
+        error = function(e) NULL))
+      g_bics <- vapply(g_fits, function(f)
+        if (is.null(f)) NA_real_ else BIC(f), numeric(1))
+      usable <- which(is.finite(g_bics) & reselect_C_range >= 2L)
+      if (length(usable)) {
+        pick <- usable[which.min(g_bics[usable])]
+        C_b <- reselect_C_range[pick]
+        fit_g_star <- g_fits[[pick]]
+        fit_c_star <- tryCatch(suppressWarnings(
+          refit_model_type(type_c, boot_data, C_b, n_starts, use_cpp)),
+          error = function(e) NULL)
+        if (is.null(fit_c_star) || is.null(fit_g_star)) return(NA_real_)
+        return(max(0, 2 * (fit_g_star$loglik - fit_c_star$loglik)))
+      }
+    }
     fit_c_star <- tryCatch(suppressWarnings(
       refit_model_type(type_c, boot_data, n_classes, n_starts, use_cpp)),
       error = function(e) NULL)
@@ -700,11 +745,12 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       stringsAsFactors = FALSE))
   }
 
-  run_test <- function(fit_c, fit_g, seed_offset) {
+  run_test <- function(fit_c, fit_g, seed_offset, reselect_C_range = NULL) {
     ll_equivalence_test(
       data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
       seed = if (!is.null(seed)) seed + seed_offset else NULL,
-      use_cpp = use_cpp, mc.cores = mc.cores, verbose = verbose)
+      use_cpp = use_cpp, mc.cores = mc.cores,
+      reselect_C_range = reselect_C_range, verbose = verbose)
   }
 
   bics <- c(LCR = NA_real_, RM = NA_real_)
@@ -729,22 +775,29 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   # decisively, untouched. Separation criterion: median of the general-model
   # LR distribution exceeds the constrained null's 95th percentile.
   # NULL fits yield NA (no test performed).
-  test_adequate <- function(fit_c, fit_g, label, seed_offset, a = alpha) {
+  last_test_obj <- NULL
+  test_adequate <- function(fit_c, fit_g, label, seed_offset, a = alpha,
+                            reselect_C_range = NULL) {
     if (is.null(fit_c) || is.null(fit_g)) return(NA)
-    t <- run_test(fit_c, fit_g, seed_offset)
+    t <- run_test(fit_c, fit_g, seed_offset, reselect_C_range)
     ok <- t$p_value > a
     if (!ok) {
       g_null <- ll_general_null(
         data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
         seed = if (!is.null(seed)) seed + seed_offset + 500L else NULL,
-        use_cpp = use_cpp, mc.cores = mc.cores)
+        use_cpp = use_cpp, mc.cores = mc.cores,
+        reselect_C_range = reselect_C_range)
       if (!is.null(g_null)) {
         separated <- stats::median(g_null) >
           stats::quantile(t$null_distribution, 0.95, names = FALSE)
         if (!separated) ok <- TRUE   # models indistinguishable -> parsimony
       }
     }
+    overridden <- ok && t$p_value <= a
     tests <<- add_test(tests, label, t, ok)
+    if (overridden && nrow(tests))
+      tests$decision[nrow(tests)] <<- "retained (severity override: no detectable effect)"
+    last_test_obj <<- t
     ok
   }
 
@@ -812,9 +865,14 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     # the gate cannot resolve a level finer than the bootstrap p-value floor
     # 1/(B+1); use the achievable threshold so it can still reject on the
     # strongest evidence (observed LR beyond every null draw) at small B.
-    a_q <- max(alpha_quant, 1 / (B + 1))
+    a_q <- alpha_quant
+    if (1 / (B + 1) > alpha_quant)
+      warning("B = ", B, " cannot resolve alpha_quant = ", alpha_quant,
+              " (p-value floor 1/(B+1) = ", signif(1/(B+1), 3),
+              "); the gate cannot reject at this B - increase B")
     proceed_to_lcr <- isTRUE(test_adequate(fits$LCR, fits$UN, "LCR vs UN", 4000L,
-                                           a = a_q))
+                                           a = a_q,
+                                           reselect_C_range = orig_C_range))
   }
 
   if (!proceed_to_lcr) {
@@ -886,7 +944,8 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       n_classes = n_classes,
       n_classes_table = n_classes_table,
       rm_vs_lcr = if (exists("rl", inherits = FALSE)) rl else NULL,
-      quant_gate = if (exists("qg", inherits = FALSE)) qg else NULL
+      quant_gate = if (exists("last_test_obj", inherits = FALSE))
+        last_test_obj else NULL
     ),
     class = "qlselect_ll"
   )

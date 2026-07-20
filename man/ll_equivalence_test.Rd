@@ -13,6 +13,7 @@ ll_equivalence_test(
   seed = NULL,
   use_cpp = TRUE,
   mc.cores = 1L,
+  reselect_C_range = NULL,
   verbose = FALSE
 )
 }

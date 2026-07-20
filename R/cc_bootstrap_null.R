@@ -446,8 +446,9 @@ print.cchier <- function(x, ...) {
   cat("------------------------------------------\n")
   for (lv in names(x$levels)) {
     r <- x$levels[[lv]]
-    cat(sprintf("  %-7s rate = %.4f  pct = %5.1f%%  p = %.3f  %s\n",
-                lv, r$observed, 100 * r$percentile, r$p_value,
+    cat(sprintf("  %-7s rate = %.4f  p = %.3f  Holm-adj = %.3f  %s\n",
+                lv, r$observed, r$p_value,
+                if (!is.null(r$p_adjusted)) r$p_adjusted else NA,
                 if (isTRUE(r$reject)) "REJECTED" else "not rejected"))
   }
   if (identical(x$attribution, "none")) {
@@ -456,7 +457,7 @@ print.cchier <- function(x, ...) {
     cat(sprintf("\nAdditivity fails at the %s-cancellation level%s.\n",
                 x$attribution,
                 if (x$attribution == "triple") ""
-                else " (deeper levels not run: uninformative given this failure)"))
+                else " (all levels run; Holm-adjusted decisions)"))
   }
   invisible(x)
 }

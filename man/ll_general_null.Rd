@@ -12,7 +12,8 @@ ll_general_null(
   n_starts = 3,
   seed = NULL,
   use_cpp = TRUE,
-  mc.cores = 1L
+  mc.cores = 1L,
+  reselect_C_range = NULL
 )
 }
 \arguments{
