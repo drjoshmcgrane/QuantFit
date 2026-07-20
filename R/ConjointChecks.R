@@ -385,6 +385,18 @@ ConjointChecks <- function(N, n, n.mat=1, CR=c(.025,.975), check="double", mc.co
       list(rows, cols, out)
     }
   }
+  proc.fun_exact <- function(dummy, arg.list) {
+    N <- arg.list[[1]]; n <- arg.list[[2]]; lof <- arg.list[[3]]
+    CR <- arg.list[[4]]; check <- arg.list[[5]]
+    use_cpp <- arg.list[[7]]; adjust_extremes <- arg.list[[8]]
+    rows <- dummy$rows; cols <- dummy$cols
+    nt <- N[rows, cols]; ncnt <- n[rows, cols]
+    dat <- ncnt/nt
+    if (!adjust_extremes && sum(dat == 1 | dat == 0) > 0) return(NULL)
+    out <- lof[[1]](nt, ncnt, n.iter = 3000, CR = CR, check = check,
+                    use_cpp = use_cpp, adjust_extremes = adjust_extremes)
+    list(rows, cols, out)
+  }
   dat <- n/N
   test <- ifelse(abs(dat-.5) <= .5, TRUE, FALSE)
   if (!all(test)) stop("There is a problem with n/N, values not between 0 and 1 (inclusive)")
@@ -394,9 +406,30 @@ ConjointChecks <- function(N, n, n.mat=1, CR=c(.025,.975), check="double", mc.co
   lof <- list(omni.check)
   arg.list <- list(N, n, lof, CR, check, mat_size, use_cpp, adjust_extremes)
   dummy <- list()
+  total_combos <- choose(nr, mat_size) * choose(nc, mat_size)
+  exhaustive <- identical(n.mat, "all") ||
+    (is.numeric(n.mat) && n.mat >= total_combos)
+  if (identical(n.mat, "all") && total_combos > 2e5) {
+    warning("n.mat='all' requested but the table has ", total_combos,
+            " submatrices (> 2e5); sampling 5000 instead")
+    exhaustive <- FALSE; n.mat <- 5000
+  }
   if (n.mat=="adjacent") {
     for (i in 1:(nr-mat_size+1)) for (j in 1:(nc-mat_size+1)) c(i,j) -> dummy[[paste(i,j)]]
     out <- parallel::mclapply(dummy, proc.fun_adjacent, arg.list=arg.list, mc.cores=mc.cores)
+  } else if (exhaustive) {
+    # EXHAUSTIVE mode: every mat_size x mat_size submatrix once - the exact
+    # population violation rate of the table, no Monte Carlo noise. Reached
+    # explicitly via n.mat='all', or automatically whenever the requested
+    # sample size meets or exceeds the number of distinct submatrices
+    # (sampling more than the population is wasted duplication).
+    rcomb <- utils::combn(nr, mat_size); ccomb <- utils::combn(nc, mat_size)
+    k <- 0L
+    for (i in seq_len(ncol(rcomb))) for (j in seq_len(ncol(ccomb))) {
+      k <- k + 1L
+      dummy[[k]] <- list(rows = rcomb[, i], cols = ccomb[, j])
+    }
+    out <- parallel::mclapply(dummy, proc.fun_exact, arg.list=arg.list, mc.cores=mc.cores)
   } else {
     for (i in 1:n.mat) dummy[[i]] <- i
     out <- parallel::mclapply(dummy, proc.fun, arg.list=arg.list, mc.cores=mc.cores)
@@ -436,5 +469,9 @@ ConjointChecks <- function(N, n, n.mat=1, CR=c(.025,.975), check="double", mc.co
   m1 <- mean(tab, na.rm=TRUE)
   weight <- N
   m2 <- sum(tab*weight, na.rm=TRUE)/sum(weight[!is.na(tab)])
-  new("checks", N=N, n=n, Checks=out, tab=tab, means=list(unweighted=m1, weighted=m2), check.counts=mat.den)
+  new("checks", N=N, n=n, Checks=out, tab=tab,
+      means=list(unweighted=m1, weighted=m2,
+                 coverage=c(checked=length(out), total=total_combos,
+                            exhaustive=as.numeric(exhaustive))),
+      check.counts=mat.den)
 }

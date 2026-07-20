@@ -67,6 +67,8 @@
 #'   resolution).
 #' @param alpha Significance level used by ALL routes (LC edge tests, CC
 #'   Holm-adjusted family, Omni): decisions are `p <= alpha`.
+#' @param alpha_quant Level for the LC quantitative gate; defaults to
+#'   `alpha` so one level governs every route unless overridden.
 #' @param null_method Null generator for CC and Omni: `"conditional_cml"`
 #'   (default) or `"empirical_mml"`; see [cc_bootstrap_null()].
 #' @param cc_n_mat Submatrices sampled per [ConjointChecks()] run (default
@@ -119,8 +121,8 @@
 #' }
 #' @export
 quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
-                                cc_n_mat = 500, triple = TRUE, cc_B = 100,
-                                alpha = 0.05,
+                                cc_n_mat = 5000, triple = TRUE, cc_B = 100,
+                                alpha = 0.05, alpha_quant = NULL,
                                 null_method = c("conditional_cml", "empirical_mml"),
                                 cc_cutoff = 0.95,
                                 omni_S = 10000, omni_N_synth = 100,
@@ -135,6 +137,8 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   lc <- tryCatch({
     sel <- select_model_ll(data, n_classes = n_classes, B = B,
                            alpha = alpha,
+                           alpha_quant = if (is.null(alpha_quant)) alpha
+                                         else alpha_quant,
                            mc.cores = mc.cores, seed = seed, verbose = FALSE,
                            ...)
     list(available = TRUE, selected = sel$selected,

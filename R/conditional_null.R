@@ -32,9 +32,10 @@
   s_j <- colSums(data[keep, , drop = FALSE])  # item margins
   n_r <- tabulate(r[keep] + 1L, nbins = J + 1L)  # persons per score 0..J
   negll <- function(bfree) {
-    if (any(!is.finite(bfree)) || max(abs(bfree)) > 30) return(1e12)
+    if (any(!is.finite(bfree))) return(1e12)
     b <- c(bfree, -sum(bfree))
-    es <- .esf(exp(-pmin(pmax(b, -30), 30)))
+    if (max(abs(b)) > 25) return(1e12)      # full identified vector, no clipping
+    es <- .esf(exp(-b))
     if (any(!is.finite(es$gamma))) return(1e12)
     lg <- log(es$gamma) + es$logC
     sum(s_j * b) + sum(n_r * lg)
@@ -89,7 +90,7 @@
 # pattern; each pattern gets its own suffix-ESF table.
 
 .eta_list <- function(delta_list)
-  lapply(delta_list, function(d) c(1, exp(-cumsum(pmin(pmax(d, -30), 30)))))
+  lapply(delta_list, function(d) c(1, exp(-cumsum(d))))
 
 .gesf_suffix <- function(etas) {           # G[[j]][s+1] over items j..J
   J <- length(etas); maxr <- sum(vapply(etas, length, 1L)) - J
@@ -125,8 +126,13 @@
   Sjk <- unlist(lapply(seq_len(J), function(j)
     vapply(seq_len(m[j]), function(k) sum(di[, j] >= k, na.rm = TRUE), 1)))
   negll <- function(dfree) {
-    if (any(!is.finite(dfree)) || max(abs(dfree)) > 30) return(1e12)
+    if (any(!is.finite(dfree))) return(1e12)
     d <- c(dfree, -sum(dfree))
+    # bound the FULL identified vector (incl. the dependent element) and use
+    # the SAME vector in numerator and denominator - clipping only inside
+    # the ESF let the optimizer exploit the seam and drive the objective
+    # negative (external review: failures on ordinary UN/MON/IIO/DM/RM data)
+    if (max(abs(d)) > 25) return(1e12)
     dl <- lapply(seq_len(J), function(j) d[(off[j] + 1L):off[j + 1L]])
     tot <- sum(Sjk * d)
     for (u in seq_along(upat)) {

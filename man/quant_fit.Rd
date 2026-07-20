@@ -9,10 +9,11 @@ quant_fit(
   data,
   n_classes = 1:6,
   n_bands = 6L,
-  cc_n_mat = 500,
+  cc_n_mat = 5000,
   triple = TRUE,
   cc_B = 100,
   alpha = 0.05,
+  alpha_quant = NULL,
   null_method = c("conditional_cml", "empirical_mml"),
   cc_cutoff = 0.95,
   omni_S = 10000,
@@ -47,6 +48,9 @@ Rasch bootstrap null (default TRUE).}
 
 \item{alpha}{Significance level used by ALL routes (LC edge tests, CC
 Holm-adjusted family, Omni): decisions are \code{p <= alpha}.}
+
+\item{alpha_quant}{Level for the LC quantitative gate; defaults to
+\code{alpha} so one level governs every route unless overridden.}
 
 \item{null_method}{Null generator for CC and Omni: \code{"conditional_cml"}
 (default) or \code{"empirical_mml"}; see \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}.}

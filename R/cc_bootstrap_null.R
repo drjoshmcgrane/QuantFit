@@ -59,7 +59,7 @@
 #' @param cutoff Percentile of the null above which interval scaling is
 #'   rejected (default 0.95).
 #' @param alpha Significance level: rejection is `p_value <= alpha` (the
-#'   corrected Monte Carlo p, (1+#[null >= obs])/(B+1)). Note B bounds the
+#'   corrected Monte Carlo p, (1 + count of null draws at or above the observed)/(B+1)). Note B bounds the
 #'   smallest attainable p at 1/(B+1): B >= 19 is needed for alpha = 0.05 to
 #'   be attainable at all, and B >= 99 is recommended for decisions.
 #' @param cutoff Retained for display only (null percentile reference); the
@@ -132,12 +132,16 @@
 #' items by CML for its distribution-free character; here items come from MML,
 #' with the empirical latent default preserving the distribution-free spirit -
 #' `latent = "normal"` departs from it and is not the faithful choice. Their
-#' n.mat is 5000; the default here is 500 (calibration is unaffected by n.mat,
-#' which observed and null share, but the statistic stabilises as it grows -
-#' runtime scales linearly).
+#' n.mat of 5000 is now the default here. Whenever n.mat meets or exceeds the
+#' table's total number of distinct submatrices, every submatrix is checked
+#' EXACTLY ONCE (exhaustive mode - the exact population violation rate, no
+#' Monte Carlo noise; typically the case for short tests). n.mat = "all"
+#' forces enumeration. Runtime scales linearly in the checks performed;
+#' economy configurations remain valid (observed and null share n.mat) but
+#' noisier. Coverage is reported in the checks object's means$coverage.
 #'
 #' @export
-cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
+cc_bootstrap_null <- function(data, check = "double", n.mat = 5000, B = 100,
                               cutoff = 0.95, alpha = 0.05, ss.lower = 10,
                               null_method = c("conditional_cml", "empirical_mml"),
                               latent = c("empirical", "normal"),
@@ -390,7 +394,7 @@ plot.ccnull <- function(x, ...) {
 #' @seealso [cc_bootstrap_null()], [quant_fit()]
 #' @export
 cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"),
-                                   n.mat = 500, B = 100, cutoff = 0.95,
+                                   n.mat = 5000, B = 100, cutoff = 0.95,
                                    alpha = 0.05, ss.lower = 10,
                                    null_method = c("conditional_cml", "empirical_mml"),
                               latent = c("empirical", "normal"),

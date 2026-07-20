@@ -7,7 +7,7 @@
 cc_bootstrap_null(
   data,
   check = "double",
-  n.mat = 500,
+  n.mat = 5000,
   B = 100,
   cutoff = 0.95,
   alpha = 0.05,
@@ -36,7 +36,7 @@ cc_bootstrap_null(
 decision uses \code{alpha}, not the percentile.}
 
 \item{alpha}{Significance level: rejection is \code{p_value <= alpha} (the
-corrected Monte Carlo p, (1+#\link{null >= obs})/(B+1)). Note B bounds the
+corrected Monte Carlo p, (1 + count of null draws at or above the observed)/(B+1)). Note B bounds the
 smallest attainable p at 1/(B+1): B >= 19 is needed for alpha = 0.05 to
 be attainable at all, and B >= 99 is recommended for decisions.}
 
@@ -146,9 +146,13 @@ deconvolution that removes exactly that inflation. Second, they estimate
 items by CML for its distribution-free character; here items come from MML,
 with the empirical latent default preserving the distribution-free spirit -
 \code{latent = "normal"} departs from it and is not the faithful choice. Their
-n.mat is 5000; the default here is 500 (calibration is unaffected by n.mat,
-which observed and null share, but the statistic stabilises as it grows -
-runtime scales linearly).
+n.mat of 5000 is now the default here. Whenever n.mat meets or exceeds the
+table's total number of distinct submatrices, every submatrix is checked
+EXACTLY ONCE (exhaustive mode - the exact population violation rate, no
+Monte Carlo noise; typically the case for short tests). n.mat = "all"
+forces enumeration. Runtime scales linearly in the checks performed;
+economy configurations remain valid (observed and null share n.mat) but
+noisier. Coverage is reported in the checks object's means$coverage.
 }
 
 \examples{

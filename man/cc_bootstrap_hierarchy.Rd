@@ -7,7 +7,7 @@
 cc_bootstrap_hierarchy(
   data,
   levels = c("single", "double", "triple"),
-  n.mat = 500,
+  n.mat = 5000,
   B = 100,
   cutoff = 0.95,
   alpha = 0.05,
