@@ -119,6 +119,10 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #'   `"empirical"` (default) samples from the latent distribution estimated
 #'   from the data, `"normal"` draws theta ~ N(0, sigma^2). See
 #'   [cc_bootstrap_null()] for the rationale.
+#' @param alpha Significance level: rejection is `p_value <= alpha`. B bounds
+#'   the smallest attainable p at 1/(B+1); the default B = 99 supports 5%
+#'   decisions (B = 12-50 economy configs cannot reject at 0.05 or do so
+#'   coarsely - treat their output as descriptive percentiles).
 #' @param person_order Person ordering used for score banding when responses
 #'   are missing; see [band_by_score()]. `"complete"` (default) bands complete
 #'   cases only; `"facility"` and `"adjusted"` keep all persons at the cost of
@@ -153,7 +157,7 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #' kara_bootstrap_null(dat, B = 40, mc.cores = 4, seed = 1)
 #' }
 #' @export
-omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
+omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha = 0.05,
                                 S = 10000, N_synth = 100,
                                 latent = c("empirical", "normal"),
                                 person_order = c("complete", "facility", "adjusted"),
@@ -206,6 +210,12 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   obs <- kc_obs$global_KL
   kl_q <- stats::quantile(as.vector(kc_obs$KL), c(0.5, 0.75, 0.90, 1),
                           names = FALSE)
+  # importance-sampler health of the OBSERVED run: poor ESS means the
+  # synthetic-likelihood weights are dominated by few draws and the statistic
+  # is unstable at this S - flagged so users can raise S
+  ess <- tryCatch(as.vector(kc_obs$ESS), error = function(e) NULL)
+  ess_min <- if (length(ess)) min(ess, na.rm = TRUE) else NA_real_
+  ess_med <- if (length(ess)) stats::median(ess, na.rm = TRUE) else NA_real_
 
   # 2. parameters for a marginal parametric bootstrap (redraw abilities from
   #    N(0, sigma^2) per replicate, not the fixed EAP estimates)
@@ -260,9 +270,10 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 50, cutoff = 0.95,
   p_value <- (1 + sum(null >= obs)) / (length(null) + 1)
   structure(list(observed = obs, null = sort(null),
                  percentile = percentile, p_value = p_value,
-                 reject = percentile >= cutoff, cutoff = cutoff,
+                 reject = p_value <= alpha, alpha = alpha, cutoff = cutoff,
                  kl_median = kl_q[1], kl_q3 = kl_q[2], kl_p90 = kl_q[3],
-                 kl_max = kl_q[4], check = "omni-KL", N = n_obs, J = J,
+                 kl_max = kl_q[4], ess_min = ess_min, ess_median = ess_med,
+                 check = "omni-KL", N = n_obs, J = J,
                  B = length(null), n_failed = n_failed),
             class = "ccnull")
 }

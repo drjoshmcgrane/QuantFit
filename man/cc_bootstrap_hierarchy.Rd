@@ -7,9 +7,10 @@
 cc_bootstrap_hierarchy(
   data,
   levels = c("single", "double", "triple"),
-  n.mat = 50,
+  n.mat = 500,
   B = 100,
   cutoff = 0.95,
+  alpha = 0.05,
   ss.lower = 10,
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),

@@ -10,6 +10,7 @@ cc_bootstrap_null(
   n.mat = 500,
   B = 100,
   cutoff = 0.95,
+  alpha = 0.05,
   ss.lower = 10,
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),
@@ -30,8 +31,13 @@ cc_bootstrap_null(
 
 \item{B}{Number of Rasch-simulated null datasets (default 100).}
 
-\item{cutoff}{Percentile of the null above which interval scaling is
-rejected (default 0.95).}
+\item{cutoff}{Retained for display only (null percentile reference); the
+decision uses \code{alpha}, not the percentile.}
+
+\item{alpha}{Significance level: rejection is \code{p_value <= alpha} (the
+corrected Monte Carlo p, (1+#\link{null >= obs})/(B+1)). Note B bounds the
+smallest attainable p at 1/(B+1): B >= 19 is needed for alpha = 0.05 to
+be attainable at all, and B >= 99 is recommended for decisions.}
 
 \item{ss.lower}{Minimum sum-score-group size passed to \code{\link[=PrepareChecks]{PrepareChecks()}}.}
 

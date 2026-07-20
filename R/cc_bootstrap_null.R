@@ -58,6 +58,12 @@
 #' @param B Number of Rasch-simulated null datasets (default 100).
 #' @param cutoff Percentile of the null above which interval scaling is
 #'   rejected (default 0.95).
+#' @param alpha Significance level: rejection is `p_value <= alpha` (the
+#'   corrected Monte Carlo p, (1+#[null >= obs])/(B+1)). Note B bounds the
+#'   smallest attainable p at 1/(B+1): B >= 19 is needed for alpha = 0.05 to
+#'   be attainable at all, and B >= 99 is recommended for decisions.
+#' @param cutoff Retained for display only (null percentile reference); the
+#'   decision uses `alpha`, not the percentile.
 #' @param ss.lower Minimum sum-score-group size passed to [PrepareChecks()].
 #' @param propagate_item_error Draw fresh item difficulties per replicate by
 #'   refitting a provisional Rasch draw (full parametric bootstrap of the item
@@ -132,7 +138,7 @@
 #'
 #' @export
 cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
-                              cutoff = 0.95, ss.lower = 10,
+                              cutoff = 0.95, alpha = 0.05, ss.lower = 10,
                               latent = c("empirical", "normal"),
                               person_order = c("complete", "facility", "adjusted"),
                               propagate_item_error = FALSE,
@@ -250,7 +256,7 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
   p_value <- (1 + sum(null >= obs)) / (length(null) + 1)
   structure(list(observed = obs, null = sort(null),
                  percentile = percentile, p_value = p_value,
-                 reject = percentile >= cutoff, cutoff = cutoff,
+                 reject = p_value <= alpha, alpha = alpha, cutoff = cutoff,
                  check = check, N = n_obs, J = J, B = length(null),
                  n_failed = n_failed,
                  obs_tab = obs_tab, obs_counts = obs_counts,
@@ -284,6 +290,11 @@ print.ccnull <- function(x, ...) {
   if (is_kara && !is.null(x$kl_median)) {
     cat(sprintf("Per-cell KL      : median %.3f, Q3 %.3f, 90%% %.3f, max %.3f\n",
                 x$kl_median, x$kl_q3, x$kl_p90, x$kl_max))
+    if (!is.null(x$ess_min) && is.finite(x$ess_min)) {
+      cat(sprintf("Sampler ESS      : min %.0f, median %.0f%s\n", x$ess_min,
+                  x$ess_median,
+                  if (x$ess_min < 50) "  ** LOW - increase S **" else ""))
+    }
   }
   cat(sprintf("Percentile (p)   : %.1f%%  (p = %.3f)\n",
               100 * x$percentile, x$p_value))
@@ -366,8 +377,8 @@ plot.ccnull <- function(x, ...) {
 #' @seealso [cc_bootstrap_null()], [quant_fit()]
 #' @export
 cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"),
-                                   n.mat = 50, B = 100, cutoff = 0.95,
-                                   ss.lower = 10,
+                                   n.mat = 500, B = 100, cutoff = 0.95,
+                                   alpha = 0.05, ss.lower = 10,
                                    latent = c("empirical", "normal"),
                                    person_order = c("complete", "facility", "adjusted"),
                                    mc.cores = 1L, seed = NULL,
@@ -376,28 +387,34 @@ cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"
   levels <- match.arg(levels, c("single", "double", "triple"),
                       several.ok = TRUE)
   latent <- match.arg(latent)
-  out <- list(); attribution <- "none"; stopped_at <- NA_character_
+  # Run ALL requested levels, then Holm-adjust the family of p-values so the
+  # familywise error of "reject if any level rejects" is controlled at alpha.
+  # (The former stop-at-first-rejection sequence ran up to three ~alpha tests
+  # with no correction - FWER near 1-(1-alpha)^3, visible empirically as
+  # ~18% false rejection of true-Rasch data in the TID validation.)
+  out <- list()
   for (k in seq_along(levels)) {
     lv <- levels[k]
     if (verbose) cat("Level", k, "of", length(levels), ":", lv,
                      "cancellation...\n")
-    r <- cc_bootstrap_null(data, check = lv, n.mat = n.mat, B = B,
-                           cutoff = cutoff, ss.lower = ss.lower,
+    out[[lv]] <- cc_bootstrap_null(data, check = lv, n.mat = n.mat, B = B,
+                           cutoff = cutoff, alpha = alpha, ss.lower = ss.lower,
                            latent = latent, person_order = person_order,
                            mc.cores = mc.cores,
                            seed = if (!is.null(seed)) seed + k - 1L else NULL,
                            verbose = FALSE)
-    out[[lv]] <- r
-    stopped_at <- lv
-    if (isTRUE(r$reject)) {
-      attribution <- lv
-      if (verbose) cat("  rejected at the", lv, "level; deeper levels are ",
-                       "uninformative about additivity beyond this failure.\n")
-      break
-    }
   }
+  p_raw <- vapply(out, function(r) r$p_value, numeric(1))
+  p_adj <- stats::p.adjust(p_raw, method = "holm")
+  for (k in seq_along(out)) {
+    out[[k]]$p_adjusted <- p_adj[k]
+    out[[k]]$reject <- p_adj[k] <= alpha        # decision on ADJUSTED p
+  }
+  rejected <- names(out)[p_adj <= alpha]
+  attribution <- if (length(rejected)) rejected[1] else "none"
   structure(list(levels = out, attribution = attribution,
-                 stopped_at = stopped_at,
+                 stopped_at = levels[length(levels)],
+                 p_raw = p_raw, p_adjusted = p_adj, alpha = alpha,
                  supports_quant = identical(attribution, "none")),
             class = "cchier")
 }

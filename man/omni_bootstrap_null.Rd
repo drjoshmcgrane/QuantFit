@@ -8,8 +8,9 @@
 omni_bootstrap_null(
   data,
   n_bands = 6L,
-  B = 50,
+  B = 99,
   cutoff = 0.95,
+  alpha = 0.05,
   S = 10000,
   N_synth = 100,
   latent = c("empirical", "normal"),
@@ -31,6 +32,11 @@ kara_bootstrap_null(...)
 
 \item{cutoff}{Null percentile above which interval scaling is rejected
 (default 0.95).}
+
+\item{alpha}{Significance level: rejection is \code{p_value <= alpha}. B bounds
+the smallest attainable p at 1/(B+1); the default B = 99 supports 5\%
+decisions (B = 12-50 economy configs cannot reject at 0.05 or do so
+coarsely - treat their output as descriptive percentiles).}
 
 \item{S, N_synth}{Iterations and synthetic datasets for each \code{\link[=KaraChecks]{KaraChecks()}}
 run (defaults 10000, 100), used identically for the observed and null.}

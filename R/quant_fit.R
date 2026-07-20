@@ -193,6 +193,9 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
                               supports_quant = NA))
 
   # -- synthesise ---------------------------------------------------------
+  # NOT independent votes: the three routes share the data and (CC/Omni) the
+  # fitted-Rasch bootstrap machinery; their p-values are not comparable and
+  # agreement is a PATTERN OF EVIDENCE, not a combined test.
   votes <- c(lc$supports_quant, cc$supports_quant, omni$supports_quant)
   support <- sum(votes, na.rm = TRUE)
   n_avail <- sum(!is.na(votes))
