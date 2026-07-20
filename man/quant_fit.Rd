@@ -107,7 +107,7 @@ scaling?
 
 All three routes are calibrated the same way - a per-dataset parametric
 bootstrap, with the statistic located in a null distribution and interval
-scaling / the constrained model rejected above the \code{cc_cutoff} percentile.
+scaling / the constrained model rejected when the corrected bootstrap p-value is <= \code{alpha}.
 \strong{LC} bootstraps the likelihood-ratio statistic against its
 chi-bar-squared null (simulating from the fitted constrained model);
 \strong{CC} bootstraps the \code{\link[=ConjointChecks]{ConjointChecks()}} violation rate against a Rasch

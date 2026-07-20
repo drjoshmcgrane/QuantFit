@@ -23,7 +23,7 @@
 #' @details
 #' All three routes are calibrated the same way - a per-dataset parametric
 #' bootstrap, with the statistic located in a null distribution and interval
-#' scaling / the constrained model rejected above the `cc_cutoff` percentile.
+#' scaling / the constrained model rejected when the corrected bootstrap p-value is <= `alpha`.
 #' \strong{LC} bootstraps the likelihood-ratio statistic against its
 #' chi-bar-squared null (simulating from the fitted constrained model);
 #' \strong{CC} bootstraps the [ConjointChecks()] violation rate against a Rasch
@@ -234,11 +234,11 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   } else if (isTRUE(lc$supports_quant) && axiom_avail == 0) {
     "QUANTITATIVE MODEL, AXIOM CHECKS UNAVAILABLE - a quantitative model is selected, but neither conjoint-axiom route could be computed, so the additivity evidence is missing (not failed)."
   } else if (isTRUE(lc$supports_quant) && axiom_ok == axiom_avail) {
-    "QUANTITATIVE (well supported) - a quantitative model is selected and the conjoint axioms are satisfied; the routes converge."
+    "QUANTITATIVE (well supported) - a quantitative model is selected and the conjoint axiom tests do not reject; the routes converge."
   } else if (isTRUE(lc$supports_quant) && axiom_ok > 0) {
     "QUANTITATIVE (qualified) - a quantitative model is selected, but one axiom check shows departures from additivity; interpret with caution."
   } else if (isTRUE(lc$supports_quant)) {
-    "QUANTITATIVE MODEL, WEAK AXIOM SUPPORT - a quantitative model fits best, but the conjoint axioms are not satisfied; the interval interpretation is not tenable on the axiom evidence."
+    "QUANTITATIVE MODEL, WEAK AXIOM SUPPORT - a quantitative model fits best, but the conjoint axiom tests reject; the interval interpretation is not tenable on the axiom evidence."
   } else if (identical(lc_scale, "ordinal") && axiom_avail == 0) {
     "ORDINAL - model selection favours an ordinal structure (the conjoint-axiom routes could not be computed)."
   } else if (identical(lc_scale, "ordinal") && axiom_ok == axiom_avail) {
@@ -272,8 +272,10 @@ print.quantverdict <- function(x, ...) {
 
   cat("[LC]   Latent-structure model selection (raw data)\n")
   if (isTRUE(x$lc$available)) {
-    cat(sprintf("       selected %s (%d classes) - %s   [%s]\n",
-                x$lc$selected, x$lc$n_classes, x$lc$scale, yn(x$lc$supports_quant)))
+    cat(sprintf("       selected %s%s - %s   [%s]
+",
+                x$lc$selected,
+                if (identical(x$lc$selected, "RM")) "" else sprintf(" (%d classes)", x$lc$n_classes), x$lc$scale, yn(x$lc$supports_quant)))
   } else cat("       unavailable:", x$lc$msg, "\n")
 
   cat("[CC]   Cancellation checks vs Rasch bootstrap null (Student & Read)\n")

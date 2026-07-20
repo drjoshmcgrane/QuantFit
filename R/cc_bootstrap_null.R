@@ -381,7 +381,8 @@ plot.ccnull <- function(x, ...) {
 #' @param data Response matrix (persons x items), dichotomous or polytomous.
 #' @param levels Which levels to run, in order (default
 #'   `c("single", "double", "triple")`).
-#' @param person_order As in [cc_bootstrap_null()].
+#' @param person_order,alpha,null_method As in [cc_bootstrap_null()]; `alpha`
+#'   applies to the Holm-ADJUSTED family of p-values.
 #' @param n.mat,B,cutoff,ss.lower,latent,mc.cores,seed,verbose As in
 #'   [cc_bootstrap_null()]; each level uses `seed`, `seed + 1L`, `seed + 2L`.
 #'

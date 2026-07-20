@@ -45,6 +45,11 @@ Values above 1 use \code{\link[parallel:mclapply]{parallel::mclapply()}} on non-
 because each replicate is seeded independently, results are identical
 to the serial run regardless of \code{mc.cores}.}
 
+\item{reselect_C_range}{When non-NULL (a class-count range), every null
+replicate repeats UN-BIC class selection over this range before both
+models are refit (post-selection calibration; used by the quantitative
+gate). Default NULL: fixed class count.}
+
 \item{verbose}{Print progress every 10 replicates (default FALSE; ignored
 when \code{mc.cores > 1}).}
 }

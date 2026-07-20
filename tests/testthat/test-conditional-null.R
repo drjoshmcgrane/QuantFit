@@ -59,3 +59,27 @@ test_that("null_method routing: hierarchy forwards; poly uses conditional; no MM
   lockBinding(".conditional_null_general", env)
   expect_true(called2)
 })
+
+test_that("CML objective is consistent on non-centred random difficulties", {
+  # regression: the clipped-denominator seam drove the objective negative and
+  # failed CML on ordinary data (UN/MON/IIO/DM/RM all erred pre-fix)
+  set.seed(41); th <- rnorm(1500); b <- runif(10, -2, 2) + 0.7
+  d <- matrix(rbinom(1500 * 10, 1, plogis(outer(th, b, "-"))), 1500, 10)
+  storage.mode(d) <- "integer"
+  dl <- QuantFit:::.cml_fit_general(d)          # must not error
+  est <- vapply(dl, sum, numeric(1))
+  expect_gt(cor(est, b), 0.99)
+  expect_lt(max(abs(est)), 20)                  # non-boundary
+  expect_lt(abs(sum(unlist(dl))), 1e-6)         # exact sum-to-zero
+})
+
+test_that("conditional CC completes on the previously failing UN design", {
+  skip_on_cran()
+  u <- simulate_responses("UN", n_persons = 1200, n_items = 10,
+                          n_classes = 3, seed = 77)
+  u <- if (is.list(u)) u$data else u; storage.mode(u) <- "integer"
+  r <- suppressWarnings(cc_bootstrap_null(u, B = 19, n.mat = 30,
+                                          seed = 1, verbose = FALSE))
+  expect_s3_class(r, "ccnull")
+  expect_gt(r$B, 15)                            # replicates actually ran
+})

@@ -29,7 +29,8 @@ cc_bootstrap_hierarchy(
 \item{n.mat, B, cutoff, ss.lower, latent, mc.cores, seed, verbose}{As in
 \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}; each level uses \code{seed}, \code{seed + 1L}, \code{seed + 2L}.}
 
-\item{person_order}{As in \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}.}
+\item{person_order, alpha, null_method}{As in \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}; \code{alpha}
+applies to the Holm-ADJUSTED family of p-values.}
 }
 \value{
 An object of class \code{cchier}: a list with \code{levels} (the per-level

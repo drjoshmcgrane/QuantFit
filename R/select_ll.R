@@ -237,6 +237,10 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #'   Values above 1 use [parallel::mclapply()] on non-Windows platforms;
 #'   because each replicate is seeded independently, results are identical
 #'   to the serial run regardless of `mc.cores`.
+#' @param reselect_C_range When non-NULL (a class-count range), every null
+#'   replicate repeats UN-BIC class selection over this range before both
+#'   models are refit (post-selection calibration; used by the quantitative
+#'   gate). Default NULL: fixed class count.
 #' @param verbose Print progress every 10 replicates (default FALSE; ignored
 #'   when `mc.cores > 1`).
 #'
@@ -797,6 +801,9 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     tests <<- add_test(tests, label, t, ok)
     if (overridden && nrow(tests))
       tests$decision[nrow(tests)] <<- "retained (severity override: no detectable effect)"
+    t$label <- label
+    t$severity_override <- overridden
+    if (exists("g_null", inherits = FALSE)) t$severity_null <- g_null
     last_test_obj <<- t
     ok
   }
