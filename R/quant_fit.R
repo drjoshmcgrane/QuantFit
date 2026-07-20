@@ -29,7 +29,10 @@
 #' \strong{CC} bootstraps the [ConjointChecks()] violation rate against a Rasch
 #' null (Student & Read, 2025); \strong{Omni} bootstraps the Karabatsos global
 #' KL against a Rasch null. This makes the three routes statistically
-#' consistent and their p-values comparable, and removes every fixed threshold.
+#' consistent within each route. The three p-values are NOT mutually
+#' comparable (different statistics, different null constructions) and the
+#' routes share the data and null machinery: read agreement as a pattern of
+#' evidence, not as independent votes or a combined test.
 #'
 #' \strong{CC} runs on raw sum-score groups: because observed and null data
 #' share the pipeline, the null self-calibrates the baseline, so no ability
@@ -40,11 +43,11 @@
 #' as the row metric. Its bootstrap null passes each simulated dataset through
 #' the same banding. The verdict still reports Karabatsos's descriptive
 #' summaries (global KL and the per-cell KL distribution) alongside the
-#' bootstrap percentile.
+#' bootstrap p-value (decision: p <= alpha).
 #'
 #' The only heuristic that remains is the ordinal / classificatory /
 #' quantitative \emph{labelling} of the LC-selected model; every route's
-#' accept/reject decision is a bootstrap percentile.
+#' accept/reject decision is a bootstrap p-value (decision: p <= alpha).
 #'
 #' Two limitations are worth stating. First, the axiom procedures are
 #' under-powered below roughly 1000 examinees (Student & Read, 2025): at small
@@ -68,7 +71,7 @@
 #'   Rasch bootstrap null (default TRUE).
 #' @param cc_B Number of Rasch-simulated null datasets for the CC route
 #'   (default 100, passed to [cc_bootstrap_null()]).
-#' @param cc_cutoff Null percentile above which the CC \emph{and} Omni routes
+#' @param cc_cutoff Display-only null percentile reference for the CC and Omni
 #'   reject interval scaling (default 0.95); it is passed as the `cutoff` to
 #'   both [cc_bootstrap_null()] and [omni_bootstrap_null()].
 #' @param omni_S,omni_N_synth Iterations and synthetic datasets for each
@@ -113,9 +116,11 @@
 #' @export
 quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
                                 cc_n_mat = 500, triple = TRUE, cc_B = 100,
+                                alpha = 0.05,
+                                null_method = c("conditional_cml", "empirical_mml"),
                                 cc_cutoff = 0.95,
                                 omni_S = 10000, omni_N_synth = 100,
-                                omni_B = 50, B = 99,
+                                omni_B = 99, B = 99,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE,
                                 ...) {
 
@@ -174,12 +179,14 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
 
+  null_method <- match.arg(null_method)
   # -- Omni route: bootstrapped null for the global KL --------------------
   # Same per-dataset parametric-bootstrap logic as CC, applied to Karabatsos's
   # global KL on the ability-banded matrix (see omni_bootstrap_null()).
   if (verbose) cat("[Kara] bootstrapped Karabatsos KL test (banded)...\n")
   omni <- tryCatch({
     kn <- omni_bootstrap_null(data, n_bands = n_bands, B = omni_B,
+                              alpha = alpha, null_method = null_method,
                               cutoff = cc_cutoff, S = omni_S,
                               N_synth = omni_N_synth, mc.cores = mc.cores,
                               seed = if (!is.null(seed)) seed + 2L else NULL,

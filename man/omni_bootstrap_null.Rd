@@ -13,6 +13,7 @@ omni_bootstrap_null(
   alpha = 0.05,
   S = 10000,
   N_synth = 100,
+  null_method = c("conditional_cml", "empirical_mml"),
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),
   propagate_item_error = FALSE,
@@ -40,6 +41,16 @@ coarsely - treat their output as descriptive percentiles).}
 
 \item{S, N_synth}{Iterations and synthetic datasets for each \code{\link[=KaraChecks]{KaraChecks()}}
 run (defaults 10000, 100), used identically for the observed and null.}
+
+\item{null_method}{Null generator: \code{"conditional_cml"} (default) estimates
+items by conditional maximum likelihood and draws null patterns
+conditional on each person's (answered set, observed total score) - no
+ability estimation, exact preservation of score-group sizes and
+missingness footprints; supports dichotomous and polytomous data via
+generalized elementary symmetric functions. \code{"empirical_mml"} is the
+semiparametric marginal bootstrap (MML + Bock-Aitkin empirical latent,
+abilities redrawn per replicate), retained as the labelled sensitivity
+analysis.}
 
 \item{latent}{How person abilities are drawn in the null replicates:
 \code{"empirical"} (default) samples from the latent distribution estimated

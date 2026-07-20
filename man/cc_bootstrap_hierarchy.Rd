@@ -12,6 +12,7 @@ cc_bootstrap_hierarchy(
   cutoff = 0.95,
   alpha = 0.05,
   ss.lower = 10,
+  null_method = c("conditional_cml", "empirical_mml"),
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),
   mc.cores = 1L,
@@ -33,8 +34,9 @@ cc_bootstrap_hierarchy(
 \value{
 An object of class \code{cchier}: a list with \code{levels} (the per-level
 \code{ccnull} objects actually run), \code{attribution} (\code{"none"} when every level
-passes, otherwise the first rejecting level), \code{stopped_at} (the last level
-run), and \code{supports_quant} (\code{TRUE} iff no tested level rejects).
+passes, otherwise the first level whose HOLM-ADJUSTED p is <= alpha; all
+requested levels are always run), \code{p_raw}/\code{p_adjusted}, and
+\code{supports_quant} (\code{TRUE} iff no adjusted p rejects).
 }
 \description{
 Runs the calibrated cancellation checks in their logical order - single,

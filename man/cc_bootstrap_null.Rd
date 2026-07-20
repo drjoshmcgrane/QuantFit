@@ -12,6 +12,7 @@ cc_bootstrap_null(
   cutoff = 0.95,
   alpha = 0.05,
   ss.lower = 10,
+  null_method = c("conditional_cml", "empirical_mml"),
   latent = c("empirical", "normal"),
   person_order = c("complete", "facility", "adjusted"),
   propagate_item_error = FALSE,

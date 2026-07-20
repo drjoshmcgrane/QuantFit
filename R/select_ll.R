@@ -109,8 +109,8 @@ rasch_latent_var <- function(fit) {
 #' @keywords internal
 rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
                            alpha = 0.05, n_starts = 3, use_cpp = TRUE,
+                           C_range = NULL, boot_reselect = TRUE,
                            mc.cores = 1L, seed = NULL) {
-  obs <- BIC(fit_lcr_obj) - BIC(fit_rm_obj)     # negative favours LCR
   n <- nrow(data); J <- ncol(data)
   # marginal parametric bootstrap: redraw abilities from N(0, sigma^2).
   # Deliberately NORMAL (not the empirical latent density used by the CC/Kara
@@ -132,16 +132,44 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   }
   if (!is.null(seed)) set.seed(seed)
   rep_seeds <- sample.int(.Machine$integer.max, B)
+  # Post-selection calibration: the OBSERVED statistic uses a class count
+  # selected on the observed data (which flatters LCR there); holding that C
+  # fixed in the null replicates leaves the null BIC-differences too large and
+  # honest RM advantages land in the lower tail (external review; empirically
+  # 7/34 true-Rasch datasets mislabelled LCR). With boot_reselect the
+  # replicate re-runs the class-count selection over a neighbourhood grid
+  # (C_hat +/- 1 within C_range; LCR BIC criterion) so the null carries the
+  # selection variability of the two-stage statistic.
+  # FULL fixed-range profiling (no data-dependent grid): the statistic is
+  # min over C in C_range of BIC(LCR_C) minus BIC(RM) - "best discrete Rasch
+  # mixture vs continuous Rasch" - computed identically on observed and null
+  # data, so the bootstrap is calibrated without per-replicate re-selection.
+  grid <- if (boot_reselect && !is.null(C_range)) {
+    sort(unique(pmax(2L, C_range)))
+  } else n_classes
+  # PROFILED statistic, identical functional on observed and null data:
+  # min over the grid of BIC(LCR_C) minus BIC(RM). Profiling only in the
+  # null (earlier version) made observed and bootstrap statistics differ -
+  # not a calibrated post-selection bootstrap (external review).
+  obs_bics <- vapply(grid, function(C) {
+    if (C == n_classes) return(BIC(fit_lcr_obj))
+    f <- tryCatch(suppressWarnings(fit_lcr(data, C, n_starts = n_starts,
+                                           use_cpp = use_cpp)),
+                  error = function(e) NULL)
+    if (is.null(f)) NA_real_ else BIC(f)
+  }, numeric(1))
+  obs <- min(obs_bics, na.rm = TRUE) - BIC(fit_rm_obj)  # negative favours LCR
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
     d <- .impose_mask(sim_fn(), data)   # null replicates share the observed missingness
     rm_b <- tryCatch(suppressWarnings(fit_rm(d, verbose = FALSE)),
                      error = function(e) NULL)
-    lcr_b <- tryCatch(
-      suppressWarnings(fit_lcr(d, n_classes, n_starts = n_starts, use_cpp = use_cpp)),
-      error = function(e) NULL)
-    if (is.null(rm_b) || is.null(lcr_b)) return(NA_real_)
-    BIC(lcr_b) - BIC(rm_b)
+    fits <- lapply(grid, function(C) tryCatch(
+      suppressWarnings(fit_lcr(d, C, n_starts = n_starts, use_cpp = use_cpp)),
+      error = function(e) NULL))
+    bics <- vapply(fits, function(f) if (is.null(f)) NA_real_ else BIC(f), numeric(1))
+    if (is.null(rm_b) || all(is.na(bics))) return(NA_real_)
+    min(bics, na.rm = TRUE) - BIC(rm_b)
   }
   raw <- par_lapply(seq_len(B), boot_one, mc.cores)
   null <- vapply(raw, function(z)
@@ -151,6 +179,10 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   p_lower <- if (length(null) == 0L) NA_real_
              else (1 + sum(null <= obs)) / (length(null) + 1)
   list(statistic = obs, p_value = p_lower, null = sort(null),
+       grid = grid, obs_bics = obs_bics,
+       profiled_C = grid[which.min(obs_bics)],
+       profiled_bic = min(obs_bics, na.rm = TRUE),
+       B_effective = length(null), B_failed = B - length(null),
        available = length(null) > 0L, select_lcr = isTRUE(p_lower <= alpha))
 }
 
@@ -606,6 +638,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   # models require C >= 2, so the comparison uses the best fittable C >= 2;
   # a globally preferred C = 1 is surfaced as a warning.
   n_classes_table <- NULL
+  orig_C_range <- n_classes                 # full range, for bootstrap re-selection
   if (length(n_classes) > 1L) {
     if (verbose) cat("Selecting the number of classes over C =",
                      paste(range(n_classes), collapse = "-"), "...\n")
@@ -799,9 +832,20 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       } else {
         if (verbose) cat("Step 3: testing RM vs LCR (BIC bootstrap)...\n")
         rl <- rm_vs_lcr_test(data, fits$RM, fits$LCR, n_classes, B = B,
+                             C_range = orig_C_range,
                              alpha = alpha, n_starts = boot_n_starts,
                              use_cpp = use_cpp, mc.cores = mc.cores,
                              seed = if (!is.null(seed)) seed + 7000L else NULL)
+        # keep the returned object consistent with the profiled decision
+        if (isTRUE(rl$available) && !is.na(rl$profiled_C) &&
+            rl$profiled_C != n_classes) {
+          f2 <- tryCatch(suppressWarnings(fit_lcr(data, rl$profiled_C,
+                  n_starts = n_starts, use_cpp = use_cpp)),
+                  error = function(e) NULL)
+          if (!is.null(f2)) {
+            fits$LCR <- f2; bics["LCR"] <- BIC(f2); n_classes <- rl$profiled_C
+          }
+        }
         tests <- rbind(tests, data.frame(
           comparison = "RM vs LCR", statistic = rl$statistic,
           p_value = rl$p_value,
@@ -840,7 +884,9 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       B = B,
       method = method,
       n_classes = n_classes,
-      n_classes_table = n_classes_table
+      n_classes_table = n_classes_table,
+      rm_vs_lcr = if (exists("rl", inherits = FALSE)) rl else NULL,
+      quant_gate = if (exists("qg", inherits = FALSE)) qg else NULL
     ),
     class = "qlselect_ll"
   )

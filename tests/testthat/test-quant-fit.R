@@ -150,11 +150,14 @@ test_that("cc_bootstrap_hierarchy attributes failure to the first rejecting leve
   # unstructured LCA data: fails, and at the single level (ordering breaks)
   u <- simulate_responses("UN", n_persons = 1000, n_items = 10, n_classes = 3,
                           seed = 5)
-  h2 <- suppressWarnings(cc_bootstrap_hierarchy(u, B = 12, n.mat = 12, seed = 3,
+  # Holm across three levels: rejection needs min raw p <= alpha/3, so B must
+  # satisfy 1/(B+1) <= alpha/3 (B >= 59 at alpha = .05); B = 12 CANNOT reject
+  h2 <- suppressWarnings(cc_bootstrap_hierarchy(u, B = 119, n.mat = 12, seed = 3,
                                                 verbose = FALSE))
   expect_false(h2$supports_quant)
   expect_identical(h2$attribution, "single")
-  # sequential early stop: deeper levels not run after a rejection
-  expect_identical(names(h2$levels), "single")
-  expect_output(print(h2), "single-cancellation")
+  # all levels now run (Holm needs the full family); adjusted p drives both
+  expect_named(h2$levels, c("single", "double", "triple"))
+  expect_identical(h2$supports_quant, !any(h2$p_adjusted <= h2$alpha))
+  expect_true(all(h2$p_adjusted >= h2$p_raw))
 })

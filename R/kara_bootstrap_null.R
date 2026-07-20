@@ -115,6 +115,15 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #'   (default 0.95).
 #' @param S,N_synth Iterations and synthetic datasets for each [KaraChecks()]
 #'   run (defaults 10000, 100), used identically for the observed and null.
+#' @param null_method Null generator: `"conditional_cml"` (default) estimates
+#'   items by conditional maximum likelihood and draws null patterns
+#'   conditional on each person's (answered set, observed total score) - no
+#'   ability estimation, exact preservation of score-group sizes and
+#'   missingness footprints; supports dichotomous and polytomous data via
+#'   generalized elementary symmetric functions. `"empirical_mml"` is the
+#'   semiparametric marginal bootstrap (MML + Bock-Aitkin empirical latent,
+#'   abilities redrawn per replicate), retained as the labelled sensitivity
+#'   analysis.
 #' @param latent How person abilities are drawn in the null replicates:
 #'   `"empirical"` (default) samples from the latent distribution estimated
 #'   from the data, `"normal"` draws theta ~ N(0, sigma^2). See
@@ -159,11 +168,13 @@ band_by_score <- function(data, n_bands, person_order = "complete") {
 #' @export
 omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha = 0.05,
                                 S = 10000, N_synth = 100,
+                                null_method = c("conditional_cml", "empirical_mml"),
                                 latent = c("empirical", "normal"),
                                 person_order = c("complete", "facility", "adjusted"),
                                 propagate_item_error = FALSE,
                                 mc.cores = 1L, seed = NULL, verbose = TRUE) {
   latent <- match.arg(latent)
+  null_method <- match.arg(null_method)
   person_order <- match.arg(person_order)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
@@ -197,14 +208,15 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha
   }
   global_kl <- function(d) {
     kc <- kara_of(d)
-    if (is.null(kc)) NA_real_ else kc$global_KL
+    if (is.null(kc)) return(c(NA_real_, NA_real_))
+    e <- tryCatch(min(as.vector(kc$ESS), na.rm = TRUE), error = function(er) NA_real_)
+    c(kc$global_KL, e)                     # (statistic, sampler min ESS)
   }
 
   # 1. observed global KL + per-cell KL quantiles; seeded so the KaraChecks
   #    sampler is reproducible (it runs at mc.cores = 1 inside)
   if (verbose) cat("Computing observed Karabatsos global KL...\n")
   if (!is.null(seed)) set.seed(seed)   # covers the null-generator fit's starts
-  fit <- suppressWarnings(fit_rm(data, verbose = FALSE))  # null generator only
   kc_obs <- kara_of(data)
   if (is.null(kc_obs)) stop("Observed KaraChecks failed")
   obs <- kc_obs$global_KL
@@ -216,6 +228,16 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha
   ess <- tryCatch(as.vector(kc_obs$ESS), error = function(e) NULL)
   ess_min <- if (length(ess)) min(ess, na.rm = TRUE) else NA_real_
   ess_med <- if (length(ess)) stats::median(ess, na.rm = TRUE) else NA_real_
+
+  if (null_method == "conditional_cml") {
+    # CML items + patterns conditional on each person's (answered set, total
+    # score): no MML fit, no latent estimation, footprints preserved exactly;
+    # dichotomous AND polytomous via generalized ESF (conditional_null.R)
+    dl_cml <- .cml_fit_general(data)
+    sim_fn <- local(function() .conditional_null_general(data, dl_cml))
+    fit <- NULL
+  } else {
+  fit <- suppressWarnings(fit_rm(data, verbose = FALSE))  # null generator only
 
   # 2. parameters for a marginal parametric bootstrap (redraw abilities from
   #    N(0, sigma^2) per replicate, not the fixed EAP estimates)
@@ -246,6 +268,7 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha
       matrix(rbinom(n_obs * J, 1, plogis(outer(theta, b, "-"))), n_obs, J)
     }
   }
+  }  # end empirical_mml branch
 
   # 3. simulate B null datasets
   if (verbose) cat("Simulating", B, if (poly) "partial-credit" else "Rasch",
@@ -254,11 +277,14 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    tryCatch(global_kl(.impose_mask(sim_fn(), data)), error = function(e) NA_real_)
+    tryCatch(global_kl((if (null_method == "conditional_cml") sim_fn() else .impose_mask(sim_fn(), data))), error = function(e) c(NA_real_, NA_real_))
   }
   raw <- par_lapply(seq_len(B), boot_one, mc.cores)
   null <- vapply(raw, function(z)
-    if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
+    if (is.numeric(z) && length(z) >= 1L) z[1L] else NA_real_, numeric(1))
+  null_ess <- vapply(raw, function(z)
+    if (is.numeric(z) && length(z) >= 2L) z[2L] else NA_real_, numeric(1))
+  null_ess <- null_ess[!is.na(null)]        # align with retained statistics
   n_failed <- sum(is.na(null))
   null <- null[!is.na(null)]
   if (length(null) == 0L) stop("All ", B, " null simulations failed")
@@ -273,6 +299,11 @@ omni_bootstrap_null <- function(data, n_bands = 6L, B = 99, cutoff = 0.95, alpha
                  reject = p_value <= alpha, alpha = alpha, cutoff = cutoff,
                  kl_median = kl_q[1], kl_q3 = kl_q[2], kl_p90 = kl_q[3],
                  kl_max = kl_q[4], ess_min = ess_min, ess_median = ess_med,
+                 null_ess_min = if (all(is.na(null_ess))) NA_real_ else
+                   min(null_ess, na.rm = TRUE),
+                 null_ess_median = if (all(is.na(null_ess))) NA_real_ else
+                   stats::median(null_ess, na.rm = TRUE),
+                 null_ess_low_n = sum(null_ess < 50, na.rm = TRUE),
                  check = "omni-KL", N = n_obs, J = J,
                  B = length(null), n_failed = n_failed),
             class = "ccnull")

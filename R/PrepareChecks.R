@@ -124,6 +124,9 @@ PrepareChecks<-function(resp,ss.lower=10,collapse.columns=FALSE,
     }
     colSums(tmp, na.rm=TRUE)->n[[glab[k]]]
   }
+  if (length(N) < 3L) stop("Fewer than three usable score groups (>= ss.lower ",
+    "respondents each); with heavy missingness under person_order=\"complete\" ",
+    "consider person_order=\"facility\" or \"adjusted\".")
   do.call("rbind",N)->N
   do.call("rbind",n)->n
   colnames(N)<-colnames(n)<-colnames(resp)

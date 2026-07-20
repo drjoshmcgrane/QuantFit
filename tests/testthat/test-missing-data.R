@@ -98,8 +98,12 @@ test_that("impose_mask rank-matches and is a no-op on complete data", {
 test_that("cc_bootstrap_null runs and calibrates on masked additive data", {
   skip_on_cran()
   d <- gen_rasch_na(1200, 10, 0.15, seed = 7)
-  r <- suppressWarnings(cc_bootstrap_null(d, B = 12, n.mat = 12, seed = 3,
-                                          verbose = FALSE))
+  # heavy masking under the complete-case default cannot support score groups;
+  # the supported masked path is person_order = "facility"/"adjusted"
+  r <- suppressWarnings(suppressMessages(
+    cc_bootstrap_null(d, B = 19, n.mat = 12, person_order = "facility",
+                      seed = 3, verbose = FALSE)))
   expect_s3_class(r, "ccnull")
   expect_false(r$reject)                     # additive data, masked pipeline
+  expect_identical(r$reject, r$p_value <= r$alpha)
 })

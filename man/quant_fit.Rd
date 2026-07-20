@@ -15,7 +15,7 @@ quant_fit(
   cc_cutoff = 0.95,
   omni_S = 10000,
   omni_N_synth = 100,
-  omni_B = 50,
+  omni_B = 99,
   B = 99,
   mc.cores = 1L,
   seed = NULL,
@@ -43,7 +43,7 @@ Rasch bootstrap null (default TRUE).}
 \item{cc_B}{Number of Rasch-simulated null datasets for the CC route
 (default 100, passed to \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}).}
 
-\item{cc_cutoff}{Null percentile above which the CC \emph{and} Omni routes
+\item{cc_cutoff}{Display-only null percentile reference for the CC and Omni
 reject interval scaling (default 0.95); it is passed as the \code{cutoff} to
 both \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}} and \code{\link[=omni_bootstrap_null]{omni_bootstrap_null()}}.}
 
@@ -101,7 +101,10 @@ chi-bar-squared null (simulating from the fitted constrained model);
 \strong{CC} bootstraps the \code{\link[=ConjointChecks]{ConjointChecks()}} violation rate against a Rasch
 null (Student & Read, 2025); \strong{Omni} bootstraps the Karabatsos global
 KL against a Rasch null. This makes the three routes statistically
-consistent and their p-values comparable, and removes every fixed threshold.
+consistent within each route. The three p-values are NOT mutually
+comparable (different statistics, different null constructions) and the
+routes share the data and null machinery: read agreement as a pattern of
+evidence, not as independent votes or a combined test.
 
 \strong{CC} runs on raw sum-score groups: because observed and null data
 share the pipeline, the null self-calibrates the baseline, so no ability
@@ -112,11 +115,11 @@ ability bands by their Rasch ability estimate, with each band's mean ability
 as the row metric. Its bootstrap null passes each simulated dataset through
 the same banding. The verdict still reports Karabatsos's descriptive
 summaries (global KL and the per-cell KL distribution) alongside the
-bootstrap percentile.
+bootstrap p-value (decision: p <= alpha).
 
 The only heuristic that remains is the ordinal / classificatory /
 quantitative \emph{labelling} of the LC-selected model; every route's
-accept/reject decision is a bootstrap percentile.
+accept/reject decision is a bootstrap p-value (decision: p <= alpha).
 
 Two limitations are worth stating. First, the axiom procedures are
 under-powered below roughly 1000 examinees (Student & Read, 2025): at small

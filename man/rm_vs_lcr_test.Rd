@@ -13,6 +13,8 @@ rm_vs_lcr_test(
   alpha = 0.05,
   n_starts = 3,
   use_cpp = TRUE,
+  C_range = NULL,
+  boot_reselect = TRUE,
   mc.cores = 1L,
   seed = NULL
 )

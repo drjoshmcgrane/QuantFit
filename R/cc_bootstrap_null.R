@@ -139,11 +139,13 @@
 #' @export
 cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
                               cutoff = 0.95, alpha = 0.05, ss.lower = 10,
+                              null_method = c("conditional_cml", "empirical_mml"),
                               latent = c("empirical", "normal"),
                               person_order = c("complete", "facility", "adjusted"),
                               propagate_item_error = FALSE,
                               mc.cores = 1L, seed = NULL, verbose = TRUE) {
   latent <- match.arg(latent)
+  null_method <- match.arg(null_method)
   person_order <- match.arg(person_order)
   if (is.data.frame(data)) data <- as.matrix(data)
   poly <- .is_polytomous(data)
@@ -186,6 +188,14 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
 
   # 2. fit the (partial-credit) Rasch model for a marginal parametric bootstrap:
   #    redraw abilities from N(0, sigma^2) per replicate.
+  if (null_method == "conditional_cml") {
+    # CML items + patterns conditional on each person's (answered set, total
+    # score): no MML fit, no latent estimation, footprints preserved exactly;
+    # dichotomous AND polytomous via generalized ESF (conditional_null.R)
+    dl_cml <- .cml_fit_general(data)
+    sim_fn <- local(function() .conditional_null_general(data, dl_cml))
+    fit <- NULL
+  } else {
   fit <- suppressWarnings(fit_rm(data, verbose = FALSE))
   sigma <- sqrt(rasch_latent_var(fit))
   rmf <- attr(fit, "rm_fit")
@@ -219,6 +229,7 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
       matrix(rbinom(n_obs * J, 1, plogis(outer(theta, b, "-"))), n_obs, J)
     }
   }
+  }  # end empirical_mml branch
 
   # 3. simulate B null datasets and compute each violation rate
   if (verbose) cat("Simulating", B, if (poly) "partial-credit" else "Rasch",
@@ -228,7 +239,7 @@ cc_bootstrap_null <- function(data, check = "double", n.mat = 500, B = 100,
 
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
-    d <- .impose_mask(sim_fn(), data)   # null replicates share the observed missingness
+    d <- (if (null_method == "conditional_cml") sim_fn() else .impose_mask(sim_fn(), data))   # null replicates share the observed missingness
     p <- tryCatch(prep_fn(d), error = function(e) NULL)
     if (is.null(p) || nrow(p$N) < min_rows) {
       return(NA_real_)
@@ -296,8 +307,9 @@ print.ccnull <- function(x, ...) {
                   if (x$ess_min < 50) "  ** LOW - increase S **" else ""))
     }
   }
-  cat(sprintf("Percentile (p)   : %.1f%%  (p = %.3f)\n",
-              100 * x$percentile, x$p_value))
+  cat(sprintf("Percentile       : %.1f%%  (p = %.3f%s)\n",
+              100 * x$percentile, x$p_value,
+              if (!is.null(x$p_adjusted)) sprintf(", Holm-adj = %.3f", x$p_adjusted) else ""))
   cat(sprintf("Interval scaling : %s at the %.0f%% cutoff\n",
               if (x$reject) "REJECTED" else "not rejected", 100 * x$cutoff))
   if (x$reject && !is.null(x$obs_tab)) {
@@ -371,15 +383,17 @@ plot.ccnull <- function(x, ...) {
 #'
 #' @return An object of class `cchier`: a list with `levels` (the per-level
 #'   `ccnull` objects actually run), `attribution` (`"none"` when every level
-#'   passes, otherwise the first rejecting level), `stopped_at` (the last level
-#'   run), and `supports_quant` (`TRUE` iff no tested level rejects).
+#'   passes, otherwise the first level whose HOLM-ADJUSTED p is <= alpha; all
+#'   requested levels are always run), `p_raw`/`p_adjusted`, and
+#'   `supports_quant` (`TRUE` iff no adjusted p rejects).
 #'
 #' @seealso [cc_bootstrap_null()], [quant_fit()]
 #' @export
 cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"),
                                    n.mat = 500, B = 100, cutoff = 0.95,
                                    alpha = 0.05, ss.lower = 10,
-                                   latent = c("empirical", "normal"),
+                                   null_method = c("conditional_cml", "empirical_mml"),
+                              latent = c("empirical", "normal"),
                                    person_order = c("complete", "facility", "adjusted"),
                                    mc.cores = 1L, seed = NULL,
                                    verbose = TRUE) {
@@ -387,6 +401,7 @@ cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"
   levels <- match.arg(levels, c("single", "double", "triple"),
                       several.ok = TRUE)
   latent <- match.arg(latent)
+  null_method <- match.arg(null_method)
   # Run ALL requested levels, then Holm-adjust the family of p-values so the
   # familywise error of "reject if any level rejects" is controlled at alpha.
   # (The former stop-at-first-rejection sequence ran up to three ~alpha tests
@@ -399,6 +414,7 @@ cc_bootstrap_hierarchy <- function(data, levels = c("single", "double", "triple"
                      "cancellation...\n")
     out[[lv]] <- cc_bootstrap_null(data, check = lv, n.mat = n.mat, B = B,
                            cutoff = cutoff, alpha = alpha, ss.lower = ss.lower,
+                           null_method = null_method,
                            latent = latent, person_order = person_order,
                            mc.cores = mc.cores,
                            seed = if (!is.null(seed)) seed + k - 1L else NULL,
