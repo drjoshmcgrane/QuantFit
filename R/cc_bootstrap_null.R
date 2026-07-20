@@ -75,6 +75,12 @@
 #'   missing (see [PrepareChecks()]): `"complete"` (default) uses complete
 #'   cases only; `"facility"`/`"adjusted"` keep all respondents at the cost of
 #'   an extra-ordinal commensuration assumption. Identical on complete data.
+#' @param null_method Null generator: `"conditional_cml"` (default; CML item
+#'   estimation + null patterns drawn conditional on each person's answered
+#'   set and total score - no ability estimation, exact preservation of
+#'   score-group sizes and missingness footprints; dichotomous and
+#'   polytomous) or `"empirical_mml"` (semiparametric marginal bootstrap,
+#'   retained as the labelled sensitivity analysis).
 #' @param latent How person abilities are drawn in the null replicates.
 #'   `"empirical"` (default) samples from the latent distribution *estimated
 #'   from the data* (posterior mass at the quadrature nodes, the Bock-Aitkin

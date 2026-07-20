@@ -42,6 +42,13 @@ be attainable at all, and B >= 99 is recommended for decisions.}
 
 \item{ss.lower}{Minimum sum-score-group size passed to \code{\link[=PrepareChecks]{PrepareChecks()}}.}
 
+\item{null_method}{Null generator: \code{"conditional_cml"} (default; CML item
+estimation + null patterns drawn conditional on each person's answered
+set and total score - no ability estimation, exact preservation of
+score-group sizes and missingness footprints; dichotomous and
+polytomous) or \code{"empirical_mml"} (semiparametric marginal bootstrap,
+retained as the labelled sensitivity analysis).}
+
 \item{latent}{How person abilities are drawn in the null replicates.
 \code{"empirical"} (default) samples from the latent distribution \emph{estimated
 from the data} (posterior mass at the quadrature nodes, the Bock-Aitkin
