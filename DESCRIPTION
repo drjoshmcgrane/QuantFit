@@ -1,6 +1,6 @@
 Package: QuantFit
 Title: Checking Quantitative Structure in Item Response Data
-Version: 0.3.0
+Version: 0.3.1
 Authors@R: c(
     person("Josh", "McGrane", email = "drjoshmcgrane@gmail.com",
            role = c("aut", "cre")),
