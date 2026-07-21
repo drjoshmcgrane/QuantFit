@@ -186,6 +186,72 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
        available = length(null) > 0L, select_lcr = isTRUE(p_lower <= alpha))
 }
 
+#' Calibrated RM-vs-UN adequacy test (continuous quantitative edge)
+#'
+#' Tests whether the continuous Rasch model (RM) fits as well as the fully
+#' unconstrained model, by locating the observed likelihood-ratio statistic
+#' 2*(logLik_UN - logLik_RM) in a parametric-bootstrap null simulated from the
+#' fitted RM. This makes RM a first-class citizen in the selection lattice:
+#' quantitative structure can be admitted through the CONTINUOUS model
+#' directly, not only through the discrete latent-class Rasch (LCR) gate.
+#'
+#' Unlike a raw BIC comparison - which RM's extreme parsimony (J + 1
+#' parameters) wins even on genuinely ordinal data - the bootstrap null
+#' calibrates how large the UN-vs-RM likelihood gap can be *when RM is true*,
+#' so true-DM/IIO data (whose UN fit captures real structure RM cannot) yield
+#' an observed gap in the null's upper tail and RM is correctly rejected.
+#'
+#' @param data Binary response matrix.
+#' @param fit_rm_obj Fitted RM object (from [fit_rm()]).
+#' @param fit_un_obj Fitted UN qlfit at the selected class count.
+#' @param B Bootstrap replicates (default 99).
+#' @param alpha RM is adequate (quantitative admitted) when `p_value > alpha`.
+#' @param n_starts Random starts for the UN refits.
+#' @param use_cpp Use the compiled EM engine.
+#' @param mc.cores Cores for the bootstrap.
+#' @param seed Optional integer seed.
+#' @return A list with `statistic` (observed LR), `p_value` (P(null >= obs);
+#'   small => RM rejected), `null`, `B_effective`, `B_failed`, `available`,
+#'   and `rm_adequate` (`p_value > alpha`).
+#' @keywords internal
+rm_vs_un_test <- function(data, fit_rm_obj, fit_un_obj, B = 99,
+                          alpha = 0.05, n_starts = 3, use_cpp = TRUE,
+                          mc.cores = 1L, seed = NULL) {
+  n_obs <- nrow(data); J <- ncol(data)
+  C <- fit_un_obj$n_classes
+  lr_obs <- max(0, 2 * (fit_un_obj$loglik - fit_rm_obj$loglik))
+  beta <- fit_rm_obj$delta
+  sigma <- sqrt(rasch_latent_var(fit_rm_obj))
+  rmf <- attr(fit_rm_obj, "rm_fit")
+  if (!is.null(seed)) set.seed(seed)
+  rep_seeds <- sample.int(.Machine$integer.max, B)
+  boot_one <- function(b) {
+    set.seed(rep_seeds[b])
+    # simulate under the fitted RM (continuous-normal latent - the model whose
+    # adequacy is under test), impose the observed missingness
+    theta <- .rm_draw_theta(rmf, n_obs, sigma, "normal")
+    ds <- matrix(stats::rbinom(n_obs * J, 1,
+           stats::plogis(outer(theta, beta, "-"))), n_obs, J)
+    ds <- .impose_mask(ds, data); storage.mode(ds) <- "integer"
+    r2 <- tryCatch(suppressWarnings(fit_rm(ds, verbose = FALSE)),
+                   error = function(e) NULL)
+    u2 <- tryCatch(suppressWarnings(
+            refit_model_type("UN", ds, C, n_starts, use_cpp)),
+          error = function(e) NULL)
+    if (is.null(r2) || is.null(u2)) return(NA_real_)
+    max(0, 2 * (u2$loglik - r2$loglik))
+  }
+  raw <- par_lapply(seq_len(B), boot_one, mc.cores)
+  null <- vapply(raw, function(z)
+    if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
+  null <- null[!is.na(null)]
+  b_eff <- length(null)
+  p_value <- if (b_eff == 0L) NA_real_ else (1 + sum(null >= lr_obs)) / (b_eff + 1)
+  list(statistic = lr_obs, p_value = p_value, null = sort(null),
+       B_effective = b_eff, B_failed = B - b_eff,
+       available = b_eff > 0L, rm_adequate = isTRUE(p_value > alpha))
+}
+
 #' Refit a latent class model of a given type
 #'
 #' @param model_type One of "UN", "MON", "IIO", "DM", "LCR".
@@ -859,49 +925,43 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     }
   }
 
-  # -- Quantitative gate ----------------------------------------------------
-  # Does the parametric latent-class Rasch model fit as well as the fully
-  # unconstrained model? Testing LCR directly against UN - a single gate rather
-  # than a sequential DM-then-LCR path - avoids compounding the false-rejection
-  # rate, so genuinely quantitative data are not lost to the ordinal layer by
-  # chance. A separate alpha_quant governs this one demotion decision
-  # (the quantitative model is only overturned on strong evidence).
-  proceed_to_lcr <- FALSE
-  if (!is.null(fits$LCR)) {
-    if (verbose) cat("Quantitative gate: testing LCR vs UN...\n")
-    # the gate cannot resolve a level finer than the bootstrap p-value floor
-    # 1/(B+1); use the achievable threshold so it can still reject on the
-    # strongest evidence (observed LR beyond every null draw) at small B.
-    a_q <- alpha_quant
-    if (1 / (B + 1) > alpha_quant)
-      warning("B = ", B, " cannot resolve alpha_quant = ", alpha_quant,
-              " (p-value floor 1/(B+1) = ", signif(1/(B+1), 3),
-              "); the gate cannot reject at this B - increase B")
-    proceed_to_lcr <- isTRUE(test_adequate(fits$LCR, fits$UN, "LCR vs UN", 4000L,
-                                           a = a_q,
-                                           reselect_C_range = orig_C_range))
-  }
+  # -- Quantitative lattice edges (TI&D successive comparison) --------------
+  # Quantitative structure sits ABOVE double monotonicity: DM -> LCR (located,
+  # equal-interval discrete) -> RM (continuous). These are tested as ADJACENT
+  # edges - LCR vs DM, then RM vs LCR - NOT against the distant unconstrained
+  # model. Testing LCR against the nearby DM (rather than UN) is what lets a
+  # genuine continuous-Rasch dataset advance: its LCR-vs-UN gap is large only
+  # because UN has many free parameters, but its LCR-vs-DM gap is small. The
+  # former single LCR-vs-UN gate collapsed both edges into one distant test
+  # and demoted true continuous data to DM; restoring the successive edges
+  # fixes that while staying faithful to Torres Irribarra & Diakow.
+  if (1 / (B + 1) > alpha_quant)
+    warning("B = ", B, " cannot resolve alpha_quant = ", alpha_quant,
+            " (p-value floor 1/(B+1) = ", signif(1/(B+1), 3),
+            "); quantitative edges cannot reject at this B - increase B")
+  a_q <- alpha_quant
+  selected <- ordinal_selected
+  interpretation <- ordinal_interp
 
-  if (!proceed_to_lcr) {
-    selected <- ordinal_selected
-    interpretation <- ordinal_interp
-  } else {
-    {
-      # Step 3: continuous (RM) vs discrete (LCR), bootstrap-calibrated on the
-      # BIC difference against a null simulated from the fitted RM.
+  # Quant is reachable only once double monotonicity holds (order before
+  # quantity). LCR vs DM: does the equal-interval constraint fit as well as
+  # the ordinal double-monotone model?
+  if (identical(ordinal_selected, "DM") && !is.null(fits$LCR)) {
+    if (verbose) cat("Quantitative edge: testing LCR vs DM...\n")
+    lcr_ok <- isTRUE(test_adequate(fits$LCR, fits$DM, "LCR vs DM", 4000L, a = a_q))
+    if (lcr_ok) {
+      selected <- "LCR"
+      interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
       bics["LCR"] <- BIC(fits$LCR)
-      if (!is.null(fits$RM)) bics["RM"] <- BIC(fits$RM)
-      if (is.null(fits$RM)) {
-        selected <- "LCR"
-        interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
-      } else {
-        if (verbose) cat("Step 3: testing RM vs LCR (BIC bootstrap)...\n")
+      # LCR -> RM: does the continuous model fit as well as the discrete one?
+      if (!is.null(fits$RM)) {
+        bics["RM"] <- BIC(fits$RM)
+        if (verbose) cat("Quantitative edge: testing RM vs LCR...\n")
         rl <- rm_vs_lcr_test(data, fits$RM, fits$LCR, n_classes, B = B,
                              C_range = orig_C_range,
                              alpha = alpha, n_starts = boot_n_starts,
                              use_cpp = use_cpp, mc.cores = mc.cores,
                              seed = if (!is.null(seed)) seed + 7000L else NULL)
-        # keep the returned object consistent with the profiled decision
         if (isTRUE(rl$available) && !is.na(rl$profiled_C) &&
             rl$profiled_C != n_classes) {
           f2 <- tryCatch(suppressWarnings(fit_lcr(data, rl$profiled_C,
@@ -918,19 +978,9 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                      else if (rl$select_lcr) "discrete (LCR) supported"
                      else "continuous (RM) preferred",
           stringsAsFactors = FALSE))
-        if (!isTRUE(rl$available)) {
-          # bootstrap failed; fall back to the raw BIC comparison
-          if (bics["RM"] <= bics["LCR"]) {
-            selected <- "RM"
-            interpretation <- "QUANTITATIVE (continuous: Rasch model)"
-          } else {
-            selected <- "LCR"
-            interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
-          }
-        } else if (rl$select_lcr) {
-          selected <- "LCR"
-          interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
-        } else {
+        rm_pref <- if (!isTRUE(rl$available)) bics["RM"] <= bics["LCR"]
+                   else !rl$select_lcr
+        if (isTRUE(rm_pref)) {
           selected <- "RM"
           interpretation <- "QUANTITATIVE (continuous: Rasch model)"
         }
