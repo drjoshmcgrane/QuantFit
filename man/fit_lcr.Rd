@@ -80,6 +80,12 @@ constraint is \eqn{\sum_j \delta_j = 0})
 The LCR model implies interval-level measurement when it fits well, as the
 distance between class locations \eqn{\theta_c} can be interpreted on the same
 scale as item difficulties.
+
+Because finite-mixture likelihoods contain local modes, the first start uses
+a stable score-quantile initialization and subsequent starts use dispersed
+class locations, perturbed item parameters, and random mixing proportions.
+Repeating only small perturbations of the score start can converge every run
+to the same extreme-class mode and materially understate the LCR likelihood.
 }
 \examples{
 \dontrun{

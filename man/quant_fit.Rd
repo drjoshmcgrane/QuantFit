@@ -49,8 +49,9 @@ Rasch bootstrap null (default TRUE).}
 \item{alpha}{Significance level used by ALL routes (LC edge tests, CC
 Holm-adjusted family, Omni): decisions are \code{p <= alpha}.}
 
-\item{alpha_quant}{Level for the LC quantitative gate; defaults to
-\code{alpha} so one level governs every route unless overridden.}
+\item{alpha_quant}{Level for the LC quantitative lattice edges (LCR vs DM
+and RM vs LCR); defaults to \code{alpha} so one level governs every route unless
+overridden.}
 
 \item{null_method}{Null generator for CC and Omni: \code{"conditional_cml"}
 (default) or \code{"empirical_mml"}; see \code{\link[=cc_bootstrap_null]{cc_bootstrap_null()}}.}

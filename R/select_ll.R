@@ -95,9 +95,16 @@ rasch_latent_var <- function(fit) {
 #' when it fits better than the RM null would produce by chance. This keeps the
 #' final step of the hierarchy consistent with the bootstrap tests above.
 #'
-#' @param data Binary response matrix.
+#' @param data Binary or polytomous response matrix.
 #' @param fit_rm_obj,fit_lcr_obj Fitted RM and LCR models.
 #' @param n_classes Number of latent classes for LCR.
+#' @param C_range Class counts over which the observed and bootstrap LCR BIC is
+#'   profiled. `NULL` uses `n_classes` only.
+#' @param boot_reselect Logical; profile over `C_range` when `TRUE` (default).
+#'   `FALSE` keeps `n_classes` fixed.
+#' @param observed_fits Optional list of observed-data LCR fits aligned with
+#'   `C_range`. Supplying the already-profiled fits prevents a second random
+#'   optimisation pass from changing the observed statistic.
 #' @param alpha Significance level for choosing LCR over RM (default 0.05).
 #' @param B,n_starts,use_cpp,mc.cores,seed As in [select_model_ll()].
 #' @return A list with `statistic` (observed BIC difference), `p_value`
@@ -110,6 +117,7 @@ rasch_latent_var <- function(fit) {
 rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
                            alpha = 0.05, n_starts = 3, use_cpp = TRUE,
                            C_range = NULL, boot_reselect = TRUE,
+                           observed_fits = NULL,
                            mc.cores = 1L, seed = NULL) {
   n <- nrow(data); J <- ncol(data)
   # marginal parametric bootstrap: redraw abilities from N(0, sigma^2).
@@ -151,13 +159,23 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   # min over the grid of BIC(LCR_C) minus BIC(RM). Profiling only in the
   # null (earlier version) made observed and bootstrap statistics differ -
   # not a calibrated post-selection bootstrap (external review).
-  obs_bics <- vapply(grid, function(C) {
-    if (C == n_classes) return(BIC(fit_lcr_obj))
-    f <- tryCatch(suppressWarnings(fit_lcr(data, C, n_starts = n_starts,
-                                           use_cpp = use_cpp)),
-                  error = function(e) NULL)
+  if (!is.null(observed_fits) && length(observed_fits) != length(grid)) {
+    stop("observed_fits must be aligned with C_range")
+  }
+  obs_bics <- vapply(seq_along(grid), function(k) {
+    C <- grid[k]
+    f <- if (!is.null(observed_fits)) observed_fits[[k]] else NULL
+    if (is.null(observed_fits) && C == n_classes) f <- fit_lcr_obj
+    if (is.null(f) && is.null(observed_fits)) {
+      f <- tryCatch(suppressWarnings(fit_lcr(
+        data, C, n_starts = n_starts, use_cpp = use_cpp)),
+        error = function(e) NULL)
+    }
     if (is.null(f)) NA_real_ else BIC(f)
   }, numeric(1))
+  if (!any(is.finite(obs_bics))) {
+    stop("No observed LCR profile fit was available for RM-vs-LCR")
+  }
   obs <- min(obs_bics, na.rm = TRUE) - BIC(fit_rm_obj)  # negative favours LCR
   boot_one <- function(b) {
     set.seed(rep_seeds[b])
@@ -175,6 +193,12 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
   null <- vapply(raw, function(z)
     if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
   null <- null[!is.na(null)]
+  n_failed <- B - length(null)
+  if (n_failed > 0.1 * B) {
+    warning(n_failed, " of ", B,
+            " RM-vs-LCR bootstrap replicates failed and were dropped; ",
+            "the p-value uses B_effective = ", length(null))
+  }
   # lower-tail p (LCR favoured) with the (1 + .)/(B + 1) correction
   p_lower <- if (length(null) == 0L) NA_real_
              else (1 + sum(null <= obs)) / (length(null) + 1)
@@ -182,74 +206,8 @@ rm_vs_lcr_test <- function(data, fit_rm_obj, fit_lcr_obj, n_classes, B = 99,
        grid = grid, obs_bics = obs_bics,
        profiled_C = grid[which.min(obs_bics)],
        profiled_bic = min(obs_bics, na.rm = TRUE),
-       B_effective = length(null), B_failed = B - length(null),
+       B_effective = length(null), B_failed = n_failed,
        available = length(null) > 0L, select_lcr = isTRUE(p_lower <= alpha))
-}
-
-#' Calibrated RM-vs-UN adequacy test (continuous quantitative edge)
-#'
-#' Tests whether the continuous Rasch model (RM) fits as well as the fully
-#' unconstrained model, by locating the observed likelihood-ratio statistic
-#' 2*(logLik_UN - logLik_RM) in a parametric-bootstrap null simulated from the
-#' fitted RM. This makes RM a first-class citizen in the selection lattice:
-#' quantitative structure can be admitted through the CONTINUOUS model
-#' directly, not only through the discrete latent-class Rasch (LCR) gate.
-#'
-#' Unlike a raw BIC comparison - which RM's extreme parsimony (J + 1
-#' parameters) wins even on genuinely ordinal data - the bootstrap null
-#' calibrates how large the UN-vs-RM likelihood gap can be *when RM is true*,
-#' so true-DM/IIO data (whose UN fit captures real structure RM cannot) yield
-#' an observed gap in the null's upper tail and RM is correctly rejected.
-#'
-#' @param data Binary response matrix.
-#' @param fit_rm_obj Fitted RM object (from [fit_rm()]).
-#' @param fit_un_obj Fitted UN qlfit at the selected class count.
-#' @param B Bootstrap replicates (default 99).
-#' @param alpha RM is adequate (quantitative admitted) when `p_value > alpha`.
-#' @param n_starts Random starts for the UN refits.
-#' @param use_cpp Use the compiled EM engine.
-#' @param mc.cores Cores for the bootstrap.
-#' @param seed Optional integer seed.
-#' @return A list with `statistic` (observed LR), `p_value` (P(null >= obs);
-#'   small => RM rejected), `null`, `B_effective`, `B_failed`, `available`,
-#'   and `rm_adequate` (`p_value > alpha`).
-#' @keywords internal
-rm_vs_un_test <- function(data, fit_rm_obj, fit_un_obj, B = 99,
-                          alpha = 0.05, n_starts = 3, use_cpp = TRUE,
-                          mc.cores = 1L, seed = NULL) {
-  n_obs <- nrow(data); J <- ncol(data)
-  C <- fit_un_obj$n_classes
-  lr_obs <- max(0, 2 * (fit_un_obj$loglik - fit_rm_obj$loglik))
-  beta <- fit_rm_obj$delta
-  sigma <- sqrt(rasch_latent_var(fit_rm_obj))
-  rmf <- attr(fit_rm_obj, "rm_fit")
-  if (!is.null(seed)) set.seed(seed)
-  rep_seeds <- sample.int(.Machine$integer.max, B)
-  boot_one <- function(b) {
-    set.seed(rep_seeds[b])
-    # simulate under the fitted RM (continuous-normal latent - the model whose
-    # adequacy is under test), impose the observed missingness
-    theta <- .rm_draw_theta(rmf, n_obs, sigma, "normal")
-    ds <- matrix(stats::rbinom(n_obs * J, 1,
-           stats::plogis(outer(theta, beta, "-"))), n_obs, J)
-    ds <- .impose_mask(ds, data); storage.mode(ds) <- "integer"
-    r2 <- tryCatch(suppressWarnings(fit_rm(ds, verbose = FALSE)),
-                   error = function(e) NULL)
-    u2 <- tryCatch(suppressWarnings(
-            refit_model_type("UN", ds, C, n_starts, use_cpp)),
-          error = function(e) NULL)
-    if (is.null(r2) || is.null(u2)) return(NA_real_)
-    max(0, 2 * (u2$loglik - r2$loglik))
-  }
-  raw <- par_lapply(seq_len(B), boot_one, mc.cores)
-  null <- vapply(raw, function(z)
-    if (is.numeric(z) && length(z) == 1L) z else NA_real_, numeric(1))
-  null <- null[!is.na(null)]
-  b_eff <- length(null)
-  p_value <- if (b_eff == 0L) NA_real_ else (1 + sum(null >= lr_obs)) / (b_eff + 1)
-  list(statistic = lr_obs, p_value = p_value, null = sort(null),
-       B_effective = b_eff, B_failed = B - b_eff,
-       available = b_eff > 0L, rm_adequate = isTRUE(p_value > alpha))
 }
 
 #' Refit a latent class model of a given type
@@ -292,9 +250,9 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #' @param fit_un The fitted more-general (alternative) model: a qlfit object,
 #'   typically of type "UN" (or "DM" when the constrained model is "LCR").
 #' @param B Number of bootstrap replicates (default 99).
-#' @param n_starts Number of random starts for each bootstrap refit
-#'   (default 3; fewer than for the observed-data fits since the bootstrap
-#'   truth is close to the initialization heuristics).
+#' @param n_starts Number of random starts for each bootstrap refit. For a
+#'   calibrated edge this should match the optimisation effort used for the
+#'   observed fits.
 #' @param seed Optional integer seed. When supplied the entire procedure,
 #'   including all bootstrap refits, is deterministic.
 #' @param use_cpp Use the compiled C++ EM engine for the refits
@@ -304,9 +262,13 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #'   because each replicate is seeded independently, results are identical
 #'   to the serial run regardless of `mc.cores`.
 #' @param reselect_C_range When non-NULL (a class-count range), every null
-#'   replicate repeats UN-BIC class selection over this range before both
-#'   models are refit (post-selection calibration; used by the quantitative
-#'   gate). Default NULL: fixed class count.
+#'   replicate repeats BIC selection over this range before both edge models
+#'   are refit. The observed statistic must have used the same selection rule.
+#'   Default NULL: fixed class count.
+#' @param selection_model_type Model used for BIC enumeration when
+#'   `reselect_C_range` is supplied. `NULL` (default) uses the more-general edge
+#'   model. The automated selector uses `"UN"` because its observed ordinal
+#'   class count is selected by UN BIC.
 #' @param verbose Print progress every 10 replicates (default FALSE; ignored
 #'   when `mc.cores > 1`).
 #'
@@ -341,10 +303,12 @@ refit_model_type <- function(model_type, data, n_classes, n_starts, use_cpp) {
 #' (a negative value can only arise from Monte Carlo optimization noise and
 #' triggers a warning beyond a small tolerance).
 #'
-#' The same machinery applies to LCR vs DM, where LCR is nested with
-#' *fewer* parameters (equality constraints from the Rasch structure plus
-#' the ordering inequalities); simulating from the fitted LCR again gives a
-#' correctly calibrated null distribution.
+#' The same machinery applies to LCR vs DM. For dichotomous data LCR is nested
+#' with *fewer* parameters (equality constraints from the Rasch structure plus
+#' the ordering inequalities). For the package's polytomous extension the
+#' relationship need not be conventionally nested, but the identical
+#' fitted-null bootstrap still calibrates the observed likelihood-gap
+#' discrepancy without relying on a chi-square law.
 #'
 #' Replicates on which either refit fails are dropped; a warning is issued
 #' if more than 10 percent are lost. The bootstrap is parallelised over
@@ -370,6 +334,7 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
                                 B = 99, n_starts = 3, seed = NULL,
                                 use_cpp = TRUE, mc.cores = 1L,
                                 reselect_C_range = NULL,
+                                selection_model_type = NULL,
                                 verbose = FALSE) {
 
   if (!inherits(fit_constrained, "qlfit") || !inherits(fit_un, "qlfit")) {
@@ -391,10 +356,15 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
 
   type_c <- fit_constrained$model_type
   type_g <- fit_un$model_type
+  selection_type <- if (is.null(selection_model_type)) type_g
+                    else match.arg(selection_model_type, supported)
 
   # Observed statistic, guarded against optimization noise
   lr_obs <- 2 * (fit_un$loglik - fit_constrained$loglik)
-  if (lr_obs < -1e-6) {
+  # Differences of a few hundredths are routine numerical noise when the
+  # constrained and general optimisers land on the same boundary solution.
+  # Warn only when the inversion is large enough to indicate a missed mode.
+  if (lr_obs < -0.05) {
     warning("Observed LR statistic is negative (",
             formatC(lr_obs, format = "g", digits = 4),
             "): the general model has a lower log-likelihood than the ",
@@ -414,23 +384,21 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
     C_b <- n_classes
     fit_g_star <- NULL
     if (!is.null(reselect_C_range) && length(reselect_C_range) > 1L) {
-      # POST-SELECTION CALIBRATION (external review): the observed statistic
-      # is two-stage - C selected by UN BIC on the observed data, then the
-      # LR computed at that C. Repeat the SAME selection inside every
-      # replicate so the null carries the selection variability; holding the
-      # observed C fixed made the null too favourable to the general model
-      # (the RM->DM leak at the quantitative gate).
-      g_fits <- lapply(reselect_C_range, function(C) tryCatch(
-        suppressWarnings(refit_model_type(type_g, boot_data, C,
+      # POST-SELECTION CALIBRATION: the observed statistic is two-stage - C is
+      # selected by the designated model's BIC, then LR is computed at that C.
+      # Repeat the same selection inside every replicate so the null carries
+      # the selection variability.
+      s_fits <- lapply(reselect_C_range, function(C) tryCatch(
+        suppressWarnings(refit_model_type(selection_type, boot_data, C,
                                           n_starts, use_cpp)),
         error = function(e) NULL))
-      g_bics <- vapply(g_fits, function(f)
+      s_bics <- vapply(s_fits, function(f)
         if (is.null(f)) NA_real_ else BIC(f), numeric(1))
-      usable <- which(is.finite(g_bics) & reselect_C_range >= 2L)
+      usable <- which(is.finite(s_bics) & reselect_C_range >= 2L)
       if (length(usable)) {
-        pick <- usable[which.min(g_bics[usable])]
+        pick <- usable[which.min(s_bics[usable])]
         C_b <- reselect_C_range[pick]
-        fit_g_star <- g_fits[[pick]]
+        if (selection_type == type_g) fit_g_star <- s_fits[[pick]]
       }
     }
     fit_c_star <- tryCatch(
@@ -501,17 +469,23 @@ ll_equivalence_test <- function(data, fit_constrained, fit_un,
 #' @param fit_constrained,fit_general Fitted qlfit objects (the LR is
 #'   \eqn{2(\ell_g - \ell_c)} refitted on data simulated from `fit_general`).
 #' @param B,n_starts,seed,use_cpp,mc.cores As in [ll_equivalence_test()].
+#' @param reselect_C_range,selection_model_type As in [ll_equivalence_test()];
+#'   the severity reference must repeat the same class-selection statistic.
 #' @return Sorted numeric vector of LR draws (length <= B; failures dropped),
 #'   or `NULL` if every replicate failed.
 #' @keywords internal
 ll_general_null <- function(data, fit_constrained, fit_general,
                             B = 99, n_starts = 3, seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L,
-                            reselect_C_range = NULL) {
+                            reselect_C_range = NULL,
+                            selection_model_type = NULL) {
   n_obs <- nrow(data)
   n_classes <- fit_constrained$n_classes
   type_c <- fit_constrained$model_type
   type_g <- fit_general$model_type
+  supported <- c("UN", "MON", "IIO", "DM", "LCR")
+  selection_type <- if (is.null(selection_model_type)) type_g
+                    else match.arg(selection_model_type, supported)
   if (!is.null(seed)) set.seed(seed)
   rep_seeds <- sample.int(.Machine$integer.max, B)
   boot_one <- function(b) {
@@ -520,17 +494,20 @@ ll_general_null <- function(data, fit_constrained, fit_general,
     # the severity comparison must use the SAME statistic as the primary
     # null: when the gate reselects C per replicate, so must this
     if (!is.null(reselect_C_range) && length(reselect_C_range) > 1L) {
-      g_fits <- lapply(reselect_C_range, function(C) tryCatch(
-        suppressWarnings(refit_model_type(type_g, boot_data, C,
+      s_fits <- lapply(reselect_C_range, function(C) tryCatch(
+        suppressWarnings(refit_model_type(selection_type, boot_data, C,
                                           n_starts, use_cpp)),
         error = function(e) NULL))
-      g_bics <- vapply(g_fits, function(f)
+      s_bics <- vapply(s_fits, function(f)
         if (is.null(f)) NA_real_ else BIC(f), numeric(1))
-      usable <- which(is.finite(g_bics) & reselect_C_range >= 2L)
+      usable <- which(is.finite(s_bics) & reselect_C_range >= 2L)
       if (length(usable)) {
-        pick <- usable[which.min(g_bics[usable])]
+        pick <- usable[which.min(s_bics[usable])]
         C_b <- reselect_C_range[pick]
-        fit_g_star <- g_fits[[pick]]
+        fit_g_star <- if (selection_type == type_g) s_fits[[pick]] else
+          tryCatch(suppressWarnings(refit_model_type(
+            type_g, boot_data, C_b, n_starts, use_cpp)),
+            error = function(e) NULL)
         fit_c_star <- tryCatch(suppressWarnings(
           refit_model_type(type_c, boot_data, C_b, n_starts, use_cpp)),
           error = function(e) NULL)
@@ -590,10 +567,13 @@ print.qleqtest <- function(x, ...) {
 #'
 #' @param data Binary response matrix (persons x items).
 #' @param n_classes Number of latent classes for the discrete models. May be
-#'   a single integer, or a vector (e.g. `1:6`), in which case the class count
-#'   is selected first by BIC with [select_n_classes()] and the structural
-#'   comparison is run at the chosen count (the enumeration table is returned
-#'   as `n_classes_table`).
+#'   a single integer, or a vector (e.g. `1:6`), in which case the ordinal class
+#'   count is selected first by UN BIC with [select_n_classes()]. If DM is
+#'   reached, that UN enumeration is repeated inside every ordinal-edge
+#'   bootstrap replicate so the p-values include class-count selection. The
+#'   LCR-vs-DM bridge instead uses the fixed equivalence count
+#'   implied by test length. The supplied range (augmented by that bridge count)
+#'   is used to profile LCR for the final RM-vs-LCR grain comparison.
 #' @param alpha Significance level for the bootstrap tests (default 0.05).
 #'   A constrained model is deemed *adequate* when its bootstrap p-value
 #'   exceeds `alpha`, i.e. the constraints are rejected when
@@ -601,35 +581,28 @@ print.qleqtest <- function(x, ...) {
 #'   \eqn{(1 + \#\{LR^* \ge LR\})/(B+1)} this is an exact level-\eqn{\alpha}
 #'   Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 #'   (e.g. `B = 99`, `alpha = 0.05`).
-#' @param alpha_quant Significance level for the single quantitative gate
-#'   (LCR vs UN), default 0.05 (the conventional level; with `B = 99` this is
-#'   an exact level-0.05 Monte Carlo test). This governs the one decision that
-#'   demotes a fitted quantitative model to the ordinal layer. True
-#'   quantitative models are protected from chance upper-tail rejections by
-#'   the estimated-power check (a rejection must also separate from the
-#'   general model's reference distribution), so the conventional level does
-#'   not carry the compounded false-demotion cost it would in a plain
-#'   sequential procedure; lower it (e.g. 0.01) to demote the quantitative
-#'   model only on stronger evidence, at the cost of letting more
-#'   near-additive ordinal data pass as quantitative.
+#' @param alpha_quant Significance level for the quantitative edges (LCR vs DM
+#'   and RM vs LCR), default 0.05. The corrected bootstrap p-value has floor
+#'   `1 / (B + 1)`, so `B = 99` can resolve a level-0.05 decision.
 #' @param B Number of bootstrap replicates per test (default 99).
 #' @param n_starts Number of random starts for the observed-data fits
 #'   (default 5).
-#' @param boot_n_starts Number of random starts for each bootstrap refit
-#'   (default 3).
-#' @param method How the ordinal layer is tested. `"joint"` (default) tests
-#'   the doubly-monotone model directly against UN and only falls back to the
-#'   single-constraint models on rejection. `"lattice"` instead tests each
-#'   constraint edge separately and accepts the deepest model reachable by
-#'   non-rejected edges (MON vs UN, IIO vs UN, then the DM increments
-#'   DM vs IIO / DM vs MON). The lattice method is more principled - it gives
-#'   each constraint family its own targeted test - but in a paired
-#'   simulation study (n = 1000, J = 10, C = 3, 30 replicates per generating
-#'   model) the two methods were statistically indistinguishable on both
-#'   overall recovery and the rate of scale-type errors, while lattice costs
-#'   roughly twice the computation (up to five bootstrap tests per data set
-#'   rather than one to three). `"joint"` is therefore the default;
-#'   `"lattice"` is available for users who prefer the edge-wise procedure.
+#' @param boot_n_starts Number of random starts for each bootstrap refit.
+#'   `NULL` (the default) uses `n_starts`, ensuring that observed and bootstrap
+#'   statistics use the same optimisation effort.
+#' @param method How the ordinal layer is tested. `"lattice"` (default) tests
+#'   each constraint edge separately and accepts the deepest model supported by
+#'   both parent paths (MON vs UN, IIO vs UN, DM vs IIO, and DM vs MON).
+#'   The lattice method is more principled - it gives
+#'   each constraint family its own targeted test and follows Torres Irribarra
+#'   and Diakow's successive-comparison diagram. `"joint"` is retained as a
+#'   faster alternative that tests DM directly against UN before falling back
+#'   to the single-constraint models.
+#' @param severity Logical; when `TRUE`, a significant edge rejection can be
+#'   overridden if a second bootstrap from the fitted general model shows no
+#'   detectable separation from the null. The default is `FALSE`: the
+#'   automated TI&D lattice then follows the corrected edge p-values without a
+#'   post-hoc override.
 #' @param seed Optional integer seed; makes the whole procedure
 #'   deterministic.
 #' @param use_cpp Use the compiled C++ EM engine (default TRUE).
@@ -650,18 +623,25 @@ print.qleqtest <- function(x, ...) {
 #'     \item{bics}{Named numeric BIC values for LCR and RM (NA when that
 #'       step was not reached or a fit failed).}
 #'     \item{fits}{Named list of the fitted models (failed fits are NULL).}
+#'     \item{lcr_vs_dm,rm_vs_lcr}{Detailed quantitative-edge test objects, or
+#'       `NULL` when an edge was not reached.}
+#'     \item{quant_fits}{The fixed-grain DM/LCR bridge fits and profiled LCR
+#'       fits used by the quantitative layer.}
 #'     \item{alpha, B}{The settings used.}
 #'   }
 #'
 #' @details
-#' The procedure walks the paper's hierarchy UN -> MON -> IIO -> DM ->
-#' LCR -> RM in three steps:
+#' The procedure automates the paper's partial-order lattice: UN has the two
+#' single-order children MON and IIO; their intersection is DM; and DM is the
+#' ordinal parent of the discrete quantitative LCR, which in turn is the parent
+#' of the continuous RM. The final RM-vs-LCR comparison resolves
+#' continuity/grain size.
 #'
 #' \enumerate{
 #'   \item \strong{Ordinal structure.} The way this layer is tested depends
 #'     on `method`.
 #'
-#'     With `method = "joint"` (the default), DM (the most constrained
+#'     With `method = "joint"`, DM (the most constrained
 #'     ordinal model) is tested against UN directly with
 #'     [ll_equivalence_test()]. If DM is adequate (p > `alpha`) it becomes
 #'     the ordinal candidate and the procedure continues to step 2.
@@ -673,36 +653,62 @@ print.qleqtest <- function(x, ...) {
 #'
 #'     With `method = "lattice"`, each edge of the constraint lattice is
 #'     tested instead: MON vs UN and IIO vs UN establish whether each single
-#'     constraint holds, and DM is reached only when one of them holds
-#'     \emph{and} the corresponding increment edge is not rejected - DM vs
+#'     constraint holds, and DM is reached only when both parents and both
+#'     increment edges are supported - DM vs
 #'     IIO tests the added monotonicity given invariant ordering, DM vs MON
-#'     tests the added ordering given monotonicity. The deepest model
-#'     reachable by a path of non-rejected edges is selected; if both single
-#'     constraints hold but the DM increment is rejected from either parent,
-#'     the better-fitting single ordinal model is kept. This gives each
-#'     constraint family its own targeted test at roughly twice the
-#'     computational cost, with recovery performance that matched the joint
-#'     method in simulation.
+#'     tests the added ordering given monotonicity. A rejection on either
+#'     parent path blocks DM. Otherwise the
+#'     better-fitting supported single ordinal model is kept.
 #'   \item \strong{Discrete quantitative structure} (reached only when DM
-#'     was adequate). LCR is tested against DM the same way: LCR is nested
+#'     was adequate). LCR is tested against DM at the fixed support-point count
+#'     \eqn{C_{bridge} = \lceil(S+1)/2\rceil}, where \eqn{S} is the maximum
+#'     total score (for dichotomous data this is
+#'     \eqn{\lceil(J+1)/2\rceil}). This is the minimum grain in the equivalence
+#'     result used by Torres Irribarra and Diakow, and it removes data-driven
+#'     class-count choice from the scale comparison. LCR is nested
 #'     in DM with strictly fewer parameters (the Rasch structure imposes
 #'     equality constraints on top of the orderings), so
 #'     \eqn{LR = 2(\ell_{DM} - \ell_{LCR})} is bootstrapped by simulating
-#'     from the fitted LCR and refitting both models. If LCR is adequate it
-#'     becomes the quantitative candidate; otherwise DM is selected
-#'     (ORDINAL interpretation).
-#'   \item \strong{Continuous quantitative structure.} RM (continuous) and
-#'     LCR (discrete) are non-nested and estimated with different machinery
-#'     (mirt marginal maximum likelihood over a continuous latent density vs
-#'     the EM algorithm over discrete classes), so a likelihood-ratio
-#'     bootstrap is not clean. Instead the BIC difference
+#'     from the fitted LCR and refitting both models.
+#'   \item \strong{Continuous quantitative structure.} Once the LCR-vs-DM
+#'     bridge supports quantity, the non-nested BIC difference
 #'     \eqn{BIC_{LCR} - BIC_{RM}} is calibrated against a null simulated from
-#'     the fitted RM: the discrete LCR is selected (QUANTITATIVE, discrete)
+#'     the fitted RM. LCR is profiled over the supplied class-count range (plus
+#'     the bridge count), using the identical profile in observed and null data.
+#'     The discrete LCR is selected (QUANTITATIVE, discrete)
 #'     only when it fits better than the RM null would produce by chance,
 #'     otherwise the continuous Rasch model is selected (QUANTITATIVE,
-#'     continuous). This keeps the final step consistent with the
-#'     bootstrap-calibrated tests above rather than a raw BIC comparison.
+#'     continuous).
 #' }
+#'
+#' The support-point equivalence result cited by Torres Irribarra and Diakow is
+#' for dichotomous Rasch data. For partial-credit data this implementation uses
+#' the analogous bound based on the number of possible total-score levels. That
+#' polytomous step is a conservative extension of, not a result evaluated in,
+#' the original simulation study. The equivalence argument also assumes a
+#' common complete-data sufficient score. With missing responses the package
+#' preserves the observed mask in every bootstrap replicate, but reports a
+#' warning because the fixed support-point bound is no longer exact.
+#'
+#' `fit_rm()` is a marginal normal-latent Rasch fit. Therefore the last
+#' RM-vs-LCR comparison distinguishes a discrete mixing distribution from this
+#' particular continuous-normal model; it is not a distribution-free test of
+#' metaphysical continuity. A non-normal continuous population may be labelled
+#' LCR, although both outcomes retain the same quantitative scale-type verdict.
+#'
+#' The paper used BIC patterns plus inspection of fitted constraints. This
+#' function automates the same conceptual succession but replaces the manual
+#' decisions with fitted-null bootstrap tests. Consequently it is a calibrated
+#' operationalisation of the TI&D lattice, not a byte-for-byte reproduction of
+#' the paper's original BIC decision rule. Non-rejection means that an edge was
+#' not contradicted at the requested sample size; it is not proof that the
+#' constraint is true. Requiring both paths to DM is deliberately conservative.
+#' `alpha` and `alpha_quant` are per-edge levels: the function does not claim
+#' familywise type-I error control over the complete, data-dependent path. A
+#' true model deep in the lattice can therefore be stopped by a chance
+#' rejection at any preceding edge, so exact model-recovery probability is not
+#' generally `1 - alpha`. Users who want fewer such demotions can specify lower
+#' edge levels, accepting less power to detect violations.
 #'
 #' \strong{Why bootstrap rather than chi-square?} UN, MON, IIO, and DM all
 #' have the same number of free parameters; the ordinal models differ from
@@ -712,12 +718,11 @@ print.qleqtest <- function(x, ...) {
 #' cannot separate the models at all. The parametric bootstrap calibrates
 #' the test without deriving the mixture weights.
 #'
-#' \strong{Computational cost.} Each bootstrap test refits two models on
-#' each of `B` datasets. With the compiled EM engine a single fit takes on
-#' the order of tens of milliseconds at moderate n, so the default `B = 99`
-#' costs a few seconds per test and the full procedure typically runs 2-3
-#' tests. Supplying `seed` makes every fit and every bootstrap draw
-#' reproducible.
+#' \strong{Computational cost.} The complete path performs up to four ordinal
+#' edge tests and two quantitative tests. The profiled RM-vs-LCR bootstrap fits
+#' LCR at every supplied class count in every replicate, so `B = 99` can take
+#' minutes per dataset at study-sized samples. `mc.cores` parallelises
+#' replicates. Supplying `seed` makes every fit and draw reproducible.
 #'
 #' @references
 #' Torres Irribarra, D., & Diakow, R. Categorization, Ordering and
@@ -740,12 +745,14 @@ print.qleqtest <- function(x, ...) {
 #' }
 #' @export
 select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
-                            B = 99, n_starts = 5, boot_n_starts = 3,
-                            method = c("joint", "lattice"), seed = NULL,
+                            B = 99, n_starts = 5, boot_n_starts = NULL,
+                            method = c("lattice", "joint"), severity = FALSE,
+                            seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
                             ...) {
 
   method <- match.arg(method)
+  if (is.null(boot_n_starts)) boot_n_starts <- n_starts
   data <- validate_data_any(data, allow_na = TRUE)
 
   # Optional first stage: if a range of class counts is supplied, select the
@@ -815,12 +822,14 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       stringsAsFactors = FALSE))
   }
 
-  run_test <- function(fit_c, fit_g, seed_offset, reselect_C_range = NULL) {
+  run_test <- function(fit_c, fit_g, seed_offset, reselect_C_range = NULL,
+                       selection_model_type = NULL) {
     ll_equivalence_test(
       data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
       seed = if (!is.null(seed)) seed + seed_offset else NULL,
       use_cpp = use_cpp, mc.cores = mc.cores,
-      reselect_C_range = reselect_C_range, verbose = verbose)
+      reselect_C_range = reselect_C_range,
+      selection_model_type = selection_model_type, verbose = verbose)
   }
 
   bics <- c(LCR = NA_real_, RM = NA_real_)
@@ -847,23 +856,26 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   # NULL fits yield NA (no test performed).
   last_test_obj <- NULL
   test_adequate <- function(fit_c, fit_g, label, seed_offset, a = alpha,
-                            reselect_C_range = NULL) {
+                            reselect_C_range = NULL,
+                            selection_model_type = NULL) {
     if (is.null(fit_c) || is.null(fit_g)) return(NA)
-    t <- run_test(fit_c, fit_g, seed_offset, reselect_C_range)
+    t <- run_test(fit_c, fit_g, seed_offset, reselect_C_range,
+                  selection_model_type)
     ok <- t$p_value > a
-    if (!ok) {
+    if (!ok && isTRUE(severity)) {
       g_null <- ll_general_null(
         data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
         seed = if (!is.null(seed)) seed + seed_offset + 500L else NULL,
         use_cpp = use_cpp, mc.cores = mc.cores,
-        reselect_C_range = reselect_C_range)
+        reselect_C_range = reselect_C_range,
+        selection_model_type = selection_model_type)
       if (!is.null(g_null)) {
         separated <- stats::median(g_null) >
           stats::quantile(t$null_distribution, 0.95, names = FALSE)
         if (!separated) ok <- TRUE   # models indistinguishable -> parsimony
       }
     }
-    overridden <- ok && t$p_value <= a
+    overridden <- isTRUE(severity) && ok && t$p_value <= a
     tests <<- add_test(tests, label, t, ok)
     if (overridden && nrow(tests))
       tests$decision[nrow(tests)] <<- "retained (severity override: no detectable effect)"
@@ -876,21 +888,28 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
 
   # -- Ordinal / nominal layer ---------------------------------------------
   # Identify the most restrictive ORDINAL model supported (UN, MON, IIO, or DM).
-  # This is the fallback used when the data do not support the parametric
-  # quantitative model tested at the gate below.
+  # This is the parent/fallback for the quantitative lattice edges below.
   ordinal_selected <- "UN"
   ordinal_interp <- "CLASSIFICATORY (no ordinal structure supported)"
+  ordinal_C_grid <- sort(unique(as.integer(
+    orig_C_range[orig_C_range >= 2L])))
+  if (length(ordinal_C_grid) <= 1L) ordinal_C_grid <- NULL
+  ordinal_test <- function(fit_c, fit_g, label, seed_offset) {
+    test_adequate(fit_c, fit_g, label, seed_offset,
+      reselect_C_range = ordinal_C_grid,
+      selection_model_type = if (is.null(ordinal_C_grid)) NULL else "UN")
+  }
 
   if (method == "joint") {
     if (verbose) cat("Ordinal layer (joint): testing DM vs UN...\n")
-    if (isTRUE(test_adequate(fits$DM, fits$UN, "DM vs UN", 1000L))) {
+    if (isTRUE(ordinal_test(fits$DM, fits$UN, "DM vs UN", 1000L))) {
       ordinal_selected <- "DM"
       ordinal_interp <- "ORDINAL (double monotonicity)"
     } else {
       candidates <- list()
-      if (isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L)))
+      if (isTRUE(ordinal_test(fits$IIO, fits$UN, "IIO vs UN", 2000L)))
         candidates$IIO <- fits$IIO
-      if (isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L)))
+      if (isTRUE(ordinal_test(fits$MON, fits$UN, "MON vs UN", 3000L)))
         candidates$MON <- fits$MON
       if (length(candidates) > 0L) {
         lls <- vapply(candidates, function(f) f$loglik, numeric(1))
@@ -901,17 +920,21 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     }
   } else {
     # Lattice: test each constraint edge and accept the deepest ordinal model
-    # reachable by a path of non-rejected edges.
+    # supported on both complete parent paths.
     if (verbose) cat("Ordinal layer (lattice): testing constraint edges...\n")
-    mon_ok <- isTRUE(test_adequate(fits$MON, fits$UN, "MON vs UN", 3000L))
-    iio_ok <- isTRUE(test_adequate(fits$IIO, fits$UN, "IIO vs UN", 2000L))
-    reach_dm <- FALSE
-    if (!is.null(fits$DM)) {
-      if (iio_ok)
-        reach_dm <- isTRUE(test_adequate(fits$DM, fits$IIO, "DM vs IIO", 5000L))
-      if (!reach_dm && mon_ok)
-        reach_dm <- isTRUE(test_adequate(fits$DM, fits$MON, "DM vs MON", 6000L))
+    mon_ok <- isTRUE(ordinal_test(fits$MON, fits$UN, "MON vs UN", 3000L))
+    iio_ok <- isTRUE(ordinal_test(fits$IIO, fits$UN, "IIO vs UN", 2000L))
+    dm_from_iio <- dm_from_mon <- FALSE
+    if (!is.null(fits$DM) && iio_ok && mon_ok) {
+      dm_from_iio <- isTRUE(ordinal_test(
+        fits$DM, fits$IIO, "DM vs IIO", 5000L))
+      dm_from_mon <- isTRUE(ordinal_test(
+        fits$DM, fits$MON, "DM vs MON", 6000L))
     }
+    # DM is the intersection of MON and IIO. Both parent constraints and both
+    # successive comparisons must be supported; otherwise calling DM adequate
+    # would contradict a rejected constraint that DM itself necessarily obeys.
+    reach_dm <- iio_ok && mon_ok && dm_from_iio && dm_from_mon
     if (reach_dm) {
       ordinal_selected <- "DM"; ordinal_interp <- "ORDINAL (double monotonicity)"
     } else if (iio_ok && mon_ok) {
@@ -925,16 +948,13 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     }
   }
 
-  # -- Quantitative lattice edges (TI&D successive comparison) --------------
-  # Quantitative structure sits ABOVE double monotonicity: DM -> LCR (located,
-  # equal-interval discrete) -> RM (continuous). These are tested as ADJACENT
-  # edges - LCR vs DM, then RM vs LCR - NOT against the distant unconstrained
-  # model. Testing LCR against the nearby DM (rather than UN) is what lets a
-  # genuine continuous-Rasch dataset advance: its LCR-vs-UN gap is large only
-  # because UN has many free parameters, but its LCR-vs-DM gap is small. The
-  # former single LCR-vs-UN gate collapsed both edges into one distant test
-  # and demoted true continuous data to DM; restoring the successive edges
-  # fixes that while staying faithful to Torres Irribarra & Diakow.
+  # -- Quantitative lattice edges (automated TI&D comparison) ----------------
+  # Follow the published succession exactly: DM -> LCR -> RM. The DM-to-LCR
+  # scale comparison is made at a FIXED support-point count large enough for
+  # the LCR/Rasch equivalence result, rather than at a low BIC-selected class
+  # count. This removes grain selection from the scale test. Only after that
+  # bridge supports quantity do we profile LCR over grain and compare it with
+  # the continuous RM.
   if (1 / (B + 1) > alpha_quant)
     warning("B = ", B, " cannot resolve alpha_quant = ", alpha_quant,
             " (p-value floor 1/(B+1) = ", signif(1/(B+1), 3),
@@ -943,32 +963,97 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   selected <- ordinal_selected
   interpretation <- ordinal_interp
 
-  # Quant is reachable only once double monotonicity holds (order before
-  # quantity). LCR vs DM: does the equal-interval constraint fit as well as
-  # the ordinal double-monotone model?
-  if (identical(ordinal_selected, "DM") && !is.null(fits$LCR)) {
-    if (verbose) cat("Quantitative edge: testing LCR vs DM...\n")
-    lcr_ok <- isTRUE(test_adequate(fits$LCR, fits$DM, "LCR vs DM", 4000L, a = a_q))
+  lcr_dm_test <- rm_lcr_test <- NULL
+  quant_fits <- NULL
+  if (identical(ordinal_selected, "DM")) {
+    if (anyNA(data)) {
+      warning("The TI&D LCR/Rasch support-point equivalence assumes complete ",
+              "responses. The observed missingness mask will be preserved in ",
+              "the bootstrap, but the automatic bridge count is approximate.")
+    }
+    # For dichotomous J-item data this is ceil((J + 1) / 2), exactly the bound
+    # invoked by TI&D. For partial-credit data, S is the maximum total score;
+    # ceil((S + 1) / 2) is the corresponding finite-support bound over the
+    # sufficient-score levels.
+    score_max <- if (!.is_polytomous(data)) {
+      ncol(data)
+    } else {
+      sum(vapply(seq_len(ncol(data)), function(j) {
+        x <- data[, j]
+        if (all(is.na(x))) 0L else as.integer(max(x, na.rm = TRUE))
+      }, integer(1)))
+    }
+    bridge_C <- max(2L, as.integer(ceiling((score_max + 1) / 2)))
+    grain_grid <- sort(unique(c(
+      as.integer(orig_C_range[orig_C_range >= 2L]), bridge_C)))
+    if (!length(grain_grid)) grain_grid <- bridge_C
+
+    dm_bridge <- fit_safe("DM bridge", fit_dm(
+      data, bridge_C, n_starts = n_starts, use_cpp = use_cpp,
+      seed = if (!is.null(seed)) seed + 3500L else NULL, ...))
+    lcr_bridge <- fit_safe("LCR bridge", fit_lcr(
+      data, bridge_C, n_starts = n_starts, use_cpp = use_cpp,
+      seed = if (!is.null(seed)) seed + 4000L else NULL, ...))
+
+    # Profile the discrete quantitative model separately for the final grain
+    # comparison. Reuse the bridge fit at its C; the remaining fits are seeded
+    # independently and selected by BIC.
+    lcr_profile <- lapply(grain_grid, function(C) {
+      if (C == bridge_C && !is.null(lcr_bridge)) return(lcr_bridge)
+      fit_safe(paste("LCR", C), fit_lcr(
+        data, C, n_starts = n_starts, use_cpp = use_cpp,
+        seed = if (!is.null(seed)) seed + 7000L + C else NULL, ...))
+    })
+    lcr_bic <- vapply(lcr_profile,
+      function(f) if (is.null(f)) NA_real_ else BIC(f), numeric(1))
+    usable_lcr <- which(is.finite(lcr_bic))
+    if (length(usable_lcr)) {
+      profile_pick <- usable_lcr[which.min(lcr_bic[usable_lcr])]
+      profile_C <- grain_grid[profile_pick]
+      lcr_best <- lcr_profile[[profile_pick]]
+    } else {
+      profile_C <- bridge_C
+      lcr_best <- lcr_bridge
+    }
+    quant_fits <- list(
+      bridge_C = bridge_C, DM = dm_bridge, LCR_bridge = lcr_bridge,
+      C = profile_C, LCR = lcr_best, C_grid = grain_grid,
+      LCR_BIC = lcr_bic, LCR_profile = lcr_profile)
+
+    lcr_ok <- FALSE
+    if (!is.null(lcr_bridge) && !is.null(dm_bridge)) {
+      if (verbose) cat("Quantitative edge: testing LCR vs DM...\n")
+      lcr_ok <- isTRUE(test_adequate(
+        lcr_bridge, dm_bridge, "LCR vs DM", 4000L, a = a_q))
+      lcr_dm_test <- last_test_obj
+    }
+
     if (lcr_ok) {
       selected <- "LCR"
       interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
-      bics["LCR"] <- BIC(fits$LCR)
-      # LCR -> RM: does the continuous model fit as well as the discrete one?
-      if (!is.null(fits$RM)) {
-        bics["RM"] <- BIC(fits$RM)
+      fits$LCR <- lcr_best
+      n_classes <- profile_C
+      if (!is.null(lcr_best)) bics["LCR"] <- BIC(lcr_best)
+      if (!is.null(fits$RM)) bics["RM"] <- BIC(fits$RM)
+
+      # Final published edge: located/discrete LCR versus continuous RM.
+      if (!is.null(fits$RM) && !is.null(lcr_best)) {
         if (verbose) cat("Quantitative edge: testing RM vs LCR...\n")
-        rl <- rm_vs_lcr_test(data, fits$RM, fits$LCR, n_classes, B = B,
-                             C_range = orig_C_range,
-                             alpha = alpha, n_starts = boot_n_starts,
-                             use_cpp = use_cpp, mc.cores = mc.cores,
-                             seed = if (!is.null(seed)) seed + 7000L else NULL)
+        rl <- rm_vs_lcr_test(
+          data, fits$RM, lcr_best, profile_C, B = B,
+          C_range = grain_grid, alpha = a_q, n_starts = boot_n_starts,
+          use_cpp = use_cpp, observed_fits = lcr_profile,
+          mc.cores = mc.cores,
+          seed = if (!is.null(seed)) seed + 8000L else NULL)
+        rm_lcr_test <- rl
         if (isTRUE(rl$available) && !is.na(rl$profiled_C) &&
-            rl$profiled_C != n_classes) {
-          f2 <- tryCatch(suppressWarnings(fit_lcr(data, rl$profiled_C,
-                  n_starts = n_starts, use_cpp = use_cpp)),
-                  error = function(e) NULL)
+            rl$profiled_C %in% grain_grid) {
+          idx <- match(rl$profiled_C, grain_grid)
+          f2 <- lcr_profile[[idx]]
           if (!is.null(f2)) {
-            fits$LCR <- f2; bics["LCR"] <- BIC(f2); n_classes <- rl$profiled_C
+            fits$LCR <- f2
+            bics["LCR"] <- BIC(f2)
+            n_classes <- rl$profiled_C
           }
         }
         tests <- rbind(tests, data.frame(
@@ -1000,9 +1085,10 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       method = method,
       n_classes = n_classes,
       n_classes_table = n_classes_table,
-      rm_vs_lcr = if (exists("rl", inherits = FALSE)) rl else NULL,
-      quant_gate = if (exists("last_test_obj", inherits = FALSE))
-        last_test_obj else NULL
+      rm_vs_lcr = rm_lcr_test,
+      lcr_vs_dm = lcr_dm_test,
+      quant_fits = quant_fits,
+      severity = severity
     ),
     class = "qlselect_ll"
   )
@@ -1019,7 +1105,7 @@ print.qlselect_ll <- function(x, ...) {
   cat("---------------------------------------------------\n")
   cat("Selected model :", x$selected, "\n")
   cat("Interpretation :", x$interpretation, "\n")
-  if (!is.null(x$n_classes)) {
+  if (!is.null(x$n_classes) && !identical(x$selected, "RM")) {
     cat("Latent classes :", x$n_classes,
         if (!is.null(x$n_classes_table)) "(selected by BIC)" else "", "\n")
   }
@@ -1027,9 +1113,9 @@ print.qlselect_ll <- function(x, ...) {
       "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n\n")
 
   if (nrow(x$tests) > 0) {
-    cat("Decision path (bootstrap LR tests):\n")
+    cat("Decision path (calibrated edge tests):\n")
     for (i in seq_len(nrow(x$tests))) {
-      cat(sprintf("  %-10s LR = %8.3f   p = %.4f   -> %s\n",
+      cat(sprintf("  %-10s stat = %8.3f   p = %.4f   -> %s\n",
                   x$tests$comparison[i], x$tests$statistic[i],
                   x$tests$p_value[i], x$tests$decision[i]))
     }

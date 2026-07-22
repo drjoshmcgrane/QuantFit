@@ -13,7 +13,8 @@ ll_general_null(
   seed = NULL,
   use_cpp = TRUE,
   mc.cores = 1L,
-  reselect_C_range = NULL
+  reselect_C_range = NULL,
+  selection_model_type = NULL
 )
 }
 \arguments{
@@ -23,6 +24,9 @@ ll_general_null(
 \eqn{2(\ell_g - \ell_c)} refitted on data simulated from \code{fit_general}).}
 
 \item{B, n_starts, seed, use_cpp, mc.cores}{As in \code{\link[=ll_equivalence_test]{ll_equivalence_test()}}.}
+
+\item{reselect_C_range, selection_model_type}{As in \code{\link[=ll_equivalence_test]{ll_equivalence_test()}};
+the severity reference must repeat the same class-selection statistic.}
 }
 \value{
 Sorted numeric vector of LR draws (length <= B; failures dropped),

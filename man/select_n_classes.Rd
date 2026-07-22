@@ -60,9 +60,13 @@ classification entropy, \code{NA} for \code{C = 1}), and \code{converged}.}
 Fits the unconstrained latent class model across a range of class counts
 and returns an enumeration table together with the class count preferred
 by the chosen information criterion. This is the standard first stage of a
-two-stage workflow: decide \emph{how many} classes the data support, then decide
-\emph{what structure} those classes have with \code{\link[=select_model_ll]{select_model_ll()}} or
-\code{\link[=compare_models]{compare_models()}}.
+workflow: decide the grain for the ordinal comparison, then decide \emph{what
+structure} those classes have with \code{\link[=select_model_ll]{select_model_ll()}} or \code{\link[=compare_models]{compare_models()}}.
+\code{\link[=select_model_ll]{select_model_ll()}} repeats this UN-BIC enumeration inside its ordinal-edge
+bootstraps so inference includes the uncertainty introduced by automation.
+If \code{\link[=select_model_ll]{select_model_ll()}} reaches DM, its DM-to-LCR bridge uses the fixed
+support-point count required by the LCR/Rasch equivalence result; the range
+here is then used to profile LCR for the final grain comparison.
 }
 \details{
 The unconstrained model is used for enumeration because it is the least

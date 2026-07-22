@@ -48,11 +48,12 @@ run_one <- function(id) {
   if (is.null(dat)) { row$err <- "load"; write.csv(row, out_file, row.names = FALSE); return(invisible()) }
   storage.mode(dat) <- "integer"
 
-  # LC route: package defaults (auto class count, alpha_quant 0.05, power check)
+  # LC route: automated adjacent-edge TI&D lattice
   t0 <- proc.time()[3]
   lc <- tryCatch(suppressWarnings(
     select_model_ll(dat, n_classes = 1:6, B = 59, n_starts = 5,
-                    boot_n_starts = 3, seed = 1, mc.cores = 1)),
+                    boot_n_starts = 5, method = "lattice", severity = FALSE,
+                    seed = 1, mc.cores = 1)),
     error = function(er) NULL)
   row$secs_lc <- round(proc.time()[3] - t0, 1)
   if (!is.null(lc)) {

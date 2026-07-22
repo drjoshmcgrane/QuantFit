@@ -11,8 +11,9 @@ select_model_ll(
   alpha_quant = 0.05,
   B = 99,
   n_starts = 5,
-  boot_n_starts = 3,
-  method = c("joint", "lattice"),
+  boot_n_starts = NULL,
+  method = c("lattice", "joint"),
+  severity = FALSE,
   seed = NULL,
   use_cpp = TRUE,
   mc.cores = 1L,
@@ -24,10 +25,13 @@ select_model_ll(
 \item{data}{Binary response matrix (persons x items).}
 
 \item{n_classes}{Number of latent classes for the discrete models. May be
-a single integer, or a vector (e.g. \code{1:6}), in which case the class count
-is selected first by BIC with \code{\link[=select_n_classes]{select_n_classes()}} and the structural
-comparison is run at the chosen count (the enumeration table is returned
-as \code{n_classes_table}).}
+a single integer, or a vector (e.g. \code{1:6}), in which case the ordinal class
+count is selected first by UN BIC with \code{\link[=select_n_classes]{select_n_classes()}}. If DM is
+reached, that UN enumeration is repeated inside every ordinal-edge
+bootstrap replicate so the p-values include class-count selection. The
+LCR-vs-DM bridge instead uses the fixed equivalence count
+implied by test length. The supplied range (augmented by that bridge count)
+is used to profile LCR for the final RM-vs-LCR grain comparison.}
 
 \item{alpha}{Significance level for the bootstrap tests (default 0.05).
 A constrained model is deemed \emph{adequate} when its bootstrap p-value
@@ -37,39 +41,33 @@ exceeds \code{alpha}, i.e. the constraints are rejected when
 Monte Carlo test whenever \eqn{\alpha (B + 1)} is an integer
 (e.g. \code{B = 99}, \code{alpha = 0.05}).}
 
-\item{alpha_quant}{Significance level for the single quantitative gate
-(LCR vs UN), default 0.05 (the conventional level; with \code{B = 99} this is
-an exact level-0.05 Monte Carlo test). This governs the one decision that
-demotes a fitted quantitative model to the ordinal layer. True
-quantitative models are protected from chance upper-tail rejections by
-the estimated-power check (a rejection must also separate from the
-general model's reference distribution), so the conventional level does
-not carry the compounded false-demotion cost it would in a plain
-sequential procedure; lower it (e.g. 0.01) to demote the quantitative
-model only on stronger evidence, at the cost of letting more
-near-additive ordinal data pass as quantitative.}
+\item{alpha_quant}{Significance level for the quantitative edges (LCR vs DM
+and RM vs LCR), default 0.05. The corrected bootstrap p-value has floor
+\code{1 / (B + 1)}, so \code{B = 99} can resolve a level-0.05 decision.}
 
 \item{B}{Number of bootstrap replicates per test (default 99).}
 
 \item{n_starts}{Number of random starts for the observed-data fits
 (default 5).}
 
-\item{boot_n_starts}{Number of random starts for each bootstrap refit
-(default 3).}
+\item{boot_n_starts}{Number of random starts for each bootstrap refit.
+\code{NULL} (the default) uses \code{n_starts}, ensuring that observed and bootstrap
+statistics use the same optimisation effort.}
 
-\item{method}{How the ordinal layer is tested. \code{"joint"} (default) tests
-the doubly-monotone model directly against UN and only falls back to the
-single-constraint models on rejection. \code{"lattice"} instead tests each
-constraint edge separately and accepts the deepest model reachable by
-non-rejected edges (MON vs UN, IIO vs UN, then the DM increments
-DM vs IIO / DM vs MON). The lattice method is more principled - it gives
-each constraint family its own targeted test - but in a paired
-simulation study (n = 1000, J = 10, C = 3, 30 replicates per generating
-model) the two methods were statistically indistinguishable on both
-overall recovery and the rate of scale-type errors, while lattice costs
-roughly twice the computation (up to five bootstrap tests per data set
-rather than one to three). \code{"joint"} is therefore the default;
-\code{"lattice"} is available for users who prefer the edge-wise procedure.}
+\item{method}{How the ordinal layer is tested. \code{"lattice"} (default) tests
+each constraint edge separately and accepts the deepest model supported by
+both parent paths (MON vs UN, IIO vs UN, DM vs IIO, and DM vs MON).
+The lattice method is more principled - it gives
+each constraint family its own targeted test and follows Torres Irribarra
+and Diakow's successive-comparison diagram. \code{"joint"} is retained as a
+faster alternative that tests DM directly against UN before falling back
+to the single-constraint models.}
+
+\item{severity}{Logical; when \code{TRUE}, a significant edge rejection can be
+overridden if a second bootstrap from the fitted general model shows no
+detectable separation from the null. The default is \code{FALSE}: the
+automated TI&D lattice then follows the corrected edge p-values without a
+post-hoc override.}
 
 \item{seed}{Optional integer seed; makes the whole procedure
 deterministic.}
@@ -96,6 +94,10 @@ or "QUANTITATIVE (...)".}
 \item{bics}{Named numeric BIC values for LCR and RM (NA when that
 step was not reached or a fit failed).}
 \item{fits}{Named list of the fitted models (failed fits are NULL).}
+\item{lcr_vs_dm,rm_vs_lcr}{Detailed quantitative-edge test objects, or
+\code{NULL} when an edge was not reached.}
+\item{quant_fits}{The fixed-grain DM/LCR bridge fits and profiled LCR
+fits used by the quantitative layer.}
 \item{alpha, B}{The settings used.}
 }
 }
@@ -108,14 +110,17 @@ constraints make standard asymptotics invalid, and BIC only where
 parameter counts genuinely differ.
 }
 \details{
-The procedure walks the paper's hierarchy UN -> MON -> IIO -> DM ->
-LCR -> RM in three steps:
+The procedure automates the paper's partial-order lattice: UN has the two
+single-order children MON and IIO; their intersection is DM; and DM is the
+ordinal parent of the discrete quantitative LCR, which in turn is the parent
+of the continuous RM. The final RM-vs-LCR comparison resolves
+continuity/grain size.
 
 \enumerate{
 \item \strong{Ordinal structure.} The way this layer is tested depends
 on \code{method}.
 
-\if{html}{\out{<div class="sourceCode">}}\preformatted{With `method = "joint"` (the default), DM (the most constrained
+\if{html}{\out{<div class="sourceCode">}}\preformatted{With `method = "joint"`, DM (the most constrained
 ordinal model) is tested against UN directly with
 [ll_equivalence_test()]. If DM is adequate (p > `alpha`) it becomes
 the ordinal candidate and the procedure continues to step 2.
@@ -127,38 +132,58 @@ adequate the unconstrained model is selected (CLASSIFICATORY).
 
 With `method = "lattice"`, each edge of the constraint lattice is
 tested instead: MON vs UN and IIO vs UN establish whether each single
-constraint holds, and DM is reached only when one of them holds
-\\emph\{and\} the corresponding increment edge is not rejected - DM vs
+constraint holds, and DM is reached only when both parents and both
+increment edges are supported - DM vs
 IIO tests the added monotonicity given invariant ordering, DM vs MON
-tests the added ordering given monotonicity. The deepest model
-reachable by a path of non-rejected edges is selected; if both single
-constraints hold but the DM increment is rejected from either parent,
-the better-fitting single ordinal model is kept. This gives each
-constraint family its own targeted test at roughly twice the
-computational cost, with recovery performance that matched the joint
-method in simulation.
+tests the added ordering given monotonicity. A rejection on either
+parent path blocks DM. Otherwise the
+better-fitting supported single ordinal model is kept.
 }\if{html}{\out{</div>}}
 
 \item \strong{Discrete quantitative structure} (reached only when DM
-was adequate). LCR is tested against DM the same way: LCR is nested
+was adequate). LCR is tested against DM at the fixed support-point count
+\eqn{C_{bridge} = \lceil(S+1)/2\rceil}, where \eqn{S} is the maximum
+total score (for dichotomous data this is
+\eqn{\lceil(J+1)/2\rceil}). This is the minimum grain in the equivalence
+result used by Torres Irribarra and Diakow, and it removes data-driven
+class-count choice from the scale comparison. LCR is nested
 in DM with strictly fewer parameters (the Rasch structure imposes
 equality constraints on top of the orderings), so
 \eqn{LR = 2(\ell_{DM} - \ell_{LCR})} is bootstrapped by simulating
-from the fitted LCR and refitting both models. If LCR is adequate it
-becomes the quantitative candidate; otherwise DM is selected
-(ORDINAL interpretation).
-\item \strong{Continuous quantitative structure.} RM (continuous) and
-LCR (discrete) are non-nested and estimated with different machinery
-(mirt marginal maximum likelihood over a continuous latent density vs
-the EM algorithm over discrete classes), so a likelihood-ratio
-bootstrap is not clean. Instead the BIC difference
+from the fitted LCR and refitting both models.
+\item \strong{Continuous quantitative structure.} Once the LCR-vs-DM
+bridge supports quantity, the non-nested BIC difference
 \eqn{BIC_{LCR} - BIC_{RM}} is calibrated against a null simulated from
-the fitted RM: the discrete LCR is selected (QUANTITATIVE, discrete)
+the fitted RM. LCR is profiled over the supplied class-count range (plus
+the bridge count), using the identical profile in observed and null data.
+The discrete LCR is selected (QUANTITATIVE, discrete)
 only when it fits better than the RM null would produce by chance,
 otherwise the continuous Rasch model is selected (QUANTITATIVE,
-continuous). This keeps the final step consistent with the
-bootstrap-calibrated tests above rather than a raw BIC comparison.
+continuous).
 }
+
+The support-point equivalence result cited by Torres Irribarra and Diakow is
+for dichotomous Rasch data. For partial-credit data this implementation uses
+the analogous bound based on the number of possible total-score levels. That
+polytomous step is a conservative extension of, not a result evaluated in,
+the original simulation study. The equivalence argument also assumes a
+common complete-data sufficient score. With missing responses the package
+preserves the observed mask in every bootstrap replicate, but reports a
+warning because the fixed support-point bound is no longer exact.
+
+\code{fit_rm()} is a marginal normal-latent Rasch fit. Therefore the last
+RM-vs-LCR comparison distinguishes a discrete mixing distribution from this
+particular continuous-normal model; it is not a distribution-free test of
+metaphysical continuity. A non-normal continuous population may be labelled
+LCR, although both outcomes retain the same quantitative scale-type verdict.
+
+The paper used BIC patterns plus inspection of fitted constraints. This
+function automates the same conceptual succession but replaces the manual
+decisions with fitted-null bootstrap tests. Consequently it is a calibrated
+operationalisation of the TI&D lattice, not a byte-for-byte reproduction of
+the paper's original BIC decision rule. Non-rejection means that an edge was
+not contradicted at the requested sample size; it is not proof that the
+constraint is true. Requiring both paths to DM is deliberately conservative.
 
 \strong{Why bootstrap rather than chi-square?} UN, MON, IIO, and DM all
 have the same number of free parameters; the ordinal models differ from
@@ -168,12 +193,11 @@ data-dependent weights), not a fixed chi-square, and information criteria
 cannot separate the models at all. The parametric bootstrap calibrates
 the test without deriving the mixture weights.
 
-\strong{Computational cost.} Each bootstrap test refits two models on
-each of \code{B} datasets. With the compiled EM engine a single fit takes on
-the order of tens of milliseconds at moderate n, so the default \code{B = 99}
-costs a few seconds per test and the full procedure typically runs 2-3
-tests. Supplying \code{seed} makes every fit and every bootstrap draw
-reproducible.
+\strong{Computational cost.} The complete path performs up to four ordinal
+edge tests and two quantitative tests. The profiled RM-vs-LCR bootstrap fits
+LCR at every supplied class count in every replicate, so \code{B = 99} can take
+minutes per dataset at study-sized samples. \code{mc.cores} parallelises
+replicates. Supplying \code{seed} makes every fit and draw reproducible.
 }
 \examples{
 \dontrun{

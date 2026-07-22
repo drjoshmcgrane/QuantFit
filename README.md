@@ -2,6 +2,23 @@
 
 Latent Structure Model Selection Framework for R
 
+## Automated TI&D lattice
+
+`select_model_ll()` now defaults to the successive Torres Irribarra–Diakow
+lattice. It tests both UN→MON/IIO→DM paths edge by edge, then follows the
+published DM→LCR→RM sequence. The DM-to-LCR scale comparison uses the fixed
+minimum support-point count required by the paper's LCR/Rasch equivalence
+argument (`ceiling((J + 1) / 2)` for dichotomous items), so a low selected
+class count cannot block true Rasch data. A calibrated, class-profiled
+RM-versus-LCR comparison then resolves continuity/grain size. Decisions use
+corrected bootstrap p-values without a heuristic override by default. When a
+class-count range is supplied, the UN-BIC ordinal enumeration is repeated in
+every applicable null replicate so class selection is part of the calibration.
+The significance levels are per edge, not familywise over the entire path; a
+true deep model can be stopped by a chance rejection at any preceding edge.
+This is one reason exact recovery of Rasch data need not be perfect even when
+every individual test is correctly calibrated.
+
 ## Overview
 
 **QuantFit** implements the model selection framework from Torres Irribarra & Diakow's paper "Categorization, Ordering and Quantification: Selecting a Latent Variable Model by Comparing Latent Structures."
@@ -58,7 +75,7 @@ plot_irfs(mon_fit)
 - `fit_iio()` - Invariant Item Ordering model
 - `fit_dm()` - Double Monotonicity model
 - `fit_lcr()` - Latent Class Rasch model
-- `fit_rm()` - Rasch Model (mirt wrapper)
+- `fit_rm()` - Rasch/partial-credit model (package MML engine)
 
 ### Model Comparison
 - `compare_models()` - Compare multiple models using AIC/BIC
@@ -73,12 +90,12 @@ plot_irfs(mon_fit)
 **Required:**
 - alabama (constrained optimization)
 - nloptr (alternative optimizer)
-- mirt (Rasch model)
 - Matrix (sparse matrices)
 - numDeriv (numerical derivatives)
 
 **Suggested:**
 - testthat (testing)
+- mirt (optional cross-validation)
 - poLCA (validation)
 - eRm (validation)
 - ggplot2 (enhanced plots)

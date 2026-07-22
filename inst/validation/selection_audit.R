@@ -26,7 +26,8 @@ select_one <- function(true, rep) {
                           n_classes = 3, n_cat = n_cat,
                           seed = 7000 * rep + match(true, models))
   sel <- tryCatch(
-    select_model_ll(d, n_classes = 3, B = B, n_starts = 3, boot_n_starts = 2,
+    select_model_ll(d, n_classes = 2:6, B = B, n_starts = 5,
+                    boot_n_starts = 5, method = "lattice", severity = FALSE,
                     seed = 1, mc.cores = 1),
     error = function(e) NULL)
   if (is.null(sel)) NA_character_ else sel$selected

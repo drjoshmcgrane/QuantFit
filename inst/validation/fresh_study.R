@@ -10,7 +10,7 @@
 # Identity: build_sha from DESCRIPTION GitSHA (stamped at freeze); the CML
 # canary below rejects any build without the full-vector fix.
 suppressMessages(library(QuantFit))
-stopifnot(packageVersion("QuantFit") >= "0.3.1")
+stopifnot(packageVersion("QuantFit") >= "0.3.2")
 local({ set.seed(41); th <- rnorm(400); b <- runif(8,-2,2)+0.7
   d <- matrix(rbinom(400*8,1,plogis(outer(th,b,"-"))),400,8); storage.mode(d)<-"integer"
   dl <- QuantFit:::.cml_fit_general(d)
@@ -19,16 +19,24 @@ BUILD_SHA <- tryCatch(utils::packageDescription("QuantFit")$GitSHA,
                       error = function(e) NA_character_)
 if (is.null(BUILD_SHA) || is.na(BUILD_SHA))
   stop("QuantFit build carries no GitSHA stamp; refuse to run an unpinned fleet")
+EXPECTED_SHA <- Sys.getenv("QUANTFIT_EXPECTED_SHA", "")
+if (!nzchar(EXPECTED_SHA))
+  stop("Set QUANTFIT_EXPECTED_SHA to the intended lattice commit before launch")
+if (!startsWith(BUILD_SHA, EXPECTED_SHA) && !startsWith(EXPECTED_SHA, BUILD_SHA))
+  stop("Installed QuantFit GitSHA (", BUILD_SHA,
+       ") does not match QUANTFIT_EXPECTED_SHA (", EXPECTED_SHA, ")")
 
 a <- commandArgs(trailingOnly = TRUE)
 phase <- a[1]; partition <- toupper(a[2]); n_cores <- as.integer(a[3])
 base <- Sys.getenv("FRESH_BASE", getwd())
-out_dir <- file.path(base, paste0("fresh_", phase)); dir.create(out_dir, showWarnings = FALSE)
+METHOD_ID <- "tid032"
+out_dir <- file.path(base, paste0("fresh_", phase, "_", METHOD_ID))
+dir.create(out_dir, showWarnings = FALSE)
 
 grid <- if (phase == "calib") {
-  g <- rbind(expand.grid(model = "RM",  J = c(6L,12L,24L,48L), sigma = c(0.5,1,2),
+  g <- rbind(expand.grid(model = "RM",  J = c(6L,12L,24L), sigma = c(0.5,1,2),
                     rep = 1:20, stringsAsFactors = FALSE),
-        expand.grid(model = "LCR", J = c(6L,12L,24L,48L), sigma = 1,
+        expand.grid(model = "LCR", J = c(6L,12L,24L), sigma = 1,
                     rep = 1:20, stringsAsFactors = FALSE))
   g$N <- 1500L; g
 } else if (phase == "recover") {
@@ -51,18 +59,18 @@ grid$seed <- sample.int(.Machine$integer.max, nrow(grid))
 # Omni assignment (stratified by rep within cell)
 grid$omni_S <- NA_integer_
 if (phase == "calib") {
-  grid$omni_S[grid$rep <= 6] <- 12000L
-  grid$omni_S[grid$rep == 7] <- 30000L
+  grid$omni_S[grid$rep <= 2] <- 12000L   # single-machine: sparse Omni subset
+  grid$omni_S[grid$rep == 3] <- 30000L   # one deep anchor per cell
 } else if (phase == "recover") {
-  grid$omni_S[grid$rep <= 3] <- 12000L
+  grid$omni_S[grid$rep <= 2] <- 12000L
 } else if (phase == "tidmatch") {
-  grid$omni_S[grid$rep <= 6] <- 12000L
-  grid$omni_S[grid$rep == 7] <- 30000L
+  grid$omni_S[grid$rep <= 3] <- 12000L
+  grid$omni_S[grid$rep == 4] <- 30000L
 } else grid$omni_S <- 800L
 cfg <- if (phase == "canary") {
-  list(lcB = 19L, ccB = 19L, nmat = 50L, omniB = 19L, Ns = 8L)
+  list(lcB = 19L, lcStarts = 2L, ccB = 19L, nmat = 50L, omniB = 19L, Ns = 8L)
 } else {
-  list(lcB = 99L, ccB = 299L, nmat = 200L, omniB = 99L, Ns = 25L)
+  list(lcB = 49L, lcStarts = 2L, ccB = 299L, nmat = 200L, omniB = 99L, Ns = 25L)
 }
 
 ids <- grid$id
@@ -103,8 +111,11 @@ run_one <- function(i) {
   ms <- g$id * 1000003L %% .Machine$integer.max
   row <- data.frame(id = i, model = g$model, J = g$J, N = g$N, sigma = g$sigma,
     rep = g$rep, seed = g$seed, build_sha = BUILD_SHA,
-    lc_selected = NA, lc_C = NA, lc_gate_p = NA, lc_gate_override = NA,
-    lc_rmlcr_p = NA, lc_bic_diff = NA, lc_gate_reached = NA,
+    lc_selected = NA, lc_C = NA,
+    lc_mon_p = NA, lc_iio_p = NA, lc_dmiio_p = NA, lc_dmmon_p = NA,
+    lc_lcrdm_p = NA, lc_lcrdm_B_eff = NA, lc_lcrdm_override = NA,
+    lc_bridge_C = NA, lc_rmlcr_p = NA, lc_rmlcr_B_eff = NA,
+    lc_profile_C = NA, lc_bic_diff = NA, lc_quant_reached = NA,
     lc_rmlcr_boot_ok = NA, dm_p = NA, dm_override = NA, dist_dm = dist_dm(dat),
     cc_p_holm = NA, cc_reject = NA, cc_attrib = NA, cc_B_eff = NA,
     omni_S = g$omni_S, omni_p = NA, omni_reject = NA, omni_B_eff = NA,
@@ -112,26 +123,41 @@ run_one <- function(i) {
     secs_lc = NA, secs_cc = NA, secs_omni = NA, err = "")
   t0 <- proc.time()[3]
   lc <- tryCatch(suppressWarnings(select_model_ll(as.matrix(dat),
-        n_classes = 1:6, B = cfg$lcB, n_starts = 5, boot_n_starts = 3,
+        n_classes = 1:6, B = cfg$lcB, n_starts = 5, boot_n_starts = 5,
+        method = "lattice", severity = FALSE,
         seed = ms, mc.cores = 1)), error = function(e) NULL)
   row$secs_lc <- round(proc.time()[3] - t0, 1)
   if (!is.null(lc)) {
     row$lc_selected <- lc$selected
-    row$lc_C <- tryCatch(lc$n_classes, error = function(e) NA)
-    dmrow <- lc$tests[lc$tests$comparison == "DM vs UN", ]
-    if (nrow(dmrow)) {
-      row$dm_p <- round(dmrow$p_value[1], 4)
-      row$dm_override <- grepl("override", dmrow$decision[1])
+    row$lc_C <- if (!is.null(lc$quant_fits)) lc$quant_fits$C else
+      tryCatch(lc$n_classes, error = function(e) NA)
+    if (!is.null(lc$quant_fits)) row$lc_bridge_C <- lc$quant_fits$bridge_C
+    edge_p <- function(label) {
+      z <- lc$tests$p_value[lc$tests$comparison == label]
+      if (length(z)) round(z[[1L]], 4) else NA_real_
     }
-    gate <- lc$tests[lc$tests$comparison == "LCR vs UN", ]
-    if (nrow(gate)) row$lc_gate_p <- round(gate$p_value[1], 4)
-    if (!is.null(lc$quant_gate))
-      row$lc_gate_override <- isTRUE(lc$quant_gate$severity_override)
-    row$lc_gate_reached <- !is.null(lc$rm_vs_lcr)
+    row$lc_mon_p <- edge_p("MON vs UN")
+    row$lc_iio_p <- edge_p("IIO vs UN")
+    row$lc_dmiio_p <- edge_p("DM vs IIO")
+    row$lc_dmmon_p <- edge_p("DM vs MON")
+    dmrow <- lc$tests[lc$tests$comparison %in% c("DM vs IIO", "DM vs MON"), ]
+    if (nrow(dmrow)) {
+      row$dm_p <- round(min(dmrow$p_value), 4)
+      row$dm_override <- any(grepl("override", dmrow$decision))
+    }
+    lcrdm <- lc$tests[lc$tests$comparison == "LCR vs DM", ]
+    if (nrow(lcrdm)) row$lc_lcrdm_p <- round(lcrdm$p_value[1], 4)
+    if (!is.null(lc$lcr_vs_dm)) {
+      row$lc_lcrdm_B_eff <- lc$lcr_vs_dm$B_effective
+      row$lc_lcrdm_override <- isTRUE(lc$lcr_vs_dm$severity_override)
+    }
+    row$lc_quant_reached <- !is.null(lc$lcr_vs_dm)
     if (!is.null(lc$rm_vs_lcr)) {
       row$lc_rmlcr_p  <- round(lc$rm_vs_lcr$p_value, 4)
+      row$lc_rmlcr_B_eff <- lc$rm_vs_lcr$B_effective
       row$lc_bic_diff <- round(lc$rm_vs_lcr$statistic, 2)
       row$lc_C        <- lc$rm_vs_lcr$profiled_C
+      row$lc_profile_C <- lc$rm_vs_lcr$profiled_C
       row$lc_rmlcr_boot_ok <- lc$rm_vs_lcr$B_failed == 0
     }
   } else row$err <- "lc;"
@@ -147,14 +173,10 @@ run_one <- function(i) {
   } else row$err <- paste0(row$err, "cc;")
   if (!is.na(g$omni_S)) {
     t0 <- proc.time()[3]
-    kj <- parallel::mcparallel(tryCatch(suppressWarnings(
-      omni_bootstrap_null(as.matrix(dat), B = cfg$omniB, S = g$omni_S,
-                          N_synth = cfg$Ns, alpha = 0.05, seed = ms,
-                          mc.cores = 1, verbose = FALSE)),
-      error = function(er) NULL), silent = TRUE)
-    ka <- tryCatch(parallel::mccollect(kj, wait = TRUE)[[1]],
-                   error = function(er) NULL)
-    if (inherits(ka, "try-error")) ka <- NULL
+    ka <- tryCatch(suppressWarnings(omni_bootstrap_null(
+      as.matrix(dat), B = cfg$omniB, S = g$omni_S,
+      N_synth = cfg$Ns, alpha = 0.05, seed = ms,
+      mc.cores = 1, verbose = FALSE)), error = function(er) NULL)
     row$secs_omni <- round(proc.time()[3] - t0, 1)
     if (!is.null(ka) && is.list(ka)) {
       row$omni_p <- round(ka$p_value, 4); row$omni_reject <- ka$reject
@@ -174,7 +196,7 @@ invisible(parallel::mclapply(ids, function(i)
     cat(sprintf("[%s] id %d: %s\n", format(Sys.time()), i,
         conditionMessage(e)), file = errlog, append = TRUE)
     NULL
-  }), mc.cores = n_cores))
+  }), mc.cores = n_cores, mc.preschedule = FALSE))
 done_n <- sum(file.exists(file.path(out_dir, sprintf("F%04d.csv", ids))))
 cat("FRESH", toupper(phase), partition,
     sprintf("COMPLETE %d/%d", done_n, length(ids)),

@@ -14,6 +14,7 @@ ll_equivalence_test(
   use_cpp = TRUE,
   mc.cores = 1L,
   reselect_C_range = NULL,
+  selection_model_type = NULL,
   verbose = FALSE
 )
 }
@@ -30,9 +31,9 @@ typically of type "UN" (or "DM" when the constrained model is "LCR").}
 
 \item{B}{Number of bootstrap replicates (default 99).}
 
-\item{n_starts}{Number of random starts for each bootstrap refit
-(default 3; fewer than for the observed-data fits since the bootstrap
-truth is close to the initialization heuristics).}
+\item{n_starts}{Number of random starts for each bootstrap refit. For a
+calibrated edge this should match the optimisation effort used for the
+observed fits.}
 
 \item{seed}{Optional integer seed. When supplied the entire procedure,
 including all bootstrap refits, is deterministic.}
@@ -46,9 +47,14 @@ because each replicate is seeded independently, results are identical
 to the serial run regardless of \code{mc.cores}.}
 
 \item{reselect_C_range}{When non-NULL (a class-count range), every null
-replicate repeats UN-BIC class selection over this range before both
-models are refit (post-selection calibration; used by the quantitative
-gate). Default NULL: fixed class count.}
+replicate repeats BIC selection over this range before both edge models
+are refit. The observed statistic must have used the same selection rule.
+Default NULL: fixed class count.}
+
+\item{selection_model_type}{Model used for BIC enumeration when
+\code{reselect_C_range} is supplied. \code{NULL} (default) uses the more-general edge
+model. The automated selector uses \code{"UN"} because its observed ordinal
+class count is selected by UN BIC.}
 
 \item{verbose}{Print progress every 10 replicates (default FALSE; ignored
 when \code{mc.cores > 1}).}
@@ -91,10 +97,12 @@ Each bootstrap statistic is floored at zero, as is the observed statistic
 (a negative value can only arise from Monte Carlo optimization noise and
 triggers a warning beyond a small tolerance).
 
-The same machinery applies to LCR vs DM, where LCR is nested with
-\emph{fewer} parameters (equality constraints from the Rasch structure plus
-the ordering inequalities); simulating from the fitted LCR again gives a
-correctly calibrated null distribution.
+The same machinery applies to LCR vs DM. For dichotomous data LCR is nested
+with \emph{fewer} parameters (equality constraints from the Rasch structure plus
+the ordering inequalities). For the package's polytomous extension the
+relationship need not be conventionally nested, but the identical
+fitted-null bootstrap still calibrates the observed likelihood-gap
+discrepancy without relying on a chi-square law.
 
 Replicates on which either refit fails are dropped; a warning is issued
 if more than 10 percent are lost. The bootstrap is parallelised over

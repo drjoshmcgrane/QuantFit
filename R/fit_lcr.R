@@ -60,6 +60,12 @@ NULL
 #' distance between class locations \eqn{\theta_c} can be interpreted on the same
 #' scale as item difficulties.
 #'
+#' Because finite-mixture likelihoods contain local modes, the first start uses
+#' a stable score-quantile initialization and subsequent starts use dispersed
+#' class locations, perturbed item parameters, and random mixing proportions.
+#' Repeating only small perturbations of the score start can converge every run
+#' to the same extreme-class mode and materially understate the LCR likelihood.
+#'
 #' @examples
 #' \dontrun{
 #' # Generate Rasch-structured data
@@ -137,9 +143,24 @@ fit_lcr <- function(data, n_classes,
 
     init_result <- init_lcr_params(data, n_classes, start_seed)
 
+    # The score-quantile start is useful but nearly identical across nominal
+    # random starts.  Finite-mixture Rasch likelihoods can have a strong local
+    # mode in which an extreme class absorbs one response pattern; repeatedly
+    # perturbing the same score start therefore does not constitute a genuine
+    # multi-start fit. Keep the stable score start once, then explore dispersed
+    # class locations, item parameters, and mixing proportions. This is
+    # particularly important for the LCR-vs-DM likelihood-ratio edge.
+    if (start > 1L) {
+      init_result$theta <- sort(stats::runif(n_classes, -4, 4))
+      init_result$delta <- init_result$delta + stats::rnorm(n_items, 0, 0.5)
+      init_result$delta <- init_result$delta - mean(init_result$delta)
+      w <- stats::rgamma(n_classes, shape = 1)
+      init_result$class_probs <- w / sum(w)
+    }
+
     # Run LCR-specific EM
     fit <- tryCatch({
-      em_lcr(
+      suppressWarnings(em_lcr(
         data = data,
         n_classes = n_classes,
         init_theta = init_result$theta,
@@ -149,7 +170,7 @@ fit_lcr <- function(data, n_classes,
         tol = tol,
         use_cpp = use_cpp,
         verbose = FALSE
-      )
+      ))
     }, error = function(e) {
       if (verbose) cat("failed: ", e$message, "\n")
       NULL
@@ -208,6 +229,11 @@ fit_lcr <- function(data, n_classes,
 
   # Flag collapsed classes so users know the effective number of classes
   result$degenerate <- isTRUE(best_fit$degenerate)
+  if (result$degenerate) {
+    warning("One or more latent classes collapsed (expected class count < 1). ",
+            "The effective number of classes is smaller than requested.",
+            call. = FALSE)
+  }
 
   result
 }
@@ -306,6 +332,13 @@ fit_lcr_mle <- function(data, n_classes,
 
     start_seed <- if (!is.null(seed)) seed + start else NULL
     init_result <- init_lcr_params(data, n_classes, start_seed)
+    if (start > 1L) {
+      init_result$theta <- sort(stats::runif(n_classes, -4, 4))
+      init_result$delta <- init_result$delta + stats::rnorm(n_items, 0, 0.5)
+      init_result$delta <- init_result$delta - mean(init_result$delta)
+      w <- stats::rgamma(n_classes, shape = 1)
+      init_result$class_probs <- w / sum(w)
+    }
 
     # Pack parameters for optimization
     # theta: n_classes values (but we'll fix one for identification)

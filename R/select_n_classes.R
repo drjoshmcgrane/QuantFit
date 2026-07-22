@@ -3,9 +3,13 @@
 #' Fits the unconstrained latent class model across a range of class counts
 #' and returns an enumeration table together with the class count preferred
 #' by the chosen information criterion. This is the standard first stage of a
-#' two-stage workflow: decide *how many* classes the data support, then decide
-#' *what structure* those classes have with [select_model_ll()] or
-#' [compare_models()].
+#' workflow: decide the grain for the ordinal comparison, then decide *what
+#' structure* those classes have with [select_model_ll()] or [compare_models()].
+#' [select_model_ll()] repeats this UN-BIC enumeration inside its ordinal-edge
+#' bootstraps so inference includes the uncertainty introduced by automation.
+#' If [select_model_ll()] reaches DM, its DM-to-LCR bridge uses the fixed
+#' support-point count required by the LCR/Rasch equivalence result; the range
+#' here is then used to profile LCR for the final grain comparison.
 #'
 #' @param data Binary response matrix (persons x items).
 #' @param C_range Integer vector of class counts to consider (default

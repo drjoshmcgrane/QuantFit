@@ -1,3 +1,24 @@
+# QuantFit 0.3.2
+
+* `select_model_ll()` now defaults to the complete adjacent-edge
+  Torres Irribarra–Diakow lattice. MON and IIO are tested from UN, and DM must
+  be supported on both parent paths before the published DM→LCR→RM sequence is
+  entered.
+* The LCR-vs-DM scale bridge is fit at the fixed minimum support-point count
+  required by the paper's LCR/Rasch equivalence result (`ceiling((J + 1) / 2)`
+  for dichotomous items). Grain is profiled separately for the calibrated
+  RM-vs-LCR comparison, so a coarse selected LCR cannot veto true Rasch data.
+  Observed and bootstrap fits use equal multi-start effort by default.
+* When an ordinal class-count range is supplied, UN-BIC enumeration is now
+  repeated inside every ordinal-edge null replicate. This calibrates the
+  automated two-stage statistic rather than treating a data-selected class
+  count as fixed.
+* The former severity override is now optional and off by default. Public
+  results expose LCR-vs-DM and RM-vs-LCR evidence separately.
+* LCR multi-start fitting now uses genuinely dispersed mixture starts after the
+  stable score start, fixing an extreme-class local optimum that materially
+  depressed the LCR likelihood on correctly generated data.
+
 # QuantFit 0.2.0
 
 First release of QuantFit as a unified package for checking quantitative

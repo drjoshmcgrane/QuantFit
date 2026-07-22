@@ -67,8 +67,9 @@
 #'   resolution).
 #' @param alpha Significance level used by ALL routes (LC edge tests, CC
 #'   Holm-adjusted family, Omni): decisions are `p <= alpha`.
-#' @param alpha_quant Level for the LC quantitative gate; defaults to
-#'   `alpha` so one level governs every route unless overridden.
+#' @param alpha_quant Level for the LC quantitative lattice edges (LCR vs DM
+#'   and RM vs LCR); defaults to `alpha` so one level governs every route unless
+#'   overridden.
 #' @param null_method Null generator for CC and Omni: `"conditional_cml"`
 #'   (default) or `"empirical_mml"`; see [cc_bootstrap_null()].
 #' @param cc_n_mat Submatrices sampled per [ConjointChecks()] run (default
@@ -145,7 +146,10 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
          interpretation = sel$interpretation, n_classes = sel$n_classes,
          scale = if (sel$selected %in% c("LCR", "RM")) "quantitative"
                  else if (sel$selected == "UN") "classificatory" else "ordinal",
-         supports_quant = sel$selected %in% c("LCR", "RM"))
+         supports_quant = sel$selected %in% c("LCR", "RM"),
+         method = sel$method, tests = sel$tests,
+         lcr_vs_dm = sel$lcr_vs_dm, rm_vs_lcr = sel$rm_vs_lcr,
+         selection = sel)
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
 

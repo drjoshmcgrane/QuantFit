@@ -63,7 +63,7 @@ test_that("fit_lcr theta values are ordered", {
   n <- 200
   data <- matrix(rbinom(n * 5, 1, 0.5), nrow = n)
 
-  fit <- fit_lcr(data, n_classes = 4, n_starts = 5)
+  fit <- suppressWarnings(fit_lcr(data, n_classes = 4, n_starts = 5))
 
   # Classes should be ordered by theta
   expect_true(all(diff(fit$theta) >= 0))
@@ -174,4 +174,27 @@ test_that("init_lcr_params produces valid initialization", {
 
   # Delta should be centered
   expect_true(abs(mean(init$delta)) < 0.01)
+})
+
+test_that("dispersed LCR starts escape the extreme-class local mode", {
+  skip_on_cran()
+  # Regression case from the TI&D lattice audit. Repeated score-quantile starts
+  # converged to LL -4724 with theta_3 about 23, although the generating
+  # parameter likelihood was -4712.6. Genuine dispersed starts reach the
+  # proper mixture mode near -4709.
+  d <- simulate_responses("LCR", n_persons = 1500, n_items = 6,
+                          n_classes = 3, seed = 1451518001)
+  pa <- attr(d, "params")
+  P <- plogis(outer(pa$theta_class, pa$item, "-"))
+  lp <- sapply(seq_len(3), function(c) {
+    pp <- matrix(P[c, ], nrow(d), ncol(d), byrow = TRUE)
+    rowSums(d * log(pp) + (1 - d) * log1p(-pp)) + log(1 / 3)
+  })
+  mx <- apply(lp, 1, max)
+  ll_true <- sum(mx + log(rowSums(exp(lp - mx))))
+
+  fit <- fit_lcr(d, 3, n_starts = 5, seed = 1)
+  expect_gte(fit$loglik, ll_true - 0.5)
+  expect_lt(max(abs(fit$theta)), 10)
+  expect_gt(min(fit$class_probs), 0.15)
 })

@@ -15,12 +15,13 @@ rm_vs_lcr_test(
   use_cpp = TRUE,
   C_range = NULL,
   boot_reselect = TRUE,
+  observed_fits = NULL,
   mc.cores = 1L,
   seed = NULL
 )
 }
 \arguments{
-\item{data}{Binary response matrix.}
+\item{data}{Binary or polytomous response matrix.}
 
 \item{fit_rm_obj, fit_lcr_obj}{Fitted RM and LCR models.}
 
@@ -29,6 +30,16 @@ rm_vs_lcr_test(
 \item{B, n_starts, use_cpp, mc.cores, seed}{As in \code{\link[=select_model_ll]{select_model_ll()}}.}
 
 \item{alpha}{Significance level for choosing LCR over RM (default 0.05).}
+
+\item{C_range}{Class counts over which the observed and bootstrap LCR BIC is
+profiled. \code{NULL} uses \code{n_classes} only.}
+
+\item{boot_reselect}{Logical; profile over \code{C_range} when \code{TRUE} (default).
+\code{FALSE} keeps \code{n_classes} fixed.}
+
+\item{observed_fits}{Optional list of observed-data LCR fits aligned with
+\code{C_range}. Supplying the already-profiled fits prevents a second random
+optimisation pass from changing the observed statistic.}
 }
 \value{
 A list with \code{statistic} (observed BIC difference), \code{p_value}

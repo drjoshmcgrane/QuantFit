@@ -336,9 +336,12 @@ test_that("Models handle low-variability population", {
 
   expect_true(fit$convergence)
 
-  # Theta range should be compressed
-  theta_range <- diff(range(fit$theta))
-  expect_true(theta_range < 3)  # Should be narrower than typical
+  # Use the mixing-distribution SD, not the raw support range. A valid mixture
+  # MLE can place a very small class in a tail, making max(theta)-min(theta)
+  # unstable even though virtually all latent mass is tightly concentrated.
+  theta_mean <- sum(fit$class_probs * fit$theta)
+  theta_sd <- sqrt(sum(fit$class_probs * (fit$theta - theta_mean)^2))
+  expect_lt(theta_sd, 0.8)
 })
 
 # ============================================================================

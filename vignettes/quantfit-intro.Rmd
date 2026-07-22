@@ -184,23 +184,23 @@ against its parent with a parametric bootstrap of the likelihood-ratio
 statistic — the correct calibration when the models are nested by inequality
 constraints and share a parameter count (the asymptotic null is
 chi-bar-squared, not chi-squared). An ordinal layer first identifies the most
-restrictive supported model among UN/MON/IIO/DM; a single *quantitative gate*
-then tests the parametric latent-class Rasch model directly against the
-unconstrained model (LCR vs UN). Using one gate rather than a sequential
-DM-then-LCR path avoids compounding the false-rejection rate of two tests, so
-genuinely quantitative data are not lost to the ordinal layer by chance; the
-gate runs at `alpha_quant` (default 0.05, the conventional level), and a
-rejection must additionally pass an estimated-power check - the LR
-distribution is also simulated under the fitted unconstrained model, and the
-quantitative model is demoted only when the two reference distributions
-separate (a negligible estimated departure cannot justify the demotion). Even
-the final RM-versus-LCR step is bootstrap-calibrated: rather than
-comparing the two BIC values directly, it bootstraps the BIC *difference*
-against a null simulated from the fitted Rasch model (`rm_vs_lcr_test()`), so
-the continuous model is preferred only when the discrete latent-class Rasch fit
-is no better than Rasch data would produce by chance. Because it refits models
-on bootstrap samples it is moderately expensive; here we use a small `B` for
-illustration:
+restrictive supported model among UN/MON/IIO/DM using both paths through the
+constraint lattice. It then follows the paper's DM→LCR→RM sequence. The
+DM-to-LCR comparison is made at the minimum support-point count required by the
+paper's equivalence result — `ceiling((J + 1) / 2)` for dichotomous data — so
+the scale decision is not confounded by a low, data-selected class count.
+Grain is profiled separately across the requested class-count range. The final
+RM-versus-LCR step bootstraps the profiled BIC *difference* against a null
+simulated from the fitted Rasch model, so LCR is selected only when its apparent
+advantage is more extreme than continuous Rasch data would produce. The
+optional severity override is off by default. Because the procedure refits
+models on bootstrap samples it is moderately expensive; here we use a small
+`B` for illustration:
+
+The reported significance levels are per edge rather than familywise over the
+whole path. Thus, a true model deep in the lattice can be stopped by a chance
+rejection at any earlier edge; exact Rasch recovery is not expected to be
+perfect merely because each individual edge is calibrated at 5%.
 
 ```{r select-ll, eval = FALSE}
 sel <- select_model_ll(responses, n_classes = 3, B = 99, seed = 1)
@@ -210,24 +210,25 @@ sel
 #> ---------------------------------------------------
 #> Selected model : RM
 #> Interpretation : QUANTITATIVE (continuous: Rasch model)
-#> Latent classes : 3
-#> Method = joint   Alpha = 0.05   Bootstrap replicates per test = 99
+#> Method = lattice   Alpha = 0.05   Bootstrap replicates per test = 99
 #>
-#> Decision path (bootstrap LR tests):
-#>   DM vs UN   LR =    2.104   p = 0.2727   -> adequate (p > alpha)
-#>   LCR vs UN  LR =    5.960   p = 0.1717   -> adequate (p > alpha_quant)
-#>   RM vs LCR  LR =    4.219   p = 0.6238   -> continuous (RM) preferred
+#> Decision path (calibrated edge tests):
+#>   MON vs UN  stat =    0.614   p = 0.7100   -> adequate (p > alpha)
+#>   IIO vs UN  stat =    1.203   p = 0.4900   -> adequate (p > alpha)
+#>   DM vs IIO  stat =    0.588   p = 0.6800   -> adequate (p > alpha)
+#>   DM vs MON  stat =    1.177   p = 0.4400   -> adequate (p > alpha)
+#>   LCR vs DM  stat =    2.104   p = 0.2700   -> adequate (p > alpha)
+#>   RM vs LCR  stat =    4.219   p = 0.6200   -> continuous (RM) preferred
 #>
 #> BIC comparison at the quantitative step:
 #>   LCR  BIC = 11846.88
 #>   RM   BIC = 11842.66   (selected)
 ```
 
-Here the doubly-monotone reduction is adequate (DM vs UN not rejected), the
-parametric Rasch model fits as well as the unconstrained model (LCR vs UN not
-rejected at the quantitative gate), and the final bootstrap prefers the
-continuous Rasch model, so the data are read as quantitative — the expected
-verdict for Rasch-generated data.
+Here both paths to double monotonicity are supported, the fixed-grain LCR
+bridge is adequate relative to DM, and the final profiled bootstrap prefers the
+continuous Rasch model. The data are therefore read as quantitative — the
+expected verdict for Rasch-generated data.
 
 A purely diagnostic alternative, `select_model_constraint()`, inspects whether
 the unconstrained estimates *satisfy* each ordinal constraint (within a

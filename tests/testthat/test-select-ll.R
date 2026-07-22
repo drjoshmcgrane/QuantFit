@@ -166,10 +166,20 @@ test_that("select_model_ll picks a quantitative model on Rasch data", {
   expect_match(sel$interpretation, "QUANTITATIVE")
   expect_true(all(c("comparison", "statistic", "p_value", "decision") %in%
                     names(sel$tests)))
-  # joint default tests DM vs UN in the ordinal layer, then LCR vs UN at the
-  # quantitative gate
-  expect_true(any(grepl("DM", sel$tests$comparison)))
-  expect_true(any(grepl("LCR vs UN", sel$tests$comparison)))
+  # The default follows the full adjacent-edge lattice. The DM-to-LCR bridge
+  # uses the TI&D equivalence grain, then RM-vs-LCR resolves continuity.
+  expect_true(any(grepl("MON vs UN", sel$tests$comparison)))
+  expect_true(any(grepl("IIO vs UN", sel$tests$comparison)))
+  expect_true(any(grepl("LCR vs DM", sel$tests$comparison)))
+  expect_true(any(grepl("RM vs LCR", sel$tests$comparison)))
+  expect_false(any(grepl("LCR vs UN", sel$tests$comparison)))
+  expect_false(is.null(sel$lcr_vs_dm))
+  expect_false(is.null(sel$rm_vs_lcr))
+  expect_identical(sel$quant_fits$bridge_C, 4L)
+  expect_true(sel$quant_fits$bridge_C %in% sel$quant_fits$C_grid)
+  profile_bic <- vapply(sel$quant_fits$LCR_profile,
+    function(f) if (is.null(f)) NA_real_ else BIC(f), numeric(1))
+  expect_equal(sel$rm_vs_lcr$obs_bics, profile_bic)
   expect_false(any(is.na(sel$bics)))
   expect_output(print(sel), "Selected model")
   expect_output(print(sel), "Decision path")
@@ -191,8 +201,9 @@ test_that("select_model_ll method argument controls the ordinal-layer tests", {
   expect_true(any(grepl("IIO vs UN", lat$tests$comparison)))
   expect_false(any(grepl("DM vs UN", lat$tests$comparison)))
   expect_true(any(grepl("DM vs UN", joint$tests$comparison)))
-  # joint is the shipped default (matched accuracy at lower cost)
-  expect_identical(formals(select_model_ll)$method[[2]], "joint")
+  # the successive edge-wise lattice is the shipped default
+  expect_identical(formals(select_model_ll)$method[[2]], "lattice")
+  expect_false(formals(select_model_ll)$severity)
 })
 
 test_that("lattice method keeps IIO data ordinal, not doubly-monotone", {
@@ -244,9 +255,8 @@ test_that("non-normal (bimodal) additive data is still classified quantitative",
   skip_on_cran()
   # Additive conjoint structure is distribution-free: a bimodal continuous
   # ability distribution must not push additive data out of the quantitative
-  # band. LCR's free class locations/weights absorb the population shape, and
-  # the quant gate compares LCR vs UN at the same C, so density-approximation
-  # error is common to both and cancels.
+  # band. LCR's free class locations/weights absorb the population shape while
+  # the LCR-vs-DM edge tests additivity at the selected grain.
   set.seed(11)
   n <- 1200; J <- 10
   theta <- c(rnorm(n / 2, -1.8, 0.5), rnorm(n / 2, 1.8, 0.5))
