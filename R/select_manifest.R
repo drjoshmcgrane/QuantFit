@@ -12,13 +12,18 @@
 #             magnitude, calibrated by a parametric null in which item ordering
 #             is imposed (simulate under the fitted DM). Small p => IIO
 #             violated.
-#   MON axis  class / person monotonicity. Order the fitted unconstrained
-#             latent classes by mean success; how much does any item's
-#             class-probability DECREASE across the ordered classes? Calibrated
-#             by DATA RESAMPLING (the statistic's own sampling distribution),
-#             NOT a parametric null - a parametric simulate-and-refit
-#             reintroduces the very unconstrained-fit noise the statistic
-#             avoids, collapsing power.
+#   MON axis  class / person monotonicity. MON holds iff SOME class ordering
+#             makes every item's class-probability monotone, so the statistic
+#             is the MINIMUM total downward movement over all class orderings
+#             (not the mean-ordering, which flips close classes on noise at low
+#             separation), normalised per item so the scale is J-invariant.
+#             Calibrated by DATA RESAMPLING (the statistic's own sampling
+#             distribution): a genuine crossing is structural and survives
+#             resampling (q05 stays high); ordering noise on near-flat classes
+#             shakes out (q05 collapses toward 0). Property holds if the q05
+#             lower bound is at or below a per-item tolerance. A parametric
+#             monotone null instead reintroduces unconstrained-fit noise and,
+#             worse, fit_mon absorbs the IIO crossing - collapsing power.
 #
 #   IIO holds & MON holds -> DM ;  IIO holds & MON violated -> IIO
 #   IIO violated & MON holds -> MON ;  both violated -> UN
@@ -56,11 +61,22 @@
 }
 
 # --- MON axis --------------------------------------------------------------
+# All orderings of C classes (rows), for the exact "exists an order" read of
+# MON. C is small in the manifest layer (2-4); guard larger C with the
+# mean-ordering fallback so cost stays bounded.
+.class_orderings <- function(C) {
+  if (C <= 1L) return(matrix(1L, 1L, 1L))
+  do.call(rbind, lapply(seq_len(C), function(i)
+    cbind(i, matrix(setdiff(seq_len(C), i)[t(.class_orderings(C - 1L))],
+                    ncol = C - 1L, byrow = TRUE))))
+}
 .manifest_mon_stat <- function(data, C, n_starts, use_cpp) {
   un <- refit_model_type("UN", as.matrix(data), C, n_starts, use_cpp)
-  P <- un$item_probs
-  P <- P[, order(colMeans(P)), drop = FALSE]     # classes easy -> hard
-  sum(pmax(0, -t(apply(P, 1, diff))))            # total downward class movement
+  P <- un$item_probs                              # items x classes
+  J <- nrow(P)
+  down <- function(o) sum(pmax(0, -t(apply(P[, o, drop = FALSE], 1, diff))))
+  ords <- if (C <= 5L) .class_orderings(C) else matrix(order(colMeans(P)), 1L)
+  min(apply(ords, 1, down)) / J                   # min over orders, per item
 }
 
 .manifest_mon_holds <- function(data, C, B, n_starts, use_cpp, eps, seed) {
@@ -109,6 +125,17 @@
 }
 
 # --- DIP axis (LCR discrete vs RM continuous): latent-distribution shape -----
+# Hartigan's dip on the score distribution (sufficient for theta), calibrated
+# against a continuous-theta RM null. Robustly bootstrapped across N/J/sigma/
+# n_classes: size ~1.4%, POWER ~65-70% - the genuine MANIFEST CEILING. The
+# score distribution is the complete manifest signal (score is sufficient for
+# theta in BOTH LCR and RM, so nothing conditional adds information), and
+# binomial noise blurs class discreteness below detectability when classes are
+# close or items few. Silverman critical bandwidth and other shape statistics
+# do NOT beat the dip once bootstrap-calibrated (verified: 65% at 5.6% size,
+# worse per unit alpha). Only model-based deconvolution breaks the ceiling, and
+# that is not manifest. This does not affect the SCALE-TYPE verdict (LCR and RM
+# are both quantitative); it is only the within-quant discrete/continuous call.
 .manifest_dip_stat <- function(data, jseed) {
   s <- rowSums(data)
   if (!is.null(jseed)) set.seed(jseed)
@@ -146,8 +173,9 @@
 #'   for the constraint fits). Default 3.
 #' @param B Bootstrap replicates per axis and per quantitative edge (default 49).
 #' @param n_starts Random starts for the constraint fits (default 5).
-#' @param mon_eps Negligible class-probability decrease below which monotonicity
-#'   is treated as holding (default 0.03).
+#' @param mon_eps Per-item tolerance on the perm-min downward-movement q05
+#'   below which class monotonicity is treated as holding (default 0.04,
+#'   anchored at N = 1500 and N-scaled internally).
 #' @param alpha Significance level for the quantitative edges (default 0.05).
 #' @param use_cpp Use the compiled EM engine.
 #' @param mc.cores Cores for the bootstraps.
@@ -158,7 +186,7 @@
 #' @seealso [select_model_ll()] for the LR-edge lattice.
 #' @export
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
-                                   mon_eps = 0.03, alpha = 0.05,
+                                   mon_eps = 0.04, alpha = 0.05,
                                    cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
                                    mc.cores = 1L, seed = NULL, verbose = FALSE) {
   data <- validate_data_any(data, allow_na = FALSE)
@@ -169,10 +197,11 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   if (verbose) cat("Manifest ordinal layer: IIO axis...\n")
   iio <- .manifest_iio_holds(data, C, B, n_starts, use_cpp, s(0L))
   if (verbose) cat("Manifest ordinal layer: MON axis...\n")
-  # N-scale the monotonicity tolerance: the resampling noise floor of the
-  # class-probability decrease scales ~ 1/sqrt(N), so anchor mon_eps at
-  # N = 1500 and widen it at smaller N (keeps size ~alpha across N; the
-  # robustness study showed a fixed eps is liberal at N = 750).
+  # mon_eps is a PER-ITEM tolerance on the perm-min downward-movement q05.
+  # N-scale it: the resampling noise floor of the class-probability decrease
+  # scales ~ 1/sqrt(N), so anchor mon_eps at N = 1500 and widen it at smaller
+  # N (keeps size ~alpha across N; the calibration study showed the holds/
+  # violated q05 gap sits at ~0.02 vs ~0.06 per item at N = 1500).
   mon_eps_N <- mon_eps * sqrt(1500 / nrow(data))
   mon <- .manifest_mon_holds(data, C, max(B %/% 2L, 20L), n_starts, use_cpp,
                              mon_eps_N, s(1000L))
