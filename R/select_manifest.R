@@ -158,7 +158,8 @@
 #' @seealso [select_model_ll()] for the LR-edge lattice.
 #' @export
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
-                                   mon_eps = 0.03, alpha = 0.05, use_cpp = TRUE,
+                                   mon_eps = 0.03, alpha = 0.05,
+                                   cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
                                    mc.cores = 1L, seed = NULL, verbose = FALSE) {
   data <- validate_data_any(data, allow_na = FALSE)
   C <- as.integer(stats::median(n_classes)); if (C < 2L) C <- 2L
@@ -168,8 +169,13 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   if (verbose) cat("Manifest ordinal layer: IIO axis...\n")
   iio <- .manifest_iio_holds(data, C, B, n_starts, use_cpp, s(0L))
   if (verbose) cat("Manifest ordinal layer: MON axis...\n")
+  # N-scale the monotonicity tolerance: the resampling noise floor of the
+  # class-probability decrease scales ~ 1/sqrt(N), so anchor mon_eps at
+  # N = 1500 and widen it at smaller N (keeps size ~alpha across N; the
+  # robustness study showed a fixed eps is liberal at N = 750).
+  mon_eps_N <- mon_eps * sqrt(1500 / nrow(data))
   mon <- .manifest_mon_holds(data, C, max(B %/% 2L, 20L), n_starts, use_cpp,
-                             mon_eps, s(1000L))
+                             mon_eps_N, s(1000L))
 
   ih <- isTRUE(iio$holds); mh <- isTRUE(mon$holds)
   ordinal <- if (ih && mh) "DM" else if (ih && !mh) "IIO" else
@@ -182,11 +188,22 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
 
   # Quantitative sequence only from DM (order before quantity)
   if (ordinal == "DM") {
-    if (verbose) cat("Quantitative axis: additivity (DM vs quant)...\n")
-    # ADD axis: is the class x item logit table additively separable
-    # (theta_c - beta_i)? Additive -> quantitative; not -> ordinal (DM).
-    add <- .manifest_add_holds(data, C, B, n_starts, use_cpp, s(2000L))
-    if (isTRUE(add$additive)) {
+    if (verbose) cat("Additivity (DM vs quant): DOUBLE cancellation...\n")
+    # DM -> quant is the additive-conjoint-structure question (ordered vs
+    # equal-interval). SINGLE cancellation tests ordinality - already
+    # established here (DM reached via the manifest IIO+MON axes) - so we test
+    # DOUBLE cancellation (the Thomsen additivity condition) ALONE. Dropping the
+    # redundant single test avoids Holm dilution over the one distinction that
+    # matters, recovering power on this intrinsically hard boundary. (The full
+    # single->double->triple hierarchy is for the standalone CC route, where
+    # ordinality is not pre-established.) Reject double -> non-additive -> DM.
+    cc <- tryCatch(cc_bootstrap_null(data, check = "double", B = cc_B,
+             n.mat = cc_n_mat, alpha = alpha, mc.cores = mc.cores,
+             seed = if (!is.null(seed)) seed + 2000L else NULL,
+             verbose = FALSE), error = function(e) NULL)
+    add <- list(supports_quant = if (is.null(cc)) NA else !isTRUE(cc$reject),
+                cc = cc)
+    if (isTRUE(add$supports_quant)) {
       # quantitative. DIP axis decides discrete (LCR) vs continuous (RM) from
       # the shape of the score distribution (sufficient for theta).
       if (verbose) cat("Quantitative axis: latent shape (LCR vs RM)...\n")
@@ -228,8 +245,9 @@ print.qlselect_manifest <- function(x, ...) {
   cat(sprintf("MON axis        : stat %.4f, lo %.4f -> %s\n",
               x$mon$stat, x$mon$lo, if (isTRUE(x$mon$holds)) "holds" else "violated"))
   if (!is.null(x$add))
-    cat(sprintf("ADD axis        : stat %.4f, p %.3f -> %s\n",
-                x$add$stat, x$add$p, if (isTRUE(x$add$additive)) "additive (quant)" else "non-additive (DM)"))
+    cat(sprintf("Additivity (CC) : supports_quant = %s -> %s\n",
+                isTRUE(x$add$supports_quant),
+                if (isTRUE(x$add$supports_quant)) "additive (quant)" else "non-additive (DM)"))
   if (!is.null(x$dip))
     cat(sprintf("DIP axis        : stat %.4f, p %.3f -> %s\n",
                 x$dip$stat, x$dip$p, if (isTRUE(x$dip$discrete)) "discrete (LCR)" else "continuous (RM)"))

@@ -11,6 +11,8 @@ select_model_manifest(
   n_starts = 5L,
   mon_eps = 0.03,
   alpha = 0.05,
+  cc_B = 99L,
+  cc_n_mat = 500L,
   use_cpp = TRUE,
   mc.cores = 1L,
   seed = NULL,
