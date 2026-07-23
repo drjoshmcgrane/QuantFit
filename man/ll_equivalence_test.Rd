@@ -64,6 +64,9 @@ An object of class \code{qleqtest}: a list with elements
 \describe{
 \item{statistic}{Observed likelihood-ratio statistic
 \eqn{2(\ell_{general} - \ell_{constrained})}, floored at 0.}
+\item{raw_statistic}{The observed statistic before flooring.}
+\item{pre_refinement_statistic}{The observed statistic before any
+child-initialized refinement of the general fit.}
 \item{p_value}{Bootstrap p-value
 \eqn{(1 + \#\{LR^*_b \ge LR_{obs}\}) / (B_{eff} + 1)}.}
 \item{B}{Requested number of replicates.}
@@ -71,6 +74,10 @@ An object of class \code{qleqtest}: a list with elements
 \item{n_failed}{Replicates dropped because a refit failed.}
 \item{null_distribution}{Sorted vector of bootstrap statistics.}
 \item{models}{Character vector \code{c(constrained_label, general_label)}.}
+\item{general_warm_started}{Whether a child-initialized EM refinement
+improved the observed general-model fit.}
+\item{bootstrap_general_warm_started}{Number of valid bootstrap
+replicates whose general fit was improved by the same safeguard.}
 }
 }
 \description{

@@ -74,6 +74,63 @@
        holds = lo <= eps)
 }
 
+# --- ADD axis (ordinal DM vs quantitative): additive separability -----------
+.manifest_add_stat <- function(un_fit) {
+  P <- pmin(pmax(un_fit$item_probs, 1e-3), 1 - 1e-3)   # items x classes
+  L <- stats::qlogis(P)
+  mu <- mean(L); ri <- rowMeans(L) - mu; cc <- colMeans(L) - mu
+  resid <- L - (outer(ri, cc, "+") + mu)               # remove additive main effects
+  sqrt(mean(resid^2)) / sqrt(mean((L - mu)^2))         # scale-free interaction size
+}
+# parametric null under ADDITIVITY (Rasch form imposed on the class x item
+# table): simulate class responses from the additive-projected probabilities,
+# refit UN, recompute the interaction. Operates on the class structure only -
+# no fit_rm. Observed interaction above the null 95th pct => non-additive => DM.
+.manifest_add_holds <- function(data, C, B, n_starts, use_cpp, seed) {
+  un <- refit_model_type("UN", as.matrix(data), C, n_starts, use_cpp)
+  obs <- .manifest_add_stat(un)
+  P <- pmin(pmax(un$item_probs, 1e-3), 1 - 1e-3)
+  L <- stats::qlogis(P); mu <- mean(L)
+  ri <- rowMeans(L) - mu; cc <- colMeans(L) - mu
+  Padd <- stats::plogis(outer(ri, cc, "+") + mu)       # additive-projected probs
+  pc <- un$class_probs; pc <- pmax(pc, 0); pc <- pc / sum(pc)
+  n <- nrow(data); J <- ncol(data)
+  if (!is.null(seed)) set.seed(seed)
+  null <- vapply(seq_len(B), function(b) {
+    cl <- sample.int(C, n, replace = TRUE, prob = pc)
+    d2 <- matrix(stats::rbinom(n * J, 1, t(Padd)[cl, , drop = FALSE]), n, J)
+    u2 <- tryCatch(refit_model_type("UN", d2, C, n_starts, use_cpp),
+                   error = function(e) NULL)
+    if (is.null(u2)) NA_real_ else .manifest_add_stat(u2)
+  }, numeric(1))
+  null <- null[!is.na(null)]
+  p <- if (!length(null)) NA_real_ else (1 + sum(null >= obs)) / (length(null) + 1)
+  list(stat = obs, p = p, additive = isTRUE(p > 0.05))
+}
+
+# --- DIP axis (LCR discrete vs RM continuous): latent-distribution shape -----
+.manifest_dip_stat <- function(data, jseed) {
+  s <- rowSums(data)
+  if (!is.null(jseed)) set.seed(jseed)
+  unname(diptest::dip.test(s + stats::runif(length(s), -0.4, 0.4))$statistic)
+}
+# calibrate the dip against a CONTINUOUS-theta (RM) null at the fitted item
+# difficulties: observed dip above the null 95th pct => the score distribution
+# is more multimodal than any continuous theta explains => LCR (discrete).
+.manifest_dip_lcr <- function(data, rm_fit, B, seed) {
+  obs <- .manifest_dip_stat(data, seed)
+  beta <- rm_fit$delta; sigma <- sqrt(rasch_latent_var(rm_fit))
+  n <- nrow(data); J <- ncol(data)
+  if (!is.null(seed)) set.seed(seed)
+  null <- vapply(seq_len(B), function(b) {
+    th <- stats::rnorm(n, 0, sigma)
+    d2 <- matrix(stats::rbinom(n * J, 1, stats::plogis(outer(th, beta, "-"))), n, J)
+    .manifest_dip_stat(d2, b)
+  }, numeric(1))
+  p <- (1 + sum(null >= obs)) / (B + 1)
+  list(stat = obs, p = p, discrete = isTRUE(p <= 0.05))   # small p => LCR
+}
+
 #' Manifest-2x2 latent-structure selector (property-based ordinal layer)
 #'
 #' An alternative to [select_model_ll()] that decides the ordinal / nominal
@@ -125,46 +182,38 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
 
   # Quantitative sequence only from DM (order before quantity)
   if (ordinal == "DM") {
-    if (verbose) cat("Quantitative sequence: DM -> LCR -> RM...\n")
-    lcr_C <- max(2L, as.integer(ceiling((J + 1) / 2)))   # Lindsay equivalence grain
-    # compare LCR vs DM at the SAME class count (the bridge asks whether the
-    # located/equal-interval constraint holds beyond double monotonicity, so
-    # both models are fit at the Lindsay grain)
-    fit_dm  <- tryCatch(refit_model_type("DM", data, lcr_C, n_starts, use_cpp),
-                        error = function(e) NULL)
-    fit_lcr_o <- tryCatch(fit_lcr(data, lcr_C, n_starts = n_starts, use_cpp = use_cpp),
-                          error = function(e) NULL)
-    fit_rm_o  <- tryCatch(suppressWarnings(fit_rm(data, verbose = FALSE)),
-                          error = function(e) NULL)
-    lcr_ok <- FALSE
-    if (!is.null(fit_dm) && !is.null(fit_lcr_o)) {
-      t <- tryCatch(ll_equivalence_test(data, fit_lcr_o, fit_dm, B = B,
-             n_starts = n_starts, seed = s(2000L), use_cpp = use_cpp,
-             mc.cores = mc.cores), error = function(e) NULL)
-      # degenerate-null guard: retain DM (i.e. LCR not needed) only on genuine
-      # non-rejection; adequate LCR (p > alpha) means the located constraint holds
-      lcr_ok <- !is.null(t) && t$p_value > alpha
-    }
-    if (lcr_ok) {
-      selected <- "LCR"; interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
-      if (!is.null(fit_rm_o)) {
-        rl <- tryCatch(rm_vs_lcr_test(data, fit_rm_o, fit_lcr_o, lcr_C, B = B,
-               C_range = if (length(n_classes) > 1L) n_classes else NULL,
-               alpha = alpha, n_starts = n_starts, use_cpp = use_cpp,
-               mc.cores = mc.cores, seed = s(3000L)), error = function(e) NULL)
-        if (!is.null(rl) && isTRUE(rl$available) && !isTRUE(rl$select_lcr)) {
+    if (verbose) cat("Quantitative axis: additivity (DM vs quant)...\n")
+    # ADD axis: is the class x item logit table additively separable
+    # (theta_c - beta_i)? Additive -> quantitative; not -> ordinal (DM).
+    add <- .manifest_add_holds(data, C, B, n_starts, use_cpp, s(2000L))
+    if (isTRUE(add$additive)) {
+      # quantitative. DIP axis decides discrete (LCR) vs continuous (RM) from
+      # the shape of the score distribution (sufficient for theta).
+      if (verbose) cat("Quantitative axis: latent shape (LCR vs RM)...\n")
+      rm_fit <- tryCatch(suppressWarnings(fit_rm(data, verbose = FALSE)),
+                         error = function(e) NULL)
+      if (!is.null(rm_fit)) {
+        dip <- .manifest_dip_lcr(data, rm_fit, B, s(3000L))
+        if (isTRUE(dip$discrete)) {
+          selected <- "LCR"; interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
+        } else {
           selected <- "RM"; interpretation <- "QUANTITATIVE (continuous: Rasch model)"
         }
+      } else {
+        selected <- "LCR"; interpretation <- "QUANTITATIVE (discrete: latent class Rasch)"
+        dip <- NULL
       }
-    }
+    } else add <- add   # not additive -> stays DM
   }
 
   scale <- c(UN = "nominal", MON = "ordinal", IIO = "ordinal", DM = "ordinal",
              LCR = "quant", RM = "quant")[selected]
   structure(list(selected = selected, interpretation = interpretation,
                  scale = unname(scale), n_classes = C,
-                 iio = iio, mon = mon, rm_vs_lcr = rl,
-                 method = "manifest-2x2"),
+                 iio = iio, mon = mon,
+                 add = if (exists("add", inherits = FALSE)) add else NULL,
+                 dip = if (exists("dip", inherits = FALSE)) dip else NULL,
+                 method = "manifest-4axis"),
             class = "qlselect_manifest")
 }
 
@@ -178,7 +227,13 @@ print.qlselect_manifest <- function(x, ...) {
               x$iio$stat, x$iio$p, if (isTRUE(x$iio$holds)) "holds" else "violated"))
   cat(sprintf("MON axis        : stat %.4f, lo %.4f -> %s\n",
               x$mon$stat, x$mon$lo, if (isTRUE(x$mon$holds)) "holds" else "violated"))
-  if (!is.null(x$rm_vs_lcr))
+  if (!is.null(x$add))
+    cat(sprintf("ADD axis        : stat %.4f, p %.3f -> %s\n",
+                x$add$stat, x$add$p, if (isTRUE(x$add$additive)) "additive (quant)" else "non-additive (DM)"))
+  if (!is.null(x$dip))
+    cat(sprintf("DIP axis        : stat %.4f, p %.3f -> %s\n",
+                x$dip$stat, x$dip$p, if (isTRUE(x$dip$discrete)) "discrete (LCR)" else "continuous (RM)"))
+  if (FALSE)
     cat(sprintf("RM vs LCR       : stat %.2f, p %.3f\n",
                 x$rm_vs_lcr$statistic, x$rm_vs_lcr$p_value))
   invisible(x)

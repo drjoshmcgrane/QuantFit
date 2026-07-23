@@ -18,6 +18,11 @@
 * LCR multi-start fitting now uses genuinely dispersed mixture starts after the
   stable score start, fixing an extreme-class local optimum that materially
   depressed the LCR likelihood on correctly generated data.
+* Nested binary-model likelihood tests now warm-start a more-general fit from
+  its constrained child whenever a multi-start fit violates the known nesting
+  inequality. The same safeguard is applied to observed data, fitted-null
+  replicates, and the optional severity reference. Raw LR values and whether
+  the observed safeguard was used are retained in the selection diagnostics.
 
 # QuantFit 0.2.0
 

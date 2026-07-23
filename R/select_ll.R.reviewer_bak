@@ -861,7 +861,7 @@ print.qleqtest <- function(x, ...) {
 select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                             B = 99, n_starts = 5, boot_n_starts = NULL,
                             method = c("lattice", "joint"), severity = FALSE,
-                            min_effect = 1.0, seed = NULL,
+                            seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
                             ...) {
 
@@ -985,20 +985,6 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     t <- run_test(fit_c, fit_g, seed_offset, reselect_C_range,
                   selection_model_type)
     ok <- t$p_value > a
-    # PROTOTYPE degenerate-null retention: the parametric-bootstrap null can be
-    # DEGENERATE when the constrained and general models are near-equivalent on
-    # the data (e.g. DM vs IIO on doubly-monotone data - both fit identically,
-    # null LRs cluster at ~0). A trivially small observed LR then exceeds the
-    # whole degenerate null, giving p = 1/(B+1) - a spurious rejection of a
-    # negligible effect. When even the null's 95th percentile is a trivially
-    # small LR, the bootstrap itself certifies the models indistinguishable, so
-    # retain the constrained model by parsimony. Cheap (reuses the null) and it
-    # cleanly separates the pathology (null q95 ~ 0.04 on true-DM data) from
-    # genuine violations (null q95 ~ 12-18 on true-IIO data).
-    null_q95 <- if (length(t$null_distribution))
-      stats::quantile(t$null_distribution, 0.95, names = FALSE) else NA_real_
-    degenerate <- isTRUE(!ok && is.finite(null_q95) && null_q95 < min_effect)
-    if (degenerate) ok <- TRUE
     if (!ok && isTRUE(severity)) {
       g_null <- ll_general_null(
         data, fit_c, fit_g, B = B, n_starts = boot_n_starts,
@@ -1012,12 +998,10 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
         if (!separated) ok <- TRUE   # models indistinguishable -> parsimony
       }
     }
-    overridden <- (isTRUE(severity) || degenerate) && ok && t$p_value <= a
+    overridden <- isTRUE(severity) && ok && t$p_value <= a
     tests <<- add_test(tests, label, t, ok)
     if (overridden && nrow(tests))
-      tests$decision[nrow(tests)] <<- if (degenerate)
-        "retained (degenerate null: models near-equivalent)"
-        else "retained (severity override: no detectable effect)"
+      tests$decision[nrow(tests)] <<- "retained (severity override: no detectable effect)"
     t$label <- label
     t$severity_override <- overridden
     if (exists("g_null", inherits = FALSE)) t$severity_null <- g_null

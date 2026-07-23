@@ -15,6 +15,7 @@ local({ set.seed(41); th <- rnorm(400); b <- runif(8,-2,2)+0.7
   d <- matrix(rbinom(400*8,1,plogis(outer(th,b,"-"))),400,8); storage.mode(d)<-"integer"
   dl <- QuantFit:::.cml_fit_general(d)
   stopifnot(cor(vapply(dl,sum,1), b) > 0.95, max(abs(unlist(dl))) < 20) })
+ROUTES <- Sys.getenv("QUANTFIT_ROUTES", "lc")   # lc | cc | omni | all
 BUILD_SHA <- tryCatch(utils::packageDescription("QuantFit")$GitSHA,
                       error = function(e) NA_character_)
 if (is.null(BUILD_SHA) || is.na(BUILD_SHA))
@@ -64,13 +65,17 @@ if (phase == "calib") {
 } else if (phase == "recover") {
   grid$omni_S[grid$rep <= 2] <- 12000L
 } else if (phase == "tidmatch") {
-  grid$omni_S[grid$rep <= 3] <- 12000L
-  grid$omni_S[grid$rep == 4] <- 30000L
+  # LC + CC only: Omni at N=5000 is infeasible single-machine, and the
+  # TI&D expert-human comparison is about LC model recovery (Omni was not
+  # part of their study). Omni size comes from the calib phase (null data).
 } else grid$omni_S <- 800L
 cfg <- if (phase == "canary") {
-  list(lcB = 19L, lcStarts = 2L, ccB = 19L, nmat = 50L, omniB = 19L, Ns = 8L)
+  list(lcB = 19L, lcStarts = 2L, lcCores = 2L, ccB = 19L, nmat = 50L, omniB = 19L, Ns = 8L)
 } else {
-  list(lcB = 49L, lcStarts = 2L, ccB = 299L, nmat = 200L, omniB = 99L, Ns = 25L)
+  if (phase == "tidmatch")
+    list(lcB = 19L, lcStarts = 2L, lcCores = 4L, ccB = 99L, nmat = 200L, omniB = 99L, Ns = 25L)
+  else
+    list(lcB = 49L, lcStarts = 2L, lcCores = 1L, ccB = 299L, nmat = 200L, omniB = 99L, Ns = 25L)
 }
 
 ids <- grid$id
@@ -105,7 +110,7 @@ dist_dm <- function(d) {
 
 run_one <- function(i) {
   g <- grid[grid$id == i, ]
-  out_file <- file.path(out_dir, sprintf("F%04d.csv", i))
+  out_file <- file.path(out_dir, sprintf("F%04d_%s.csv", i, ROUTES))
   if (file.exists(out_file)) return(invisible())
   dat <- gen_data(g)
   ms <- g$id * 1000003L %% .Machine$integer.max
@@ -113,7 +118,13 @@ run_one <- function(i) {
     rep = g$rep, seed = g$seed, build_sha = BUILD_SHA,
     lc_selected = NA, lc_C = NA,
     lc_mon_p = NA, lc_iio_p = NA, lc_dmiio_p = NA, lc_dmmon_p = NA,
+    lc_mon_raw = NA, lc_iio_raw = NA, lc_dmiio_raw = NA, lc_dmmon_raw = NA,
+    lc_mon_pre = NA, lc_iio_pre = NA, lc_dmiio_pre = NA, lc_dmmon_pre = NA,
+    lc_mon_warm = NA, lc_iio_warm = NA,
+    lc_dmiio_warm = NA, lc_dmmon_warm = NA,
     lc_lcrdm_p = NA, lc_lcrdm_B_eff = NA, lc_lcrdm_override = NA,
+    lc_lcrdm_raw = NA, lc_lcrdm_pre = NA, lc_lcrdm_warm = NA,
+    lc_lcrdm_boot_warm = NA,
     lc_bridge_C = NA, lc_rmlcr_p = NA, lc_rmlcr_B_eff = NA,
     lc_profile_C = NA, lc_bic_diff = NA, lc_quant_reached = NA,
     lc_rmlcr_boot_ok = NA, dm_p = NA, dm_override = NA, dist_dm = dist_dm(dat),
@@ -122,7 +133,8 @@ run_one <- function(i) {
     omni_ess_min = NA, omni_null_ess_med = NA, omni_null_ess_low = NA,
     secs_lc = NA, secs_cc = NA, secs_omni = NA, err = "")
   t0 <- proc.time()[3]
-  lc <- tryCatch(suppressWarnings(select_model_ll(as.matrix(dat),
+  lc <- if (!ROUTES %in% c("lc","all")) NULL else
+    tryCatch(suppressWarnings(select_model_ll(as.matrix(dat),
         n_classes = 1:6, B = cfg$lcB, n_starts = 5, boot_n_starts = 5,
         method = "lattice", severity = FALSE,
         seed = ms, mc.cores = 1)), error = function(e) NULL)
@@ -136,17 +148,47 @@ run_one <- function(i) {
       z <- lc$tests$p_value[lc$tests$comparison == label]
       if (length(z)) round(z[[1L]], 4) else NA_real_
     }
+    edge_raw <- function(label) {
+      z <- lc$tests$raw_statistic[lc$tests$comparison == label]
+      if (length(z)) round(z[[1L]], 6) else NA_real_
+    }
+    edge_warm <- function(label) {
+      z <- lc$tests$general_warm_started[lc$tests$comparison == label]
+      if (length(z)) z[[1L]] else NA
+    }
+    edge_pre <- function(label) {
+      z <- lc$tests$pre_refinement_statistic[lc$tests$comparison == label]
+      if (length(z)) round(z[[1L]], 6) else NA_real_
+    }
     row$lc_mon_p <- edge_p("MON vs UN")
     row$lc_iio_p <- edge_p("IIO vs UN")
     row$lc_dmiio_p <- edge_p("DM vs IIO")
     row$lc_dmmon_p <- edge_p("DM vs MON")
+    row$lc_mon_raw <- edge_raw("MON vs UN")
+    row$lc_iio_raw <- edge_raw("IIO vs UN")
+    row$lc_dmiio_raw <- edge_raw("DM vs IIO")
+    row$lc_dmmon_raw <- edge_raw("DM vs MON")
+    row$lc_mon_pre <- edge_pre("MON vs UN")
+    row$lc_iio_pre <- edge_pre("IIO vs UN")
+    row$lc_dmiio_pre <- edge_pre("DM vs IIO")
+    row$lc_dmmon_pre <- edge_pre("DM vs MON")
+    row$lc_mon_warm <- edge_warm("MON vs UN")
+    row$lc_iio_warm <- edge_warm("IIO vs UN")
+    row$lc_dmiio_warm <- edge_warm("DM vs IIO")
+    row$lc_dmmon_warm <- edge_warm("DM vs MON")
     dmrow <- lc$tests[lc$tests$comparison %in% c("DM vs IIO", "DM vs MON"), ]
     if (nrow(dmrow)) {
       row$dm_p <- round(min(dmrow$p_value), 4)
       row$dm_override <- any(grepl("override", dmrow$decision))
     }
     lcrdm <- lc$tests[lc$tests$comparison == "LCR vs DM", ]
-    if (nrow(lcrdm)) row$lc_lcrdm_p <- round(lcrdm$p_value[1], 4)
+    if (nrow(lcrdm)) {
+      row$lc_lcrdm_p <- round(lcrdm$p_value[1], 4)
+      row$lc_lcrdm_raw <- round(lcrdm$raw_statistic[1], 6)
+      row$lc_lcrdm_pre <- round(lcrdm$pre_refinement_statistic[1], 6)
+      row$lc_lcrdm_warm <- lcrdm$general_warm_started[1]
+      row$lc_lcrdm_boot_warm <- lcrdm$bootstrap_general_warm_started[1]
+    }
     if (!is.null(lc$lcr_vs_dm)) {
       row$lc_lcrdm_B_eff <- lc$lcr_vs_dm$B_effective
       row$lc_lcrdm_override <- isTRUE(lc$lcr_vs_dm$severity_override)
@@ -162,7 +204,8 @@ run_one <- function(i) {
     }
   } else row$err <- "lc;"
   t0 <- proc.time()[3]
-  cc <- tryCatch(suppressWarnings(cc_bootstrap_hierarchy(as.matrix(dat),
+  cc <- if (phase == "tidmatch" || !ROUTES %in% c("cc","all")) NULL else
+    tryCatch(suppressWarnings(cc_bootstrap_hierarchy(as.matrix(dat),
         B = cfg$ccB, n.mat = cfg$nmat, alpha = 0.05, seed = ms,
         mc.cores = 1, verbose = FALSE)), error = function(e) NULL)
   row$secs_cc <- round(proc.time()[3] - t0, 1)
@@ -171,7 +214,7 @@ run_one <- function(i) {
     row$cc_p_holm <- round(min(cc$p_adjusted), 4)
     row$cc_B_eff <- min(vapply(cc$levels, function(l) l$B, 1))
   } else row$err <- paste0(row$err, "cc;")
-  if (!is.na(g$omni_S)) {
+  if (!is.na(g$omni_S) && ROUTES %in% c("omni","all")) {
     t0 <- proc.time()[3]
     ka <- tryCatch(suppressWarnings(omni_bootstrap_null(
       as.matrix(dat), B = cfg$omniB, S = g$omni_S,

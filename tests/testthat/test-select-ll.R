@@ -48,6 +48,10 @@ test_that("ll_equivalence_test returns a valid, deterministic qleqtest", {
                               seed = 42)
   expect_s3_class(tst1, "qleqtest")
   expect_true(tst1$statistic >= 0)
+  expect_true(is.finite(tst1$raw_statistic))
+  expect_true(is.finite(tst1$pre_refinement_statistic))
+  expect_type(tst1$general_warm_started, "logical")
+  expect_true(tst1$bootstrap_general_warm_started >= 0)
   expect_true(tst1$p_value >= 0 && tst1$p_value <= 1)
   expect_identical(tst1$models, c("MON", "UN"))
   expect_true(tst1$B_effective <= 19)
@@ -166,6 +170,10 @@ test_that("select_model_ll picks a quantitative model on Rasch data", {
   expect_match(sel$interpretation, "QUANTITATIVE")
   expect_true(all(c("comparison", "statistic", "p_value", "decision") %in%
                     names(sel$tests)))
+  expect_true(all(c("raw_statistic", "pre_refinement_statistic",
+                    "general_warm_started",
+                    "bootstrap_general_warm_started") %in%
+                    names(sel$tests)))
   # The default follows the full adjacent-edge lattice. The DM-to-LCR bridge
   # uses the TI&D equivalence grain, then RM-vs-LCR resolves continuity.
   expect_true(any(grepl("MON vs UN", sel$tests$comparison)))
@@ -225,6 +233,21 @@ test_that("lattice method keeps IIO data ordinal, not doubly-monotone", {
   expect_true(any(grepl("MON vs UN", sel$tests$comparison)))
   expect_true(any(grepl("IIO vs UN", sel$tests$comparison)))
   expect_s3_class(sel, "qlselect_ll")
+})
+
+test_that("nested general fits are warm-refined from a better constrained fit", {
+  set.seed(812)
+  d <- simulate_responses("DM", n_persons = 300, n_items = 6,
+                          n_classes = 3, seed = 812)
+  dm <- fit_dm(d, 3, n_starts = 2, seed = 2)
+  iio <- fit_iio(d, 3, n_starts = 2, seed = 3)
+  # Emulate a missed parent mode while retaining a valid parent object. The
+  # child solution is feasible in IIO, so the warm refinement must restore the
+  # nesting inequality without changing model labels.
+  iio$loglik <- dm$loglik - 1
+  z <- QuantFit:::.warm_refine_general(d, iio, dm)
+  expect_identical(z$model_type, "IIO")
+  expect_gte(z$loglik, dm$loglik - 1e-5)
 })
 
 test_that("select_model_ll stays classificatory/ordinal on unstructured data", {

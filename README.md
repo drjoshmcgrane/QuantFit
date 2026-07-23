@@ -14,10 +14,20 @@ RM-versus-LCR comparison then resolves continuity/grain size. Decisions use
 corrected bootstrap p-values without a heuristic override by default. When a
 class-count range is supplied, the UN-BIC ordinal enumeration is repeated in
 every applicable null replicate so class selection is part of the calibration.
+If finite-mixture optimisation leaves a general model below its nested child,
+the general model receives one EM refinement initialized at the child solution;
+the identical safeguard is used in bootstrap replicates, and its use is exposed
+in the returned diagnostics.
 The significance levels are per edge, not familywise over the entire path; a
 true deep model can be stopped by a chance rejection at any preceding edge.
 This is one reason exact recovery of Rasch data need not be perfect even when
 every individual test is correctly calibrated.
+
+Full calibration is computationally intensive because every lattice edge
+refits multiple finite-mixture models in every bootstrap replicate. Runtime
+grows sharply with test length and the class-count grid; long tests can take
+hours even with parallel bootstrap workers. Use a small `B` only for code
+shakedowns, and use `B = 99` or more for a reported 5% decision.
 
 ## Overview
 

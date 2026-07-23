@@ -194,8 +194,15 @@ RM-versus-LCR step bootstraps the profiled BIC *difference* against a null
 simulated from the fitted Rasch model, so LCR is selected only when its apparent
 advantage is more extreme than continuous Rasch data would produce. The
 optional severity override is off by default. Because the procedure refits
-models on bootstrap samples it is moderately expensive; here we use a small
+models on bootstrap samples it is computationally intensive; here we use a small
 `B` for illustration:
+
+Finite-mixture optimizers can occasionally miss a parent-model mode and return
+a log-likelihood just below a nested child. In that event the implementation
+runs one parent EM refinement initialized at the child solution. The same rule
+is applied to observed and bootstrap fits, and the returned test table records
+the pre-refinement LR, final LR, and warm-start counts. This is an optimisation
+safeguard, not a decision override.
 
 The reported significance levels are per edge rather than familywise over the
 whole path. Thus, a true model deep in the lattice can be stopped by a chance

@@ -14,6 +14,7 @@ select_model_ll(
   boot_n_starts = NULL,
   method = c("lattice", "joint"),
   severity = FALSE,
+  min_effect = 1,
   seed = NULL,
   use_cpp = TRUE,
   mc.cores = 1L,
@@ -184,6 +185,12 @@ operationalisation of the TI&D lattice, not a byte-for-byte reproduction of
 the paper's original BIC decision rule. Non-rejection means that an edge was
 not contradicted at the requested sample size; it is not proof that the
 constraint is true. Requiring both paths to DM is deliberately conservative.
+\code{alpha} and \code{alpha_quant} are per-edge levels: the function does not claim
+familywise type-I error control over the complete, data-dependent path. A
+true model deep in the lattice can therefore be stopped by a chance
+rejection at any preceding edge, so exact model-recovery probability is not
+generally \code{1 - alpha}. Users who want fewer such demotions can specify lower
+edge levels, accepting less power to detect violations.
 
 \strong{Why bootstrap rather than chi-square?} UN, MON, IIO, and DM all
 have the same number of free parameters; the ordinal models differ from
@@ -196,8 +203,9 @@ the test without deriving the mixture weights.
 \strong{Computational cost.} The complete path performs up to four ordinal
 edge tests and two quantitative tests. The profiled RM-vs-LCR bootstrap fits
 LCR at every supplied class count in every replicate, so \code{B = 99} can take
-minutes per dataset at study-sized samples. \code{mc.cores} parallelises
-replicates. Supplying \code{seed} makes every fit and draw reproducible.
+hours per dataset for long tests and broad class-count grids. \code{mc.cores}
+parallelises replicates. Supplying \code{seed} makes every fit and draw
+reproducible.
 }
 \examples{
 \dontrun{
