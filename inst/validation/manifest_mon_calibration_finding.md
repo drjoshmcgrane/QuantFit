@@ -1,5 +1,23 @@
 # MON-axis separation-robust calibration (and a correct model×separation generator)
 
+> **CORRECTION (post-hoc).** The `mon_eps = 0.04` recommended below was
+> calibrated ONLY on the artificial `gen_correct` generator at low class
+> separation (sep=0.6). On the actual deployment generator
+> (`simulate_responses`, well-separated classes) a real IIO class-monotonicity
+> violation gives a per-item q05 of only ~0.01-0.06, so **eps=0.04 sits above it
+> and silently classifies IIO data as DM** — collapsing IIO recovery from the
+> validated ~87-100% (at J=12) to ~20% in the head-to-head. IIO detection is the
+> entire purpose of the manifest route, so this was a serious regression.
+> **The default is now `mon_eps = 0.01`**, which restores IIO recovery while
+> keeping DM/MON/UN size at 100% on `simulate_responses` (verified: eps=0.01
+> gives sr_IIO power 100%, sr_DM/MON size 100%, sr_UN power 100%). The low-sep
+> `gen_correct` "size" the 0.04 value protected (sep<~1 logit) is a regime the
+> real generator never produces AND where weak-IIO and collapsed-DM are
+> genuinely indistinguishable — an identifiability limit, not a tuning target.
+> Lesson: calibrate the threshold on the DEPLOYMENT generator, not an artificial
+> stress corner. The perm-min statistic and resample-q05 machinery below are
+> retained and correct; only the threshold was mis-set.
+
 ## The bug that motivated this
 
 The earlier `gen_sep` generator (in `manifest_iio_mon_robustness.R`) built IIO/MON

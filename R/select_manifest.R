@@ -174,8 +174,14 @@
 #' @param B Bootstrap replicates per axis and per quantitative edge (default 49).
 #' @param n_starts Random starts for the constraint fits (default 5).
 #' @param mon_eps Per-item tolerance on the perm-min downward-movement q05
-#'   below which class monotonicity is treated as holding (default 0.04,
-#'   anchored at N = 1500 and N-scaled internally).
+#'   below which class monotonicity is treated as holding (default 0.01,
+#'   anchored at N = 1500 and N-scaled internally). Set deliberately tight: on
+#'   the standard well-separated generator a real IIO class-monotonicity
+#'   violation gives q05 ~0.01-0.06, so a larger eps silently classifies IIO
+#'   data as DM (0.04 collapsed IIO recovery to ~20\%). A tight eps keeps IIO
+#'   detection; the cost is only at artificially low class separation
+#'   (< ~1 logit), where weak IIO and near-collapsed DM are genuinely
+#'   indistinguishable - an identifiability limit, not a tuning target.
 #' @param dm_quant How to decide DM (ordinal) vs quantitative once the 2x2
 #'   ordinal layer reaches DM. \code{"double_cancellation"} (default) uses the
 #'   manifest double-cancellation additivity test then the DIP shape axis.
@@ -197,7 +203,7 @@
 #' @seealso [select_model_ll()] for the LR-edge lattice.
 #' @export
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
-                                   mon_eps = 0.04, alpha = 0.05,
+                                   mon_eps = 0.01, alpha = 0.05,
                                    dm_quant = c("double_cancellation", "lr"),
                                    lr_boot_n_starts = 2L,
                                    cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
