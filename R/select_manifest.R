@@ -193,7 +193,14 @@
 #' @param lr_boot_n_starts Multistart count for the LR-edge bootstrap null refits
 #'   when \code{dm_quant = "lr"} (default 2, matching the validated lattice run;
 #'   keeps a single quant-edge dataset tractable).
-#' @param alpha Significance level for the quantitative edges (default 0.05).
+#' @param lr_n_classes Latent-class range passed to the LR delegation when
+#'   \code{dm_quant = "lr"} (default \code{2:6}, matching the standalone
+#'   \code{select_model_ll} audit). The lattice selects the class count by BIC
+#'   over this range; forcing a single C (e.g. the 2x2's C = 3) misspecifies the
+#'   quant grain and biases the LCR-vs-DM edge toward retaining DM on
+#'   short/finely-graded data (it cost ~3/4 of the J=8 quant misses). The LCR
+#'   bridge grain ceiling((J+1)/2) is always added internally, so the quant edge
+#'   is never capped below the Lindsay bound regardless of this range.
 #' @param use_cpp Use the compiled EM engine.
 #' @param mc.cores Cores for the bootstraps.
 #' @param seed Optional integer seed.
@@ -205,7 +212,7 @@
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                    mon_eps = 0.01, alpha = 0.05,
                                    dm_quant = c("double_cancellation", "lr"),
-                                   lr_boot_n_starts = 2L,
+                                   lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                    cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
                                    mc.cores = 1L, seed = NULL, verbose = FALSE) {
   dm_quant <- match.arg(dm_quant)
@@ -246,7 +253,7 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
     # lattice verdict ONLY when it is quantitative; if the lattice finds no quant
     # support the manifest's DM stands (its ordinal-layer call is authoritative).
     if (verbose) cat("Additivity (DM vs quant): LR edge (lattice) ...\n")
-    ll <- tryCatch(select_model_ll(data, n_classes = C, alpha = alpha,
+    ll <- tryCatch(select_model_ll(data, n_classes = lr_n_classes, alpha = alpha,
              alpha_quant = alpha, B = B, n_starts = n_starts,
              boot_n_starts = lr_boot_n_starts, use_cpp = use_cpp,
              mc.cores = mc.cores,
