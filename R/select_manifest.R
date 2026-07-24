@@ -184,6 +184,9 @@
 #'   LCR-vs-DM edge held DM cleanly in the head-to-head where double cancellation
 #'   leaked to quant. The lattice verdict is adopted only when quantitative;
 #'   otherwise the manifest's DM stands.
+#' @param lr_boot_n_starts Multistart count for the LR-edge bootstrap null refits
+#'   when \code{dm_quant = "lr"} (default 2, matching the validated lattice run;
+#'   keeps a single quant-edge dataset tractable).
 #' @param alpha Significance level for the quantitative edges (default 0.05).
 #' @param use_cpp Use the compiled EM engine.
 #' @param mc.cores Cores for the bootstraps.
@@ -196,6 +199,7 @@
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                    mon_eps = 0.04, alpha = 0.05,
                                    dm_quant = c("double_cancellation", "lr"),
+                                   lr_boot_n_starts = 2L,
                                    cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
                                    mc.cores = 1L, seed = NULL, verbose = FALSE) {
   dm_quant <- match.arg(dm_quant)
@@ -237,7 +241,8 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
     # support the manifest's DM stands (its ordinal-layer call is authoritative).
     if (verbose) cat("Additivity (DM vs quant): LR edge (lattice) ...\n")
     ll <- tryCatch(select_model_ll(data, n_classes = C, alpha = alpha,
-             alpha_quant = alpha, B = B, n_starts = n_starts, use_cpp = use_cpp,
+             alpha_quant = alpha, B = B, n_starts = n_starts,
+             boot_n_starts = lr_boot_n_starts, use_cpp = use_cpp,
              mc.cores = mc.cores,
              seed = if (!is.null(seed)) seed + 2000L else NULL,
              verbose = FALSE), error = function(e) NULL)
