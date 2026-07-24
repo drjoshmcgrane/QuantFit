@@ -42,8 +42,14 @@ run <- function(k) {
                  cc_n_mat=500L, mc.cores=1L, seed=cs$id, verbose=FALSE),
              error=function(e) NULL)
     else
-      tryCatch(select_model_ll(d, n_classes=3L, B=99L, mc.cores=1L,
-                 seed=cs$id, verbose=FALSE), error=function(e) NULL)
+      # B=49, boot_n_starts=2: production B=99 was attempted and confirmed
+      # INFEASIBLE on this machine - a single quant-edge dataset (LCR bootstrap
+      # at 7 classes) exceeds the ~20-min background-job kill ceiling and never
+      # completes. B=49 (as in the double-cancellation study) brings each dataset
+      # well under the ceiling so the LCR/RM rows actually finish. B=49 still
+      # gives a p-value granularity of 1/50, adequate at alpha=0.05.
+      tryCatch(select_model_ll(d, n_classes=3L, B=49L, boot_n_starts=2L,
+                 mc.cores=1L, seed=cs$id, verbose=FALSE), error=function(e) NULL)
   sm <- if (is.null(sel)) NA_character_ else sel$selected
   write.csv(data.frame(id=cs$id, truth=cs$model, truth_scale=scale_of(cs$model),
     J=cs$J, N=cs$N, rep=cs$rep, selector=SELECTOR,

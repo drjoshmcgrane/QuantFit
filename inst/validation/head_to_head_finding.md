@@ -45,18 +45,61 @@ Scale-type confusion (all errors in the LIBERAL direction; nothing demoted):
 - The 8 ordinal→quant leaks (5 IIO + 3 DM) are the entire scale-type error
   budget; both are the hardest theoretical boundaries.
 
-## LATTICE selector — in progress
+## LATTICE selector — complete
 
-Lattice (`select_model_ll`, B=99) costs ~21 min/dataset on the quant/DM data
-(LCR bootstrap at ceiling((J+1)/2)=7 classes), so its 60-dataset pass is being
-accumulated across relaunches (the machine periodically kills background jobs).
-Table to be filled once complete. Prior full validation of this selector
-(selection_audit.R, dichotomous, B=99) reported exact 87.2% / scale-type 96.1%
-under simulate_responses with the single-gate quant path.
+truth → selected:
+
+|      | UN | MON | IIO | DM | LCR | RM | recovery |
+|------|----|-----|-----|----|-----|----|----------|
+| UN   | 10 |     |     |    |     |    | **10/10** |
+| MON  |    | 10  |     |    |     |    | **10/10** |
+| IIO  | 1  |     | 3   | 5  |     | 1  | 3/10 |
+| DM   |    |     |     | 10 |     |    | **10/10** |
+| LCR  |    | 1   |     |    | 9   |    | 9/10 |
+| RM   |    |     |     |    | 2   | 8  | 8/10 |
+
+Lattice B was reduced from production 99 to **49** with `boot_n_starts=2`:
+production B=99 was attempted and confirmed INFEASIBLE on this machine — a single
+quant-edge lattice dataset (LCR bootstrap at 7 classes) exceeds the ~20-min
+background-job kill ceiling and never completes, so the LCR/RM rows could never
+finish. B=49 brings each dataset under the ceiling; p-granularity 1/50 is
+adequate at alpha=0.05.
+
+## Head-to-head (60/60 shared datasets)
+
+|                | MANIFEST 2×2 | LATTICE (LR-edge) |
+|----------------|--------------|-------------------|
+| exact model    | 46/60 (77%)  | **50/60 (83%)**   |
+| scale-type     | 51/60 (85%)  | **57/60 (95%)**   |
+
+Per-model recovery: UN 9/10 vs 10/10 · MON 10/10 vs 10/10 · IIO 2/10 vs 3/10 ·
+DM 7/10 vs **10/10** · LCR 9/10 vs 9/10 · RM 9/10 vs 8/10.
+
+### The decisive difference is WHERE the errors land
+- **Lattice keeps errors within scale-type.** Its IIO misses go IIO→DM (both
+  ordinal) — only 1 IIO error leaks to quant — so scale-type holds at 95%, and
+  DM is recovered perfectly (10/10).
+- **Manifest leaks ordinal→quant.** IIO→LCR/RM (5/10) and DM→LCR (3/10) are its
+  entire scale-type error budget. The DM→quant leak is the double-cancellation
+  power limit (see `double_cancellation_finding.md`): the lattice's LR-based
+  DM-vs-quant edge is more powerful than the manifest's double-cancellation gate
+  at N≤3000 / J=12.
+- **Both** recover MON perfectly (10/10) and handle UN/LCR/RM well; **IIO is the
+  hard model for both** (exact 2–3/10) — the standing identifiability floor.
+
+### Verdict
+At J=12, N≤3000, the LR-edge lattice is the stronger selector, chiefly because
+its misclassifications respect scale-type boundaries. The manifest 2×2 is
+competitive on the nominal/ordinal split and MUCH cheaper to run (fast axes
+clear UN/MON/IIO in ~1s; only DM/LCR/RM pay the DC step, vs the lattice paying a
+full multi-model bootstrap on every dataset), but its double-cancellation
+DM→quant gate is the weak seam — the very seam the lattice tests by likelihood.
+A hybrid — manifest 2×2 for the ordinal layer, LR edge for DM→quant — is the
+natural follow-up.
 
 ## Note on settings vs cost
 
-At production `n.mat=500` / `B=99` the head-to-head is a multi-hour grind. The
-manifest selector is the faster of the two (fast axes clear UN/MON/IIO in ~1s;
-only DM/LCR/RM pay the ~12-min DC), which is itself a practical finding: the
-manifest route is cheaper to run than the LR-edge lattice at production fidelity.
+At production fidelity the head-to-head is a multi-hour grind, and the machine's
+~20-min background-job ceiling forced the lattice down to B=49. The manifest
+selector is the faster of the two by ~50× per quant dataset — itself a practical
+finding: the manifest route is far cheaper to run at production DC fidelity.
