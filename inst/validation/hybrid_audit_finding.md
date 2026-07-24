@@ -41,11 +41,13 @@ Scale-type confusion (all 13 errors are the CONSERVATIVE quant→ordinal directi
   error is quant→DM — the CONSERVATIVE direction (under-claiming
   quantitativeness, the safe error for a quantitativeness test). At the short
   test the LR DM-vs-LCR edge has less power to promote additive data past DM.
-  Likely amplified by `lr_boot_n_starts=2` (the standalone lattice audit used 5);
-  fewer null-refit starts make the LCR fit noisier and bias toward retaining DM.
   This cost scale-type here (92.2% vs the lattice's 96.1%) where at J=12 it did
-  not. A larger `lr_boot_n_starts` (or J≥10) is expected to recover most of it,
-  at higher cost.
+  not. Tested the `lr_boot_n_starts` hypothesis directly on the 6 LCR→DM misses:
+  raising it from 2 to 5 flipped only **1 of 4** back to LCR — so the
+  conservatism is **mostly a genuine J=8 short-test identifiability limit**, not a
+  bootstrap-starts artifact. At J=8 the additive LCR structure is, for many
+  draws, statistically indistinguishable from doubly-monotone DM. `boot_n_starts`
+  is a minor contributor; J≥10 is the real remedy.
 
 ## Bottom line
 
