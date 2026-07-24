@@ -1,2 +1,2 @@
 "id","truth","truth_scale","J","N","rep","selector","selected","selected_scale"
-45,"IIO","ordinal",12,3000,4,"manifest","MON","ordinal"
+45,"IIO","ordinal",12,3000,4,"manifest","UN","nominal"
