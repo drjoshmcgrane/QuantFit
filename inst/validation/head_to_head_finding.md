@@ -88,14 +88,50 @@ DM 7/10 vs **10/10** · LCR 9/10 vs 9/10 · RM 9/10 vs 8/10.
   hard model for both** (exact 2–3/10) — the standing identifiability floor.
 
 ### Verdict
-At J=12, N≤3000, the LR-edge lattice is the stronger selector, chiefly because
-its misclassifications respect scale-type boundaries. The manifest 2×2 is
-competitive on the nominal/ordinal split and MUCH cheaper to run (fast axes
-clear UN/MON/IIO in ~1s; only DM/LCR/RM pay the DC step, vs the lattice paying a
-full multi-model bootstrap on every dataset), but its double-cancellation
-DM→quant gate is the weak seam — the very seam the lattice tests by likelihood.
-A hybrid — manifest 2×2 for the ordinal layer, LR edge for DM→quant — is the
-natural follow-up.
+At J=12, N≤3000, the LR-edge lattice is the stronger of the two ORIGINAL
+selectors, chiefly because its misclassifications respect scale-type boundaries.
+The manifest 2×2 is competitive on the nominal/ordinal split and MUCH cheaper to
+run, but its double-cancellation DM→quant gate is the weak seam — the very seam
+the lattice tests by likelihood. This motivated the HYBRID below.
+
+## HYBRID: manifest 2×2 ordinal layer + LR-edge DM→quant  (built, validated)
+
+`select_model_manifest(dm_quant = "lr")` keeps the cheap manifest 2×2 for the
+nominal/ordinal layer but delegates the DM→quant decision to the lattice's
+likelihood-ratio LCR-vs-DM edge (`lr_boot_n_starts = 2`, matching the lattice
+run). Same 60 shared-seed datasets.
+
+|                | HYBRID       | MANIFEST     | LATTICE      |
+|----------------|--------------|--------------|--------------|
+| exact model    | 49/60 (82%)  | 46/60 (77%)  | 50/60 (83%)  |
+| **scale-type** | **58/60 (97%)** | 51/60 (85%) | 57/60 (95%)  |
+
+Per-model recovery (hybrid / manifest / lattice), of 10 each:
+UN 9/9/10 · MON 10/10/10 · IIO 2/2/3 · **DM 10/7/10** · **LCR 10/9/9** · RM 8/9/8.
+
+Hybrid scale-type confusion — one ordinal→quant leak, quant airtight:
+
+| truth\got | nominal | ordinal | quant |
+|-----------|---------|---------|-------|
+| nominal   | 9       | 1       | 0     |
+| ordinal   | 0       | 29      | 1     |
+| quant     | 0       | 0       | **20** |
+
+### Verdict — the hybrid is the best of the three
+- **Best scale-type of all three (97%)**, edging the lattice (95%) and far above
+  the standalone manifest (85%). Only ONE ordinal→quant leak (manifest had 8),
+  and quant is recovered 20/20.
+- **Fixes the manifest's weak seam**: DM 7/10 → **10/10**, exactly matching the
+  lattice. The LR edge holds the DM→quant boundary where double cancellation
+  leaked.
+- **Essentially ties the lattice on exact (82% vs 83%)** while being CHEAPER:
+  UN/MON/IIO-ordinal data is cleared by the ~1s manifest 2×2 and never invokes
+  the lattice; only DM-reaching datasets pay the LR cost.
+- IIO exact stays 2/10 for all three — the identifiability floor — but the hybrid
+  keeps those errors ORDINAL (IIO→DM), which is why its scale-type holds.
+
+The hybrid is the recommended selector: manifest-2×2 economy on the ordinal
+layer, LR-edge rigor on the one boundary (DM→quant) that decides quantitativeness.
 
 ## Note on settings vs cost
 
