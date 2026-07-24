@@ -176,6 +176,14 @@
 #' @param mon_eps Per-item tolerance on the perm-min downward-movement q05
 #'   below which class monotonicity is treated as holding (default 0.04,
 #'   anchored at N = 1500 and N-scaled internally).
+#' @param dm_quant How to decide DM (ordinal) vs quantitative once the 2x2
+#'   ordinal layer reaches DM. \code{"double_cancellation"} (default) uses the
+#'   manifest double-cancellation additivity test then the DIP shape axis.
+#'   \code{"lr"} is the HYBRID: it delegates the DM->quant decision to the
+#'   LR-edge lattice \code{\link{select_model_ll}}, whose likelihood-ratio
+#'   LCR-vs-DM edge held DM cleanly in the head-to-head where double cancellation
+#'   leaked to quant. The lattice verdict is adopted only when quantitative;
+#'   otherwise the manifest's DM stands.
 #' @param alpha Significance level for the quantitative edges (default 0.05).
 #' @param use_cpp Use the compiled EM engine.
 #' @param mc.cores Cores for the bootstraps.
@@ -187,8 +195,10 @@
 #' @export
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                    mon_eps = 0.04, alpha = 0.05,
+                                   dm_quant = c("double_cancellation", "lr"),
                                    cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
                                    mc.cores = 1L, seed = NULL, verbose = FALSE) {
+  dm_quant <- match.arg(dm_quant)
   data <- validate_data_any(data, allow_na = FALSE)
   C <- as.integer(stats::median(n_classes)); if (C < 2L) C <- 2L
   J <- ncol(data)
@@ -216,7 +226,27 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   selected <- ordinal; interpretation <- interp; rl <- NULL
 
   # Quantitative sequence only from DM (order before quantity)
-  if (ordinal == "DM") {
+  if (ordinal == "DM" && dm_quant == "lr") {
+    # HYBRID: manifest 2x2 for the ordinal layer, but delegate the DM -> quant
+    # decision to the LR-edge lattice (select_model_ll). The head-to-head showed
+    # the manifest's own double-cancellation gate is the weak seam - it leaks
+    # DM/IIO -> quant because double cancellation is under-powered at moderate
+    # N/J, whereas the lattice's likelihood-ratio LCR-vs-DM edge (with its
+    # degenerate-null and power-check safeguards) holds DM cleanly. We take the
+    # lattice verdict ONLY when it is quantitative; if the lattice finds no quant
+    # support the manifest's DM stands (its ordinal-layer call is authoritative).
+    if (verbose) cat("Additivity (DM vs quant): LR edge (lattice) ...\n")
+    ll <- tryCatch(select_model_ll(data, n_classes = C, alpha = alpha,
+             alpha_quant = alpha, B = B, n_starts = n_starts, use_cpp = use_cpp,
+             mc.cores = mc.cores,
+             seed = if (!is.null(seed)) seed + 2000L else NULL,
+             verbose = FALSE), error = function(e) NULL)
+    add <- list(supports_quant = if (is.null(ll)) NA else ll$selected %in% c("LCR", "RM"),
+                lr = ll)
+    if (isTRUE(add$supports_quant)) {
+      selected <- ll$selected; interpretation <- ll$interpretation
+    }                                   # else stays DM (manifest ordinal call)
+  } else if (ordinal == "DM") {
     if (verbose) cat("Additivity (DM vs quant): DOUBLE cancellation...\n")
     # DM -> quant is the additive-conjoint-structure question (ordered vs
     # equal-interval). SINGLE cancellation tests ordinality - already
@@ -259,7 +289,7 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                  iio = iio, mon = mon,
                  add = if (exists("add", inherits = FALSE)) add else NULL,
                  dip = if (exists("dip", inherits = FALSE)) dip else NULL,
-                 method = "manifest-4axis"),
+                 method = if (dm_quant == "lr") "hybrid-2x2+lr" else "manifest-4axis"),
             class = "qlselect_manifest")
 }
 
