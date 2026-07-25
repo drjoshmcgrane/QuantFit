@@ -14,9 +14,15 @@
 #             violated.
 #   MON axis  class / person monotonicity. MON holds iff SOME class ordering
 #             makes every item's class-probability monotone, so the statistic
-#             is the MINIMUM total downward movement over all class orderings
-#             (not the mean-ordering, which flips close classes on noise at low
-#             separation), normalised per item so the scale is J-invariant.
+#             is the MINIMUM total downward movement over all class orderings -
+#             the exact read of the "exists an order" definition, rather than
+#             the mean-ordering heuristic. (Empirically the two coincide on
+#             property-HOLDS data and differ only occasionally on violated data,
+#             where perm-min is the slightly more conservative choice; it is
+#             kept for definitional correctness, NOT because it fixed the
+#             low-separation size problem - the per-item normalisation and the
+#             eps recalibration did that.) Normalised per item so the scale is
+#             J-invariant.
 #             Calibrated by DATA RESAMPLING (the statistic's own sampling
 #             distribution): a genuine crossing is structural and survives
 #             resampling (q05 stays high); ordering noise on near-flat classes
@@ -321,10 +327,15 @@ print.qlselect_manifest <- function(x, ...) {
               x$iio$stat, x$iio$p, if (isTRUE(x$iio$holds)) "holds" else "violated"))
   cat(sprintf("MON axis        : stat %.4f, lo %.4f -> %s\n",
               x$mon$stat, x$mon$lo, if (isTRUE(x$mon$holds)) "holds" else "violated"))
-  if (!is.null(x$add))
-    cat(sprintf("Additivity (CC) : supports_quant = %s -> %s\n",
+  if (!is.null(x$add)) {
+    # label the ACTUAL test used: the hybrid's DM->quant verdict comes from the
+    # LR edge, not from ConjointChecks, so do not print "CC" for that path.
+    lab <- if (identical(x$method, "hybrid-2x2+lr")) "DM vs quant (LR)" else
+           "Additivity (CC)"
+    cat(sprintf("%-16s: supports_quant = %s -> %s\n", lab,
                 isTRUE(x$add$supports_quant),
-                if (isTRUE(x$add$supports_quant)) "additive (quant)" else "non-additive (DM)"))
+                if (isTRUE(x$add$supports_quant)) "quantitative" else "non-additive (DM)"))
+  }
   if (!is.null(x$dip))
     cat(sprintf("DIP axis        : stat %.4f, p %.3f -> %s\n",
                 x$dip$stat, x$dip$p, if (isTRUE(x$dip$discrete)) "discrete (LCR)" else "continuous (RM)"))
