@@ -59,11 +59,36 @@ is an antichain.** 19 of the 21 correctly-nominal datasets *are* antichains. So
 on this data the poset separates "correctly nominal" from "wrongly nominal"
 almost perfectly.
 
+## IMPORTANT CORRECTION: the calibrated rung is much weaker than the diagnostic
+
+The table above is a **point estimate** - the poset of a single UN fit. When the
+rung is implemented properly and the structure claim is required to survive
+**resampling** (the label-invariant count of comparable pairs, q05 lower bound,
+mirroring the MON axis), the result shrinks substantially. Same 26 real datasets,
+end-to-end through `select_model_hybrid()`:
+
+| | point estimate | **calibrated rung (q05)** |
+|---|----------------|---------------------------|
+| misclassified (IIO/MON) flagged partial | **5/5** | **2/5** |
+| true UN correctly antichain             | 19/21 | 20/21 |
+
+So the calibrated detector has **good specificity (20/21) but poor sensitivity
+(2/5)**. The "every misclassified dataset shows partial structure" claim holds
+for the raw poset and does NOT survive calibration - most of those dominance
+relations do not persist under resampling, i.e. they are not distinguishable
+from sampling noise.
+
+This is the third time in this work that an uncalibrated statistic flattered a
+result that calibration then shrank (cf. `mon_eps` and the cost-ordered interim
+reads in `tid_realdata_iio_finding.md`). The rung is retained because its
+specificity is high and it costs almost nothing, but it should be presented as a
+**conservative flag**, not a reliable detector of missed ordinal structure.
+
 ## Why it matters
 
-A partial-order rung would not merely relabel output - it would **flag exactly
-the cases both current selectors get wrong**, at a cost of 2 false positives
-among 21 true-UN datasets. For a package whose purpose is defensible scale-type
+A partial-order rung does not merely relabel output - it flags **some** of the
+cases both current selectors get wrong (2 of 5 when properly calibrated) at a
+cost of 1 false positive among 21 true-UN datasets. For a package whose purpose is defensible scale-type
 claims, reporting "partial order" instead of "nominal" is a strictly better
 answer when it is true, and it is true surprisingly often.
 

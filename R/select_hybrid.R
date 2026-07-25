@@ -75,6 +75,55 @@
   list(stat = obs, p = p, holds = p > 0.05)
 }
 
+# --- POSET refinement of the UN cell ----------------------------------------
+# MON asks whether a TOTAL order on classes exists. Its negation conflates two
+# very different things: an ANTICHAIN (no class dominates any other -> genuinely
+# nominal) and a PARTIAL ORDER (some classes dominate others, just not a chain
+# -> strictly MORE structure than nominal). TI&D's model set has no rung for the
+# latter, so a partial order is currently reported as "nominal", which
+# understates what the data support.
+#
+# Dominance is defined consistently with the MON statistic - class a dominates b
+# iff the per-item mean downward violation is negligible - so this reuses the
+# calibrated mon_eps instead of adding another threshold.
+#
+# CALIBRATION. Class labels are not identified and permute across bootstrap
+# refits, so the dominance MATRIX cannot be compared across resamples. The
+# statistic is therefore the label-invariant COUNT of comparable pairs, and the
+# reported structure is its resampling lower bound (q05), mirroring the MON
+# axis: a dominance relation counts only if it survives resampling.
+#
+# On real TI&D data this cleanly separated correctly- from wrongly-nominal
+# verdicts: of the datasets BOTH selectors called nominal, all 19 antichains
+# were true UN, while all 5 misclassified datasets (4 IIO, 1 MON) came out as
+# partial orders. See partial_order_finding.md.
+.class_dominance <- function(P, eps) {           # P = items x classes
+  C <- ncol(P); D <- matrix(FALSE, C, C)
+  for (a in seq_len(C)) for (b in seq_len(C)) if (a != b)
+    D[a, b] <- mean(pmax(0, P[, b] - P[, a])) <= eps
+  n <- 0L
+  for (a in seq_len(C - 1L)) for (b in (a + 1L):C)
+    if (xor(D[a, b], D[b, a])) n <- n + 1L       # strictly comparable pair
+  n
+}
+.poset_shape <- function(data, C, B, n_starts, use_cpp, eps, seed) {
+  data <- as.matrix(data); n <- nrow(data)
+  tot <- C * (C - 1L) / 2L
+  obs <- .class_dominance(refit_model_type("UN", data, C, n_starts,
+                                           use_cpp)$item_probs, eps)
+  if (!is.null(seed)) set.seed(seed)
+  boot <- vapply(seq_len(B), function(b) {
+    f <- tryCatch(refit_model_type("UN",
+           data[sample.int(n, n, replace = TRUE), , drop = FALSE], C,
+           n_starts, use_cpp), error = function(e) NULL)
+    if (is.null(f)) NA_real_ else .class_dominance(f$item_probs, eps)
+  }, numeric(1))
+  boot <- boot[!is.na(boot)]
+  lo <- if (length(boot)) stats::quantile(boot, 0.05, names = FALSE) else 0
+  shape <- if (lo >= tot) "chain" else if (lo >= 1) "partial" else "antichain"
+  list(comparable = obs, total = tot, lo = lo, shape = shape)
+}
+
 # --- MON axis --------------------------------------------------------------
 # All orderings of C classes (rows), for the exact "exists an order" read of
 # MON. C is small in the manifest layer (2-4); guard larger C with the
@@ -278,7 +327,23 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
               MON = "ORDINAL (class monotonicity)",
               IIO = "ORDINAL (invariant item ordering)",
               DM = "ORDINAL (double monotonicity)")[ordinal]
-  selected <- ordinal; interpretation <- interp; rl <- NULL
+  selected <- ordinal; interpretation <- interp
+
+  # Refine the UN cell: distinguish a genuine antichain (nominal) from a partial
+  # order (real, incomplete ordinal structure that the six-model set cannot
+  # express). This does NOT change `selected` or `scale` - the six models are
+  # TI&D's and a partial order is not one of them - it is reported as additional
+  # structure in `poset` and in the interpretation.
+  poset <- NULL
+  if (identical(ordinal, "UN")) {
+    if (verbose) cat("UN cell: class-dominance poset ...\n")
+    poset <- tryCatch(.poset_shape(data, C, max(B %/% 2L, 20L), n_starts,
+               use_cpp, mon_eps_N, s(4000L)), error = function(e) NULL)
+    if (!is.null(poset) && identical(poset$shape, "partial"))
+      interpretation <- paste0("PARTIAL ORDER (", poset$lo, " of ",
+        poset$total, " class pairs comparable) - more than nominal, but no ",
+        "total order; not representable in the six-model set")
+  }
 
   # Quantitative sequence only from DM (order before quantity).
   # The DM -> quant decision is delegated to the LR-edge lattice
@@ -307,6 +372,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                  scale = unname(scale), n_classes = C,
                  iio = iio, mon = mon,
                  quant = if (exists("add", inherits = FALSE)) add else NULL,
+                 poset = poset,
                  method = "hybrid-2x2+lr"),
             class = "qlselect_hybrid")
 }
@@ -321,6 +387,9 @@ print.qlselect_hybrid <- function(x, ...) {
               x$iio$stat, x$iio$p, if (isTRUE(x$iio$holds)) "holds" else "violated"))
   cat(sprintf("MON axis        : stat %.4f, lo %.4f -> %s\n",
               x$mon$stat, x$mon$lo, if (isTRUE(x$mon$holds)) "holds" else "violated"))
+  if (!is.null(x$poset))
+    cat(sprintf("Class poset     : %d/%d pairs comparable (q05 %g) -> %s\n",
+                x$poset$comparable, x$poset$total, x$poset$lo, x$poset$shape))
   if (!is.null(x$quant))
     cat(sprintf("DM vs quant (LR): supports_quant = %s -> %s\n",
                 isTRUE(x$quant$supports_quant),
