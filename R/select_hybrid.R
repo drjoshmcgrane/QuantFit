@@ -244,8 +244,10 @@
 #' Decides the ordinal / nominal layer (UN, MON, IIO, DM) by testing the
 #' invariant-item-ordering and class-monotonicity PROPERTIES directly against the
 #' data (a 2x2 on the two defining constraints, mirroring Torres Irribarra &
-#' Diakow's own constraint-presence logic), then delegates the DM -> quantitative
-#' decision to the likelihood-ratio edge of [select_model_ll()].
+#' Diakow's own constraint-presence logic), then decides DM -> quantitative with
+#' the same likelihood-ratio machinery as [select_model_ll()]'s quantitative
+#' edge (`ll_equivalence_test` at the Lindsay bridge grain, then
+#' `rm_vs_lcr_test`), run directly - without refitting the ordinal lattice.
 #'
 #' The 2x2 roughly doubles IIO recovery relative to the LR-edge lattice, which
 #' loses power precisely where DM and IIO coincide (paired K=20 audit: IIO 12/12
@@ -292,9 +294,10 @@
 #' @param seed Optional integer seed.
 #' @param verbose Print progress.
 #' @return A list with `selected`, `interpretation`, `scale`, `n_classes`, the
-#'   two axis results (`iio`, `mon`) and, when DM was reached, `quant` holding
-#'   the LR-edge verdict (`supports_quant`) and the full [select_model_ll()]
-#'   object (`lr`).
+#'   two axis results (`iio`, `mon`), `poset` (the class-dominance refinement of
+#'   a UN verdict: `shape`, `comparable`, `total`, `lo`), and, when DM was
+#'   reached, `quant` holding the quantitative-edge evidence (`supports_quant`,
+#'   `bridge_C`, `lcr_vs_dm`, `rm_vs_lcr`, and the selected `LCR`/`RM` fit).
 #' @seealso [select_model_ll()] for the LR-edge lattice on its own;
 #'   [cc_bootstrap_null()] for the conjoint-cancellation route.
 #' @export
@@ -340,7 +343,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
     poset <- tryCatch(.poset_shape(data, C, max(B %/% 2L, 20L), n_starts,
                use_cpp, mon_eps_N, s(4000L)), error = function(e) NULL)
     if (!is.null(poset) && identical(poset$shape, "partial"))
-      interpretation <- paste0("PARTIAL ORDER (", poset$lo, " of ",
+      interpretation <- paste0("PARTIAL ORDER (", floor(poset$lo), " of ",
         poset$total, " class pairs comparable) - more than nominal, but no ",
         "total order; not representable in the six-model set")
   }

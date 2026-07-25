@@ -20,7 +20,8 @@
 > lattice pass is unaffected (it does not use the MON axis) and is unchanged.
 
 Both selectors run on the SAME datasets (shared seeds), full generating
-hierarchy, production settings (manifest DC n.mat=500, cc_B=49; lattice B=99).
+hierarchy (manifest DC n.mat=500, cc_B=49; lattice B=49 - see the settings
+note below, which supersedes an earlier B=99 claim).
 Grid: J=12, N∈{1500,3000}, 5 reps → 60 datasets per selector. Run as two
 separate passes (`SELECTOR=lattice|manifest`) because the lattice pass is ~50×
 slower per dataset; join by dataset id. Script: `head_to_head.R`.
