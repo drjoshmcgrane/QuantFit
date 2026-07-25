@@ -44,13 +44,15 @@ neither is individually decisive:
 
 | experiment                 | hybrid       | lattice     | McNemar |
 |----------------------------|--------------|-------------|---------|
-| simulated, K=20 (J=8)      | 12/12        | 6/12        | p = 0.031 |
-| **real TI&D, full N=5000** | 13/18 (72%)  | 7/18 (39%)  | p = 0.070 |
-| combined discordant pairs  | 13           | 1           | -       |
+| simulated, K=20 (J=8), COMPLETE grid | **18/20 (90%)** | 9/20 (45%) | 9:0, **p = 0.0039** |
+| **real TI&D, full N=5000** | 13/18 (72%)  | 7/18 (39%)  | 7:1, p = 0.070 |
 
-13 of 14 discordant pairs across the two favour the hybrid. Pooling them would
-give a very small p, but that combines two different data sources and is a
-judgement call, so it is flagged rather than asserted.
+(The simulated row was first reported from an interim 64-dataset read as "12/12
+vs 6/12, p = 0.031"; the completed 120-dataset grid gives the numbers above -
+larger n, same direction, and now decisively significant.) So the IIO advantage
+IS established at alpha = 0.05 on the complete simulated grid, and the real-data
+replication shows the same ~2x effect without individually reaching
+significance. 16 of 17 discordant pairs across the two favour the hybrid.
 
 The lattice's IIO ceiling is now measured four independent ways and agrees:
 **39% here, 45% (simulated, same-code), 42% (prior full TI&D run), 41% (TI&D's

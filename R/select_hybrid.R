@@ -258,10 +258,12 @@
 #' edge (`ll_equivalence_test` at the Lindsay bridge grain, then
 #' `rm_vs_lcr_test`), run directly - without refitting the ordinal lattice.
 #'
-#' The 2x2 roughly doubles IIO recovery relative to the LR-edge lattice, which
-#' loses power precisely where DM and IIO coincide (paired K=20 audit: IIO 12/12
-#' vs 6/12, McNemar p = 0.031); the LR edge in turn holds the DM/quantitative
-#' boundary that a double-cancellation gate leaks across (DM 10/10 vs 7/10).
+#' The 2x2 doubles IIO recovery relative to the LR-edge lattice, which loses
+#' power precisely where DM and IIO coincide (complete paired K=20 grid, J=8:
+#' IIO 18/20 vs 9/20, McNemar 9:0 discordant, p = 0.0039; on real TI&D data at
+#' full N = 5000, 13/18 vs 7/18, p = 0.070); the LR edge in turn holds the
+#' DM/quantitative boundary that a double-cancellation gate leaks across
+#' (DM 10/10 vs 7/10).
 #'
 #' Both layers are latent-model based, which is deliberate. TI&D's six-model
 #' hierarchy is defined by constraints on the latent class x item table, and
