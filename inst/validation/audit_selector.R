@@ -1,0 +1,47 @@
+# Same-code, same-data audit of ANY of the three selectors on the standard
+# large audit grid (6 models x K reps, N=1500, J=8 dichotomous, n_classes=3).
+# Seeds match selection_audit.R / hybrid_audit.R exactly, so all selectors see
+# IDENTICAL datasets and results are paired.
+#
+#   SELECTOR=lattice   select_model_ll (LR-edge lattice)
+#   SELECTOR=manifest  select_model_manifest (2x2 + double cancellation)
+#   SELECTOR=hybrid    select_model_manifest(dm_quant="lr")
+#
+# Purpose: replace the stale-code lattice figures with properly powered,
+# same-code paired comparisons (the IIO claim is the load-bearing one).
+# Resumable: one CSV per (selector, model, rep).
+suppressMessages(library(QuantFit))
+SEL     <- Sys.getenv("SELECTOR", "lattice")
+K       <- as.integer(Sys.getenv("AUDIT_K", "30"))
+B       <- as.integer(Sys.getenv("AUDIT_B", "49"))
+cores   <- as.integer(Sys.getenv("AUDIT_CORES", "8"))
+n_items <- 8L
+models  <- c("UN","MON","IIO","DM","LCR","RM")
+scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
+              LCR="quant",RM="quant")
+out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
+grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
+
+run <- function(k) {
+  cs <- grid[k,]; f <- file.path(out, sprintf("%s_%s_%03d.csv", SEL, cs$model, cs$rep))
+  if (file.exists(f)) return(invisible())
+  d <- simulate_responses(cs$model, n_persons=1500, n_items=n_items,
+                          n_classes=3, seed=7000*cs$rep + match(cs$model, models))
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  sel <- tryCatch(switch(SEL,
+      lattice  = select_model_ll(d, n_classes=2:6, B=B, n_starts=5,
+                   boot_n_starts=2L, method="lattice", seed=1, mc.cores=1L,
+                   verbose=FALSE)$selected,
+      manifest = select_model_manifest(d, n_classes=3L, B=B, mc.cores=1L,
+                   seed=1, verbose=FALSE)$selected,
+      hybrid   = select_model_manifest(d, n_classes=3L, B=B, dm_quant="lr",
+                   lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE)$selected),
+    error=function(e) NA_character_)
+  write.csv(data.frame(selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
+    rep=cs$rep, selected=sel,
+    selected_scale=if (is.na(sel)) NA else scale_of[sel]), f, row.names=FALSE)
+}
+cat("Audit [", SEL, "]:", nrow(grid), "datasets (J=8, N=1500, K=", K, ", B=", B, ")\n")
+invisible(parallel::mclapply(seq_len(nrow(grid)),
+  function(k) tryCatch(run(k), error=function(e) NULL), mc.cores=cores))
+cat("AUDIT DONE\n")
