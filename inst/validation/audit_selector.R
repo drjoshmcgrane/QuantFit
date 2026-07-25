@@ -4,8 +4,7 @@
 # IDENTICAL datasets and results are paired.
 #
 #   SELECTOR=lattice   select_model_ll (LR-edge lattice)
-#   SELECTOR=manifest  select_model_manifest (2x2 + double cancellation)
-#   SELECTOR=hybrid    select_model_manifest(dm_quant="lr")
+#   SELECTOR=hybrid    select_model_hybrid (2x2 ordinal layer + LR quant edge)
 #
 # Purpose: replace the stale-code lattice figures with properly powered,
 # same-code paired comparisons (the IIO claim is the load-bearing one).
@@ -32,9 +31,7 @@ run <- function(k) {
       lattice  = select_model_ll(d, n_classes=2:6, B=B, n_starts=5,
                    boot_n_starts=2L, method="lattice", seed=1, mc.cores=1L,
                    verbose=FALSE)$selected,
-      manifest = select_model_manifest(d, n_classes=3L, B=B, mc.cores=1L,
-                   seed=1, verbose=FALSE)$selected,
-      hybrid   = select_model_manifest(d, n_classes=3L, B=B, dm_quant="lr",
+      hybrid   = select_model_hybrid(d, n_classes=3L, B=B,
                    lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE)$selected),
     error=function(e) NA_character_)
   write.csv(data.frame(selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],

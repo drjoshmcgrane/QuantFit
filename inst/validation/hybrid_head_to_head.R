@@ -1,5 +1,5 @@
 # Hybrid selector pass for the three-way head-to-head: manifest 2x2 ordinal
-# layer + LR-edge DM->quant (select_model_manifest(dm_quant="lr")), on the SAME
+# layer + LR-edge DM->quant (select_model_hybrid()), on the SAME
 # shared-seed datasets as the manifest and lattice passes. Resumable (one CSV per
 # dataset). Join by id with the manifest_/lattice_ results.
 suppressMessages(library(QuantFit))
@@ -21,7 +21,7 @@ NCORE <- as.integer(Sys.getenv("H2H_CORES", "6"))
 run <- function(k) { cs <- cases[k,]; f <- file.path(out, sprintf("hybrid_h%03d.csv", k))
   if (file.exists(f)) return(invisible())
   d <- gen(cs$model, cs$J, cs$N, cs$seed)
-  sel <- tryCatch(select_model_manifest(d, n_classes=3L, B=49L, dm_quant="lr",
+  sel <- tryCatch(select_model_hybrid(d, n_classes=3L, B=49L,
              mc.cores=1L, seed=cs$id, verbose=FALSE), error=function(e) NULL)
   sm <- if (is.null(sel)) NA_character_ else sel$selected
   write.csv(data.frame(id=cs$id, truth=cs$model, truth_scale=scale_of(cs$model),

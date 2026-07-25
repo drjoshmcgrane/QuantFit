@@ -1,5 +1,5 @@
 # Selection-accuracy audit for the HYBRID selector
-# (select_model_manifest(dm_quant="lr"): manifest 2x2 ordinal layer + LR-edge
+# (select_model_hybrid: 2x2 ordinal layer + LR-edge
 # DM->quant), on the standard large audit grid used for select_model_ll:
 #   6 models x K reps, N=1500, J=8 dichotomous, n_classes=3, B=49
 # (J=8 here vs J=12 in the head-to-head -> a generalisation check.) One CSV per
@@ -22,7 +22,7 @@ run <- function(k) {
   d <- simulate_responses(cs$model, n_persons=1500, n_items=n_items,
                           n_classes=3, seed=7000*cs$rep + match(cs$model, models))
   d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
-  sel <- tryCatch(select_model_manifest(d, n_classes=3L, B=B, dm_quant="lr",
+  sel <- tryCatch(select_model_hybrid(d, n_classes=3L, B=B,
              lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE),
            error=function(e) NULL)
   sm <- if (is.null(sel)) NA_character_ else sel$selected
