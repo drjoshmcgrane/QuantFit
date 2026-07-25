@@ -1,5 +1,16 @@
 # Can the MON axis's `mon_eps` threshold be replaced by a calibrated null?
 
+> **API STATUS (updated).** The selector called "manifest" below (2x2 ordinal
+> layer closed with a **double-cancellation** additivity test) has since been
+> **REMOVED**. Its 2x2 ordinal layer survives in **`select_model_hybrid()`**
+> (formerly `select_model_manifest`), which closes DM->quant
+> with the **LR edge** instead. Double cancellation is untouched as its own
+> route: `cc_bootstrap_null()` / `cc_bootstrap_hierarchy()`. Reason for the
+> removal: TI&D's hierarchy is defined on the *latent* class x item table and
+> class monotonicity has no faithful manifest proxy, so mixing an
+> observable-conjoint axiom into a latent hierarchy was incoherent as well as
+> empirically worse -- see `manifest_coherence_finding.md`.
+
 ## Motivation
 
 A self-audit flagged a design asymmetry in the manifest 2x2: the IIO axis is
@@ -63,9 +74,11 @@ Confirmed functionally on a single IIO dataset: `eps` → **IIO** (correct);
    calibration. The audit's "magic number" criticism is answered: the number is
    not removable without losing the capability.
 
-`mon_method = "null"` is exposed (sort projection, the better-balanced variant)
-for the case where class separation is known to be low and false IIO calls cost
-more than missed ones. Default `mon_method = "eps"`.
+**The `mon_method = "null"` option was subsequently DELETED** rather than shipped:
+keeping a knowingly-inferior calibration in the exported API is unjustified
+surface area for a package headed for publication. The negative result is
+preserved here so it is not retried; the resample-q05 + `mon_eps` rule is the
+only MON calibration in `select_model_hybrid()`.
 
 ## Residual caveat (honest)
 

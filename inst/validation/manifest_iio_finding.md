@@ -1,5 +1,16 @@
 # The IIO recovery ceiling is largely procedural: direct property tests roughly double it
 
+> **API STATUS (updated).** The selector called "manifest" below (2x2 ordinal
+> layer closed with a **double-cancellation** additivity test) has since been
+> **REMOVED**. Its 2x2 ordinal layer survives in **`select_model_hybrid()`**
+> (formerly `select_model_manifest`), which closes DM->quant
+> with the **LR edge** instead. Double cancellation is untouched as its own
+> route: `cc_bootstrap_null()` / `cc_bootstrap_hierarchy()`. Reason for the
+> removal: TI&D's hierarchy is defined on the *latent* class x item table and
+> class monotonicity has no faithful manifest proxy, so mixing an
+> observable-conjoint axiom into a latent hierarchy was incoherent as well as
+> empirically worse -- see `manifest_coherence_finding.md`.
+
 ## Summary
 
 Invariant Item Ordering (IIO) has been the hardest of the six latent-structure
@@ -79,7 +90,7 @@ for the LR-edge lattice.
 
 ## Implementation
 
-`select_model_manifest()` (R/select_manifest.R) - a SEPARATE selector,
+`select_model_hybrid()` (R/select_hybrid.R) - a SEPARATE selector,
 independent of `select_model_ll()`. Ordinal/nominal layer by the manifest 2x2;
 when DM is reached it enters the DM -> LCR -> RM quantitative sequence reusing
 the same calibrated machinery as the lattice. The ordinal layer is validated

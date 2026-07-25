@@ -1,18 +1,23 @@
 # Hybrid on the TI&D DEVELOPMENT data (real datasets)
 
-The hybrid (`select_model_manifest(dm_quant="lr")`) on the actual TI&D archive
+The hybrid (`select_model_hybrid()`) on the actual TI&D archive
 (`tid_data/`, the "development study" set; the locked validation is
 `fresh_study.R`). 1080 real TI&D-simulated datasets, N=5000, J∈{6,12,24,48},
 dichotomous, known generating models 0-5 = UN/MON/IIO/DM/LCR/RM (180 each).
 Balanced sample over model × nI, 5 per cell. Runner: `tid_hybrid.R`.
 
-**Two tractability constraints (both machine-imposed, not method):**
-- **N subsampled 5000 → 1500** (seeded). The LR quant edge over full N=5000
-  exceeds this machine's ~20-min background-job ceiling. This subsampling is the
-  cause of the *only* weakness seen (see RM/nI=6 below), which vanishes at N=5000.
+**Two tractability constraints — and an important retraction:**
+- **N subsampled 5000 → 1500** (seeded), on the belief that the LR quant edge over
+  full N=5000 exceeded a ~20-min background-job kill ceiling. **That belief was
+  later TESTED AND DISPROVEN** (a probe ran 14+ min and an 8-worker job 16+ min
+  uninterrupted; the kills coincided with several concurrent jobs oversubscribing
+  the cores). So the subsampling was **not necessary** — and it is the cause of
+  the *only* weakness seen here (RM/nI=6 below), which vanishes at N=5000. The
+  runner now defaults to the full N=5000 (`TID_N`); a full-N rerun is the
+  outstanding item.
 - **nI=48 excluded** (LCR bridge grain ceiling(49/2)=25 classes — infeasible);
-  **nI=24 excluded** from the final run (bridge 13 exceeds the ceiling at the LR
-  edge). Results are for **nI∈{6,12}**.
+  **nI=24 excluded** from the final run for the same (now-retracted) reason.
+  Results below are for **nI∈{6,12}**; `TID_NI` now defaults to 6,12,24.
 
 ## Result (nI∈{6,12}, N subsampled to 1500)
 
@@ -57,7 +62,9 @@ route's IIO strength on the real data it was designed against, not just the
 artifact of the N=1500 subsampling forced by the machine's job ceiling and
 disappears at the data's true N=5000 (verified on the MON axis).
 
-**Outstanding for a stable/plugged-in machine:** a full-N=5000 confirmation run
-of the whole hybrid (the MON-axis flip is decisive on the mechanism, but the
-end-to-end N=5000 recovery was not run because the LR edge over 5000 rows exceeds
-the ~20-min ceiling), plus nI∈{24,48}.
+**Outstanding:** a full-N=5000 end-to-end rerun including nI=24 (the MON-axis
+flip at N=5000 is decisive on the *mechanism* of the RM/nI=6 artifact, but the
+full-N recovery itself has not been run). This was previously deferred as
+infeasible; that reason has been retracted (see above), so it is simply pending.
+Run one job at a time to avoid the core oversubscription that caused the earlier
+kills.

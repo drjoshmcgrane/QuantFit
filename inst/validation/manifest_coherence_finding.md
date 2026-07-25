@@ -35,8 +35,7 @@ Proposal: make the MON axis manifest too, using **Mokken monotone homogeneity**
 (MH): for each item, P(X_j = 1 | rest score) must be non-decreasing. Implemented
 as `.manifest_mh_stat` / `.manifest_mh_holds` — the exact counterpart of the IIO
 axis (same rest-score construction, same person weighting, same parametric DM
-null, same bootstrap p-value, and **no `mon_eps`**). Available as
-`mon_method = "mh"`.
+null, same bootstrap p-value, and **no `mon_eps`**). Implemented and tested, then removed.
 
 Result (10 reps/condition, N=1500, hold-rates; HOLDS rows want ~1, VIOL want ~0):
 
@@ -91,9 +90,16 @@ This gives a principled reading of the empirical result that the hybrid fixes
 the manifest route's DM→quant leak (DM 7/10 → 10/10): the pure-manifest route was
 not just underpowered at that seam, it was testing a different object.
 
-`mon_method = "mh"` is retained (documented as inferior) so this is not retried,
-and because it is the correct axis if one ever wants a genuinely manifest,
-Mokken-style scale analysis rather than TI&D's latent hierarchy.
+**Both the `mon_method = "mh"` option and the manifest selector itself were
+subsequently DELETED.** `select_model_manifest()` is gone; the surviving selector
+is **`select_model_hybrid()`** (2x2 ordinal layer + LR quantitative edge), which
+is latent throughout and therefore internally consistent. Double cancellation
+remains available as its own route (`cc_bootstrap_null()` /
+`cc_bootstrap_hierarchy()`), where it is applied to an observable conjoint array
+without a latent hierarchy wrapped around it — which is where it belongs. The MH
+result is kept here as a negative result so it is not retried; it would still be
+the right axis for a genuinely manifest, Mokken-style scale analysis, which is a
+different question from TI&D's latent hierarchy.
 
 ## Status of `mon_eps`
 

@@ -1,6 +1,6 @@
 # Hybrid selector — large-set audit (generalisation check at J=8)
 
-The hybrid (`select_model_manifest(dm_quant="lr", lr_boot_n_starts=2)`) run on
+The hybrid (`select_model_hybrid(lr_boot_n_starts = 2)`) run on
 the STANDARD large audit grid used for `select_model_ll`: 6 models × 30 reps,
 N=1500, **J=8 dichotomous**, n_classes=3, B=49. This is J=8 vs the head-to-head's
 J=12 — a generalisation test at a shorter test length. Resumable

@@ -1,5 +1,16 @@
 # MON-axis separation-robust calibration (and a correct model×separation generator)
 
+> **API STATUS (updated).** The selector called "manifest" below (2x2 ordinal
+> layer closed with a **double-cancellation** additivity test) has since been
+> **REMOVED**. Its 2x2 ordinal layer survives in **`select_model_hybrid()`**
+> (formerly `select_model_manifest`), which closes DM->quant
+> with the **LR edge** instead. Double cancellation is untouched as its own
+> route: `cc_bootstrap_null()` / `cc_bootstrap_hierarchy()`. Reason for the
+> removal: TI&D's hierarchy is defined on the *latent* class x item table and
+> class monotonicity has no faithful manifest proxy, so mixing an
+> observable-conjoint axiom into a latent hierarchy was incoherent as well as
+> empirically worse -- see `manifest_coherence_finding.md`.
+
 > **CORRECTION (post-hoc).** The `mon_eps = 0.04` recommended below was
 > calibrated ONLY on the artificial `gen_correct` generator at low class
 > separation (sep=0.6). On the actual deployment generator
@@ -98,6 +109,6 @@ signal — consistent with the standing IIO identifiability floor.
 
 ## Files
 
-- `R/select_manifest.R`: `.class_orderings`, perm-min per-item `.manifest_mon_stat`,
+- `R/select_hybrid.R`: `.class_orderings`, perm-min per-item `.manifest_mon_stat`,
   `.manifest_mon_holds` (unchanged mechanism, new statistic), `mon_eps` default 0.04.
 - `inst/validation/manifest_iio_mon_robustness.R`: correct `gen_sep`, `eps=0.04`.
