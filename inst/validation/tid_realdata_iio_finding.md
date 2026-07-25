@@ -56,6 +56,31 @@ The lattice's IIO ceiling is now measured four independent ways and agrees:
 **39% here, 45% (simulated, same-code), 42% (prior full TI&D run), 41% (TI&D's
 own human raters)**.
 
+## Full coverage of the run (clean conditions, nI 6/12, full N = 5000)
+
+| truth | covered | hybrid | lattice |
+|-------|---------|--------|---------|
+| UN    | 18/18   | 18     | 18      |
+| MON   | 18/18   | 17     | 18      |
+| **IIO** | **18/18** | **13** | **7** |
+| DM    | 18/18   | 17     | 16      |
+| LCR   | 5/18    | 4      | 4       |
+| **RM**| **0/18**| — | — |
+
+Over the four COMPLETE cells (UN/MON/IIO/DM, n = 72): hybrid 65/72 (90%),
+lattice 59/72 (82%), McNemar 8 vs 2 discordant, **p = 0.109 - not significant**.
+No aggregate is quoted over all rows, because the missing cells are not a random
+subset: they are systematically the quantitative models, so any overall figure
+would be biased.
+
+**RM was not reachable at full N = 5000 in this environment** (0/18 across many
+attempts) and LCR only partially (5/18). The cost is structural: an RM dataset
+must fit DM and LCR at the bridge grain, run a 49-replicate equivalence
+bootstrap, profile LCR across the grain grid, and then run `rm_vs_lcr_test`,
+whose every bootstrap replicate refits the LCR profile - plausibly 1-3 hours per
+dataset at N = 5000. This is a stated coverage gap, not an omission; it needs a
+machine that can run uninterrupted for hours.
+
 ## METHODOLOGICAL WARNING: interim reads of this run are biased
 
 Datasets were deliberately processed cheapest-first (UN/MON/IIO resolve in the
