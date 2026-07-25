@@ -120,7 +120,16 @@
   }, numeric(1))
   boot <- boot[!is.na(boot)]
   lo <- if (length(boot)) stats::quantile(boot, 0.05, names = FALSE) else 0
-  shape <- if (lo >= tot) "chain" else if (lo >= 1) "partial" else "antichain"
+  # "chain" is deliberately NOT an outcome. This runs only in the UN cell, i.e.
+  # only after the MON axis has already rejected a total order at the aggregate
+  # tolerance; the pairwise and aggregate statistics differ (each pair <= eps
+  # allows total violation up to (C-1)*eps), so a full dominance chain here is a
+  # borderline case of that disagreement, not evidence for a total order the MON
+  # axis missed. Reporting "chain" would contradict the axis that routed us to
+  # this cell, so the outcome is capped at "partial". (Empirically no validation
+  # dataset ever produced a calibrated chain; this closes the branch on
+  # principle.)
+  shape <- if (lo >= 1) "partial" else "antichain"
   list(comparable = obs, total = tot, lo = lo, shape = shape)
 }
 
