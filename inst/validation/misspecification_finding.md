@@ -40,7 +40,10 @@ The hybrid's 2x2 preserves the double-monotone structure of misspecified Rasch
 data on 14/18 where the lattice loses it entirely. Reaching DM is strictly
 closer to the truth (RM satisfies DM's constraints) — but whether the quant edge
 would then correctly promote to RM is **unresolved here**; those 18 runs need an
-uninterrupted machine. So the fair statement is: the hybrid keeps the question
+uninterrupted machine. (Directly tested here: a single caffeinated attempt got a
+~50-min window - the longest observed - and still zero of the 8 in-flight
+datasets finished, so each needs > 50 min; and the workers do NOT survive the
+kill as orphans, so windows cannot be chained.) So the fair statement is: the hybrid keeps the question
 alive that the lattice forecloses.
 
 ## The one clean positive: failures are all in the safe direction

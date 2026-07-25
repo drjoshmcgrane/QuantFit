@@ -66,5 +66,7 @@ disappears at the data's true N=5000 (verified on the MON axis).
 flip at N=5000 is decisive on the *mechanism* of the RM/nI=6 artifact, but the
 full-N recovery itself has not been run). This was previously deferred as
 infeasible; that reason has been retracted (see above), so it is simply pending.
-Run one job at a time to avoid the core oversubscription that caused the earlier
-kills.
+Note: the kill cause was never established (a single caffeinated job was later
+killed at ~50 min, disconfirming the oversubscription theory too); the practical
+rule is that datasets needing < ~30 min complete across relaunch cycles and
+datasets needing > ~50 min do not.

@@ -19,8 +19,14 @@ NS <- as.integer(Sys.getenv("TID_N","5000"))
 # nI set is configurable. NOTE: an earlier run excluded nI=24 and subsampled to
 # N=1500 on the belief that longer jobs were killed by a machine/harness ceiling.
 # That belief was TESTED AND DISPROVEN (a probe ran 14+ min and an 8-worker job
-# 16+ min uninterrupted; the earlier kills coincided with several concurrent jobs
-# oversubscribing the cores). Run ONE job at a time and full N=5000 is viable --
+# 16+ min uninterrupted). NOTE the kill CAUSE was never established: a later
+# single caffeinated job was killed at ~50 min, so "concurrent jobs
+# oversubscribing cores" does not explain it either. Empirically: windows are
+# irregular (~15-50 min observed), kills take the whole process group (forked
+# workers do NOT survive as orphans - tested directly), and single-job runs got
+# longer windows. Practical rule: datasets needing < ~30 min complete reliably
+# across relaunch cycles; datasets needing > ~50 min never complete here. Full
+# N=5000 is viable for the ordinal-resolving and nI<=12 quant datasets --
 # which matters because the N=1500 subsampling is what produced the only blemish
 # in the TI&D result (the RM/nI=6 -> IIO artifact).
 nIs <- as.integer(strsplit(Sys.getenv("TID_NI","6,12,24"), ",")[[1]])
