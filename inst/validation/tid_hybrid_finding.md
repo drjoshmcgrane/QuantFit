@@ -10,8 +10,9 @@ Balanced sample over model × nI, 5 per cell. Runner: `tid_hybrid.R`.
 - **N subsampled 5000 → 1500** (seeded), on the belief that the LR quant edge over
   full N=5000 exceeded a ~20-min background-job kill ceiling. **That belief was
   later TESTED AND DISPROVEN** (a probe ran 14+ min and an 8-worker job 16+ min
-  uninterrupted; the kills coincided with several concurrent jobs oversubscribing
-  the cores). So the subsampling was **not necessary** — and it is the cause of
+  uninterrupted; kill cause never established - an oversubscription theory was
+  later disconfirmed too, with a single caffeinated job killed at ~50 min). So
+  the subsampling was **not necessary** — and it is the cause of
   the *only* weakness seen here (RM/nI=6 below), which vanishes at N=5000. The
   runner now defaults to the full N=5000 (`TID_N`); a full-N rerun is the
   outstanding item.
