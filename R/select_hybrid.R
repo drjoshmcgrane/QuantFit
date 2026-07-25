@@ -105,6 +105,91 @@
        holds = lo <= eps)
 }
 
+# --- Quantitative edge: DM -> LCR -> RM -------------------------------------
+# Runs ONLY the quantitative succession, which is all the 2x2 needs once it has
+# established DM. Deliberately does NOT call select_model_ll(): that would
+# re-select the class count by BIC, refit all six models and re-run the entire
+# ordinal lattice with bootstraps, only to have its ordinal verdict discarded.
+# That was pure waste, and the discarded verdict was not a usable second opinion
+# anyway - the lattice's ordinal layer runs at a BIC-selected C while the 2x2
+# runs at a fixed C, so any disagreement confounds class count with structure.
+#
+# The DM-vs-LCR comparison is made at the Lindsay bridge grain
+# ceiling((score_max + 1) / 2) - the support-point count at which a latent-class
+# Rasch model can represent the continuous Rasch model - so grain selection is
+# removed from the scale test. Only if the bridge supports quantity is LCR
+# profiled over grain and compared with the continuous RM.
+.hybrid_quant_edge <- function(data, grain_range, B, n_starts, boot_n_starts,
+                               alpha, use_cpp, mc.cores, seed, min_effect = 1,
+                               verbose = FALSE) {
+  data <- as.matrix(data)
+  score_max <- if (!.is_polytomous(data)) ncol(data) else
+    sum(vapply(seq_len(ncol(data)), function(j) {
+      x <- data[, j]; if (all(is.na(x))) 0L else as.integer(max(x, na.rm = TRUE))
+    }, integer(1)))
+  bridge_C <- max(2L, as.integer(ceiling((score_max + 1) / 2)))
+  grain_grid <- sort(unique(c(as.integer(grain_range[grain_range >= 2L]),
+                              bridge_C)))
+  sd_ <- function(off) if (is.null(seed)) NULL else seed + off
+  ok <- function(lbl, expr) tryCatch(suppressWarnings(expr), error = function(e) {
+    if (verbose) cat("Fit of", lbl, "failed:", conditionMessage(e), "\n"); NULL })
+
+  dm_bridge  <- ok("DM bridge",  fit_dm(data, bridge_C, n_starts = n_starts,
+                                        use_cpp = use_cpp, seed = sd_(5000L)))
+  lcr_bridge <- ok("LCR bridge", fit_lcr(data, bridge_C, n_starts = n_starts,
+                                         use_cpp = use_cpp, seed = sd_(6000L)))
+  out <- list(supports_quant = NA, selected = NA_character_,
+              bridge_C = bridge_C, grain_grid = grain_grid,
+              lcr_vs_dm = NULL, rm_vs_lcr = NULL)
+  if (is.null(dm_bridge) || is.null(lcr_bridge)) return(out)
+
+  # LCR vs DM at the bridge grain, with the same degenerate-null retention the
+  # lattice uses: when even the null's 95th percentile is a trivially small LR,
+  # the bootstrap itself certifies the models indistinguishable, so retain the
+  # constrained model by parsimony rather than reject on a negligible effect.
+  if (verbose) cat("Quantitative edge: LCR vs DM at C =", bridge_C, "...\n")
+  t <- tryCatch(ll_equivalence_test(data, lcr_bridge, dm_bridge, B = B,
+           n_starts = boot_n_starts, seed = sd_(4000L), use_cpp = use_cpp,
+           mc.cores = mc.cores), error = function(e) NULL)
+  if (is.null(t)) return(out)
+  adequate <- t$p_value > alpha
+  q95 <- if (length(t$null_distribution))
+    stats::quantile(t$null_distribution, 0.95, names = FALSE) else NA_real_
+  if (!adequate && is.finite(q95) && q95 < min_effect) adequate <- TRUE
+  out$lcr_vs_dm <- t
+  out$supports_quant <- adequate
+  if (!adequate) { out$selected <- "DM"; return(out) }
+
+  # Quantitative: profile LCR over grain by BIC, then located/discrete LCR
+  # versus continuous RM.
+  lcr_profile <- lapply(grain_grid, function(C)
+    if (C == bridge_C) lcr_bridge else
+      ok(paste("LCR", C), fit_lcr(data, C, n_starts = n_starts,
+                                  use_cpp = use_cpp, seed = sd_(7000L + C))))
+  bic <- vapply(lcr_profile, function(f) if (is.null(f)) NA_real_ else BIC(f),
+                numeric(1))
+  usable <- which(is.finite(bic))
+  pick <- if (length(usable)) usable[which.min(bic[usable])] else
+    match(bridge_C, grain_grid)
+  profile_C <- grain_grid[pick]; lcr_best <- lcr_profile[[pick]]
+  rm_fit <- ok("RM", fit_rm(data, verbose = FALSE))
+  out$selected <- "LCR"; out$C <- profile_C; out$LCR <- lcr_best
+  if (is.null(rm_fit) || is.null(lcr_best)) return(out)
+  if (verbose) cat("Quantitative edge: RM vs LCR ...\n")
+  rl <- tryCatch(rm_vs_lcr_test(data, rm_fit, lcr_best, profile_C, B = B,
+           C_range = grain_grid, alpha = alpha, n_starts = boot_n_starts,
+           use_cpp = use_cpp, observed_fits = lcr_profile, mc.cores = mc.cores,
+           seed = sd_(8000L)), error = function(e) NULL)
+  out$rm_vs_lcr <- rl
+  if (!is.null(rl)) {
+    if (isTRUE(rl$available) && !is.na(rl$profiled_C)) out$C <- rl$profiled_C
+    rm_pref <- if (!isTRUE(rl$available))
+      (BIC(rm_fit) <= BIC(lcr_best)) else !rl$select_lcr
+    if (isTRUE(rm_pref)) { out$selected <- "RM"; out$RM <- rm_fit }
+  }
+  out
+}
+
 #' Hybrid latent-structure selector (property-based 2x2 + LR quantitative edge)
 #'
 #' Decides the ordinal / nominal layer (UN, MON, IIO, DM) by testing the
@@ -201,17 +286,18 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   # if the lattice finds no quant support the 2x2's DM stands (its ordinal-layer
   # call is authoritative).
   if (ordinal == "DM") {
-    if (verbose) cat("DM vs quant: LR edge (lattice) ...\n")
-    ll <- tryCatch(select_model_ll(data, n_classes = lr_n_classes, alpha = alpha,
-             alpha_quant = alpha, B = B, n_starts = n_starts,
-             boot_n_starts = lr_boot_n_starts, use_cpp = use_cpp,
-             mc.cores = mc.cores,
+    if (verbose) cat("DM vs quant: LR edge ...\n")
+    add <- tryCatch(.hybrid_quant_edge(data, grain_range = lr_n_classes,
+             B = B, n_starts = n_starts, boot_n_starts = lr_boot_n_starts,
+             alpha = alpha, use_cpp = use_cpp, mc.cores = mc.cores,
              seed = if (!is.null(seed)) seed + 2000L else NULL,
-             verbose = FALSE), error = function(e) NULL)
-    add <- list(supports_quant = if (is.null(ll)) NA else ll$selected %in% c("LCR", "RM"),
-                lr = ll)
-    if (isTRUE(add$supports_quant)) {
-      selected <- ll$selected; interpretation <- ll$interpretation
+             verbose = verbose), error = function(e) NULL)
+    if (isTRUE(add$supports_quant) && !is.na(add$selected)) {
+      selected <- add$selected
+      interpretation <- if (identical(selected, "LCR"))
+        "QUANTITATIVE (discrete: latent class Rasch)" else
+        "QUANTITATIVE (continuous: Rasch model)"
+      C <- add$C
     }                                   # else stays DM (2x2 ordinal call)
   }
 
