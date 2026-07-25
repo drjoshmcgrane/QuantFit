@@ -73,8 +73,9 @@ also MATCHES the hybrid's LR delegation so the paired comparison is at equal
 settings. (An earlier version of this note claimed B=99 was "confirmed
 infeasible on this machine" because of a ~20-min job-kill ceiling. That belief
 was later tested and DISPROVEN — a probe ran 14+ min and an 8-worker job 16+ min
-uninterrupted; the kills coincided with several concurrent jobs oversubscribing
-the cores. B=49 is a matched-settings choice, not a forced one.)
+uninterrupted. The kill cause was never established - an oversubscription theory
+was later disconfirmed too, when a single caffeinated job was killed at ~50 min;
+windows are irregular (~15-50 min) and forked workers do not survive the kill. B=49 is a matched-settings choice, not a forced one.)
 
 ## Three-way head-to-head (60/60 shared datasets, mon_eps = 0.01)
 
