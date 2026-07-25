@@ -45,8 +45,15 @@ base <- prior[prior$nI %in% nIs, ]
 s_clean <- base[base$clean %in% c(TRUE, "TRUE"), ]
 s_latun <- base[base$lc_selected == "UN", ]
 sel <- switch(set_which,
-  clean  = s_clean,
-  lat_un = s_latun,
+  clean    = s_clean,
+  lat_un   = s_latun,
+  # "nonclean": ALL misspecified-condition datasets (slope variation /
+  # correlated dimensions; every one is nI=24). This is the regime where the
+  # prior lattice run COLLAPSED (27% exact; IIO 0/18, RM 0/18, nearly all
+  # verdicts MON or UN). Most resolve in the fast ordinal layer even at nI=24;
+  # only 2x2-DM-reaching datasets pay the (locally unreachable) 13-class
+  # bridge and may not complete - report coverage explicitly.
+  nonclean = base[!(base$clean %in% c(TRUE, "TRUE")), ],
   base[base$id %in% union(s_clean$id, s_latun$id), ])
 if (identical(set_which, "clean") && !clean_only) sel <- base
 
