@@ -85,58 +85,6 @@
   min(apply(ords, 1, down)) / J                   # min over orders, per item
 }
 
-# Calibrated alternative to the eps rule: a parametric null in which MON holds
-# EXACTLY. The observed UN fit is projected onto the monotone cone by SORTING
-# each item's class-probabilities along the best class ordering - this enforces
-# monotonicity while preserving each item's spread exactly, so the null keeps the
-# observed class separation. (A weighted-isotonic/PAVA projection was also tested
-# and is worse: it POOLS violating classes to equal values, degrading separation
-# and inflating the null until IIO power collapses to ~0-12%.)
-#
-# MEASURED FRONTIER (per-condition hold-rates, n~10 each):
-#                       IIO power J=8 | IIO power J=12 | low-sep DM size
-#   eps rule (default)        78%      |      100%      |      0.38
-#   null, sort projection     33%      |       38%      |      0.88
-#   null, pava projection      0%      |       12%      |      1.00
-# No method dominates: the MON axis has an intrinsic power/size trade-off, and a
-# calibrated p-value does NOT remove the eps threshold's role - it slides along
-# the same frontier. eps stays the default because IIO detection is the whole
-# purpose of the manifest route and the null's advantage is confined to an
-# artificially low class separation (< ~1 logit) that the standard generators and
-# the TI&D data do not produce. Offered for use when separation is known to be
-# low and false IIO calls are costlier than missed ones.
-.manifest_mon_null <- function(data, C, B, n_starts, use_cpp, alpha, seed) {
-  data <- as.matrix(data); n <- nrow(data); J <- ncol(data)
-  un <- refit_model_type("UN", data, C, n_starts, use_cpp)
-  P <- un$item_probs; pi_c <- un$class_probs
-  stat_of <- function(Q) {
-    ords <- if (C <= 5L) .class_orderings(C) else matrix(order(colMeans(Q)), 1L)
-    min(apply(ords, 1, function(o)
-      sum(pmax(0, -t(apply(Q[, o, drop = FALSE], 1, diff)))))) / nrow(Q)
-  }
-  obs <- stat_of(P)
-  ords <- if (C <= 5L) .class_orderings(C) else matrix(order(colMeans(P)), 1L)
-  o <- ords[which.min(apply(ords, 1, function(x)
-    sum(pmax(0, -t(apply(P[, x, drop = FALSE], 1, diff)))))), ]
-  P0 <- P
-  P0[, o] <- t(apply(P[, o, drop = FALSE], 1, sort))   # monotone, spread preserved
-  P0 <- pmin(pmax(P0, 1e-6), 1 - 1e-6); tP0 <- t(P0)
-  if (!is.null(seed)) set.seed(seed)
-  null <- vapply(seq_len(B), function(b) {
-    cls <- sample.int(C, n, replace = TRUE, prob = pi_c)
-    sim <- matrix(stats::rbinom(n * J, 1, tP0[cls, , drop = FALSE]), n, J)
-    storage.mode(sim) <- "integer"
-    f <- tryCatch(refit_model_type("UN", sim, C, n_starts, use_cpp),
-                  error = function(e) NULL)
-    if (is.null(f)) NA_real_ else stat_of(f$item_probs)
-  }, numeric(1))
-  null <- null[!is.na(null)]
-  if (!length(null)) return(list(stat = obs, lo = NA_real_, p = NA_real_, holds = NA))
-  p <- (1 + sum(null >= obs)) / (length(null) + 1)
-  list(stat = obs, lo = stats::quantile(null, 0.95, names = FALSE),
-       p = p, holds = p > alpha)
-}
-
 .manifest_mon_holds <- function(data, C, B, n_starts, use_cpp, eps, seed) {
   if (!is.null(seed)) set.seed(seed)
   n <- nrow(data)
@@ -240,20 +188,6 @@
 #'   detection; the cost is only at artificially low class separation
 #'   (< ~1 logit), where weak IIO and near-collapsed DM are genuinely
 #'   indistinguishable - an identifiability limit, not a tuning target.
-#' @param mon_method Calibration of the MON axis. \code{"eps"} (default)
-#'   compares the resample q05 to \code{mon_eps}. \code{"null"} instead computes
-#'   a bootstrap p-value against a null in which MON holds exactly (the observed
-#'   UN fit projected onto the monotone cone by sorting each item's class
-#'   probabilities, which preserves class separation), and holds if
-#'   \code{p > alpha} - removing the threshold. Measured trade-off (n~10/cell):
-#'   \code{"eps"} gives IIO power 78\% (J=8) / 100\% (J=12) but only 0.38
-#'   hold-rate on artificially low-separation DM; \code{"null"} gives 0.88 on
-#'   low-separation DM but IIO power drops to 33-38\%. NEITHER DOMINATES - the
-#'   MON axis has an intrinsic power/size trade-off. \code{"eps"} is the default
-#'   because IIO detection is the purpose of this route and the null's advantage
-#'   is confined to a separation regime (< ~1 logit) the standard generators and
-#'   the TI&D data do not produce. Use \code{"null"} when class separation is
-#'   known to be low and false IIO calls cost more than missed ones.
 #' @param dm_quant How to decide DM (ordinal) vs quantitative once the 2x2
 #'   ordinal layer reaches DM. \code{"double_cancellation"} (default) uses the
 #'   manifest double-cancellation additivity test then the DIP shape axis.
@@ -283,12 +217,11 @@
 #' @export
 select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                    mon_eps = 0.01, alpha = 0.05,
-                                   mon_method = c("eps", "null"),
                                    dm_quant = c("double_cancellation", "lr"),
                                    lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                    cc_B = 99L, cc_n_mat = 500L, use_cpp = TRUE,
                                    mc.cores = 1L, seed = NULL, verbose = FALSE) {
-  dm_quant <- match.arg(dm_quant); mon_method <- match.arg(mon_method)
+  dm_quant <- match.arg(dm_quant)
   data <- validate_data_any(data, allow_na = FALSE)
   C <- as.integer(stats::median(n_classes)); if (C < 2L) C <- 2L
   J <- ncol(data)
@@ -303,12 +236,8 @@ select_model_manifest <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   # N (keeps size ~alpha across N; the calibration study showed the holds/
   # violated q05 gap sits at ~0.02 vs ~0.06 per item at N = 1500).
   mon_eps_N <- mon_eps * sqrt(1500 / nrow(data))
-  mon <- if (mon_method == "null")
-    .manifest_mon_null(data, C, max(B %/% 2L, 20L), n_starts, use_cpp,
-                       alpha, s(1000L))
-  else
-    .manifest_mon_holds(data, C, max(B %/% 2L, 20L), n_starts, use_cpp,
-                        mon_eps_N, s(1000L))
+  mon <- .manifest_mon_holds(data, C, max(B %/% 2L, 20L), n_starts, use_cpp,
+                             mon_eps_N, s(1000L))
 
   ih <- isTRUE(iio$holds); mh <- isTRUE(mon$holds)
   ordinal <- if (ih && mh) "DM" else if (ih && !mh) "IIO" else
