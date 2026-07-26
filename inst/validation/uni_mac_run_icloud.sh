@@ -14,11 +14,11 @@
 #     tid_lattice_baseline/      <- 324 lattice-baseline CSVs
 #     tid_realdata_results/      <- resumable state (h_*.csv) + NEW RESULTS
 #
-# LAUNCH ON THE UNI MAC (only requirement: tid_data/ from the earlier sessions):
+# LAUNCH ON THE UNI MAC - fully self-contained, run from anywhere (the bundle
+# carries a needed-files-only subset of tid_data, ~83 MB):
 #
-#   cd <directory containing tid_data/>       # e.g. ~/QuantModelFitting
 #   B=~/Library/Mobile\ Documents/com~apple~CloudDocs/QF_uniMacBatch
-#   nohup caffeinate -dims bash "$B/run.sh" > uni_mac_run.log 2>&1 & disown
+#   nohup caffeinate -dims bash "$B/run.sh" > ~/uni_mac_run.log 2>&1 & disown
 #
 # caffeinate -dims keeps display/idle/disk/system awake for the whole run;
 # nohup+disown survives closing the terminal. KEEP IT PLUGGED IN, LID OPEN
@@ -34,10 +34,13 @@ BUNDLE="$(cd "$(dirname "$0")" && pwd)"
 stamp() { date "+%Y-%m-%d %H:%M:%S"; }
 phase() { echo ""; echo "=== [$(stamp)] $1 ==="; }
 
-if [ ! -d tid_data ]; then
-  echo "ERROR: run from the directory containing tid_data/ (the TA archive)."
-  exit 1
-fi
+# TA archive: use a full local tid_data/ if the cwd has one, else the bundled
+# needed-files-only subset (covers phases 1-3; phase 4 / nI=48 requires the
+# full archive).
+if [ -d tid_data ]; then export TIDF_DATA="$PWD/tid_data"
+else export TIDF_DATA="$BUNDLE/tid_data"; fi
+echo "TA archive: $TIDF_DATA"
+[ -d "$TIDF_DATA" ] || { echo "ERROR: no tid_data found"; exit 1; }
 
 phase "Materialise any iCloud-evicted files in the bundle"
 if find "$BUNDLE" -name "*.icloud" | grep -q .; then

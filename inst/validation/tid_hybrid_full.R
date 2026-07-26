@@ -21,7 +21,9 @@
 #      TIDF_B, TIDF_CORES.
 # Resumable: one CSV per TA id.
 suppressMessages(library(QuantFit))
-DD <- "tid_data"
+DD <- Sys.getenv("TIDF_DATA", "tid_data")   # TA archive location (env-overridable
+                                            # so the iCloud bundle can carry a
+                                            # needed-files-only subset)
 models <- c("UN","MON","IIO","DM","LCR","RM")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant")
