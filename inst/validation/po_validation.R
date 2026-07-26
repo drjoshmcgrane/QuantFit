@@ -1,76 +1,93 @@
-# Validation of the "PO" (partial class order) generator at TI&D spec.
+# Validation of the CALIBRATED partial-order tests (v2; supersedes the v1
+# count/threshold study whose raw results remain in po_validation_results/).
 #
-# simulate_responses("PO") extends TI&D's own generation idiom (one C x J
-# U(-4,4) logit matrix; column-sort = MON chain, unsorted = UN antichain) with
-# per-item random linear extensions of a specified partial order - the natural
-# interpolation, nesting both endpoints exactly (chain-D reproduces the MON
-# column sort identically; verified). Ground truth here is a class structure
-# the six-model set cannot express.
+# Design mirrors how the 2x2 axes were validated: SIZE and POWER for each
+# antichain test, swept across the dimensions that govern them. Key structural
+# fact (established in the smoke tests, quantified here): each side's power is
+# governed by the size of the OTHER side - the class test has J observations
+# per class pair, the item test has C per item pair - so class-side power is
+# swept over nI and PO crossing margin, and every case reports both tests where
+# its cell runs them.
 #
-# Questions:
-#   1. What does the hybrid SELECT on true-PO data? (Expected UN - or IIO when
-#      the unconstrained item side happens to pass the IIO axis, in which case
-#      the poset rung never runs; track that leak.)
-#   2. Rung SENSITIVITY: how often does the poset rung flag "partial" on
-#      true-PO data reaching the UN cell? (The TI&D-real-data estimate was 2/5
-#      on misspecification-induced structure; this is purpose-built structure
-#      with guaranteed crossing margins.)
-#   3. Rung SPECIFICITY at the same spec: UN controls should stay "antichain".
-#   4. (Small lattice arm at nI=12) where does the lattice file PO data?
+# Truths and their routing:
+#   PO free (margin m)   -> UN cell: class test (power) + item test (vs pop)
+#   PO invariant         -> IIO cell: class test (power)
+#   PO_ITEMS layers2     -> MON cell: item test (power)
+#   UN control           -> UN cell: class test SIZE + item test (vs pop)
+#   MON control          -> MON cell: item test vs POPULATION truth
+#   IIO control          -> IIO cell: class test SIZE
 #
-# TI&D spec: N = 5000, C = 3, equal class probs. Grid: poset type
-# {V, Lambda, single} x nI {6,12,24} x K reps, + UN controls. Resumable.
+# Item-side outcomes are scored against the POPULATION table (params$L): TI&D
+# style draws genuinely contain margin-driven item dominance, and the test
+# detecting it is correct - the population comparable-pair count (eps = 0.01 on
+# the true probabilities) is recorded per dataset for exactly that comparison.
 suppressMessages(library(QuantFit))
-K     <- as.integer(Sys.getenv("PO_K", "10"))
-NR    <- as.integer(Sys.getenv("PO_N", "5000"))
+K     <- as.integer(Sys.getenv("PO_K", "8"))
+NR    <- as.integer(Sys.getenv("PO_N", "1500"))
+B     <- as.integer(Sys.getenv("PO_B", "49"))
 cores <- as.integer(Sys.getenv("PO_CORES", "8"))
-ARM   <- Sys.getenv("PO_ARM", "hybrid")          # "hybrid" or "lattice"
-out   <- Sys.getenv("PO_OUT", "po_validation_out"); dir.create(out, showWarnings = FALSE)
+out   <- Sys.getenv("PO_OUT", "po_validation2_out"); dir.create(out, showWarnings = FALSE)
 
 grid <- rbind(
-  expand.grid(truth = c("V", "Lambda", "single"), nI = c(6L, 12L, 24L),
-              rep = seq_len(K), stringsAsFactors = FALSE),
-  expand.grid(truth = "UN", nI = c(6L, 12L, 24L), rep = seq_len(K),
-              stringsAsFactors = FALSE))
-if (ARM == "lattice")                             # small arm: nI=12 only
-  grid <- grid[grid$nI == 12L & grid$rep <= min(K, 6L), ]
+  expand.grid(truth = "PO",       margin = c(0.05, 0.10, 0.15),
+              nI = c(6L, 12L, 24L), rep = seq_len(K), stringsAsFactors = FALSE),
+  expand.grid(truth = "PO_INV",   margin = 0.12,
+              nI = c(6L, 12L, 24L), rep = seq_len(K), stringsAsFactors = FALSE),
+  expand.grid(truth = "PO_ITEMS", margin = 0.10,
+              nI = c(8L, 12L, 24L), rep = seq_len(K), stringsAsFactors = FALSE),
+  expand.grid(truth = c("UN", "MON", "IIO"), margin = NA,
+              nI = c(6L, 12L, 24L), rep = seq_len(K), stringsAsFactors = FALSE))
 
-gen <- function(truth, nI, rep) {
-  sd <- 31000L + 611L * rep + 7L * nI + match(truth, c("V","Lambda","single","UN"))
-  if (truth == "UN")
-    simulate_responses("UN", n_persons = NR, n_items = nI, n_classes = 3,
-                       seed = sd)
-  else
-    simulate_responses("PO", n_persons = NR, n_items = nI, n_classes = 3,
-                       poset = truth, seed = sd)
+gen <- function(tr, m, nI, rep) {
+  sd <- 41000L + 977L * rep + 13L * nI + round(100 * ifelse(is.na(m), 0, m)) +
+        match(tr, c("PO","PO_INV","PO_ITEMS","UN","MON","IIO"))
+  switch(tr,
+    PO       = simulate_responses("PO", n_persons = NR, n_items = nI,
+                 n_classes = 3, poset = "V", po_margin = m, seed = sd),
+    PO_INV   = simulate_responses("PO", n_persons = NR, n_items = nI,
+                 n_classes = 3, poset = "V", item_order = "invariant",
+                 po_margin = m, seed = sd),
+    PO_ITEMS = suppressWarnings(simulate_responses("PO_ITEMS", n_persons = NR,
+                 n_items = nI, n_classes = 3, poset = "layers2",
+                 po_margin = m, seed = sd)),
+    simulate_responses(tr, n_persons = NR, n_items = nI, n_classes = 3,
+                       seed = sd))
+}
+pop_pairs <- function(L, eps = 0.01) {           # population dominance counts
+  P <- stats::plogis(L); C <- nrow(P); J <- ncol(P); cl <- 0L; it <- 0L
+  for (a in seq_len(C - 1L)) for (b in (a + 1L):C) {
+    ab <- mean(pmax(0, P[b, ] - P[a, ])) <= eps
+    ba <- mean(pmax(0, P[a, ] - P[b, ])) <= eps
+    if (xor(ab, ba)) cl <- cl + 1L }
+  for (j in seq_len(J - 1L)) for (k in (j + 1L):J) {
+    jk <- mean(pmax(0, P[, k] - P[, j])) <= eps
+    kj <- mean(pmax(0, P[, j] - P[, k])) <= eps
+    if (xor(jk, kj)) it <- it + 1L }
+  c(class = cl, item = it)
 }
 
 run <- function(k) {
   cs <- grid[k, ]
-  f <- file.path(out, sprintf("%s_%s_%02d_%02d.csv", ARM, cs$truth, cs$nI, cs$rep))
+  f <- file.path(out, sprintf("v_%s_%s_%02d_%02d.csv", cs$truth,
+                              ifelse(is.na(cs$margin), "na", cs$margin),
+                              cs$nI, cs$rep))
   if (file.exists(f)) return(invisible())
-  d <- gen(cs$truth, cs$nI, cs$rep); storage.mode(d) <- "integer"
+  d <- gen(cs$truth, cs$margin, cs$nI, cs$rep)
+  pp <- pop_pairs(attr(d, "params")$L); storage.mode(d) <- "integer"
   t0 <- proc.time()[3]
-  if (ARM == "hybrid") {
-    r <- tryCatch(select_model_hybrid(d, n_classes = 3L, B = 49L,
-             mc.cores = 1L, seed = 1, verbose = FALSE), error = function(e) NULL)
-    write.csv(data.frame(arm = ARM, truth = cs$truth, nI = cs$nI, rep = cs$rep,
-      selected = if (is.null(r)) NA else r$selected,
-      shape    = if (is.null(r) || is.null(r$poset)) NA else r$poset$shape,
-      comparable = if (is.null(r) || is.null(r$poset)) NA else r$poset$comparable,
-      lo       = if (is.null(r) || is.null(r$poset)) NA else r$poset$lo,
-      secs = round(proc.time()[3] - t0, 1)), f, row.names = FALSE)
-  } else {
-    r <- tryCatch(select_model_ll(d, n_classes = 2:6, B = 49L, boot_n_starts = 2L,
-             mc.cores = 1L, seed = 1, verbose = FALSE), error = function(e) NULL)
-    write.csv(data.frame(arm = ARM, truth = cs$truth, nI = cs$nI, rep = cs$rep,
-      selected = if (is.null(r)) NA else r$selected,
-      shape = NA, comparable = NA, lo = NA,
-      secs = round(proc.time()[3] - t0, 1)), f, row.names = FALSE)
-  }
+  r <- tryCatch(select_model_hybrid(d, n_classes = 3L, B = B, mc.cores = 1L,
+         seed = 1, verbose = FALSE), error = function(e) NULL)
+  g <- function(x, fld) if (is.null(x)) NA else x[[fld]]
+  write.csv(data.frame(truth = cs$truth, margin = cs$margin, nI = cs$nI,
+    rep = cs$rep, selected = if (is.null(r)) NA else r$selected,
+    class_shape = g(r$poset$class, "shape"), class_p = g(r$poset$class, "p"),
+    class_type = g(r$poset$class, "type"),
+    item_shape = g(r$poset$item, "shape"), item_p = g(r$poset$item, "p"),
+    pop_class_pairs = pp["class"], pop_item_pairs = pp["item"],
+    secs = round(proc.time()[3] - t0, 1)), f, row.names = FALSE)
 }
-cat("PO validation [", ARM, "]:", nrow(grid), "datasets (N =", NR, ")\n")
+cat("PO validation v2:", nrow(grid), "datasets (B =", B, ")\n")
 invisible(parallel::mclapply(seq_len(nrow(grid)),
   function(k) tryCatch(run(k), error = function(e) NULL),
   mc.cores = cores, mc.preschedule = FALSE))
-cat("PO VALIDATION DONE\n")
+cat("PO V2 DONE\n")

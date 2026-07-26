@@ -140,20 +140,67 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
         # refinement must catch what the six-model verdict cannot express.
         # class crossings must clear the MON axis's own detection floor
         # (resample-q05 vs eps ~ 0.01 treats mean-violations < ~0.1 as noise),
-        # otherwise the data route to DM instead of the IIO cell
+        # otherwise the data route to DM instead of the IIO cell.
+        # CONSTRUCTIVE search, not blind rejection (blind draws satisfy the
+        # joint exact-dominance + balanced-crossing geometry with near-zero
+        # probability - minutes per dataset): slopes get guaranteed pairwise
+        # separation (shuffled equal-spaced grid), intercepts are placed in
+        # topological order so every comparable pair is dominated EXACTLY by
+        # construction, and each incomparable pair's crossing point is placed
+        # deliberately inside the spine. Capped best-of loop; achieved margin
+        # recorded, warning if it falls short (mirrors PO_ITEMS).
         m_eff <- max(po_margin, 0.12)
-        repeat {
+        n_dom <- rowSums(D)                     # how many classes each dominates
+        best_L <- NULL; best_m <- -Inf
+        inc_pairs <- which(upper.tri(D) & !(D | t(D)), arr.ind = TRUE)
+        for (try_i in seq_len(400L)) {
           s_j <- sort(stats::runif(n_items, -2.5, 2.5))
-          a <- stats::runif(n_classes, 0.4, 1.6)
-          b <- stats::runif(n_classes, -2, 2)
+          a <- sample(seq(0.4, 1.6, length.out = n_classes))
+          if (nrow(inc_pairs)) {                # extreme slope separation for
+            a[inc_pairs[1L, ]] <- sample(c(0.4, 1.6))   # the crossing pair
+            a[-inc_pairs[1L, ]] <- sample(seq(0.7, 1.3,
+              length.out = n_classes - 2L))
+          }
+          b <- numeric(n_classes)
+          for (cc in order(n_dom)) {            # bottoms first
+            below <- which(D[cc, ])            # classes cc must dominate
+            placed <- below[match(below, order(n_dom)) < match(cc, order(n_dom))]
+            inc <- setdiff(which(!(D[cc, ] | D[, cc]) & seq_len(n_classes) != cc),
+                           cc)
+            inc <- inc[match(inc, order(n_dom)) < match(cc, order(n_dom))]
+            b[cc] <- stats::runif(1, -2, 2)
+            if (length(inc)) {                  # engineer a crossing at the
+              # item-mass median (balanced masses on both sides)
+              u <- stats::median(s_j) + stats::runif(1, -0.4, 0.4)
+              x <- inc[1L]
+              b[cc] <- a[x] * u + b[x] - a[cc] * u
+            }
+            if (length(placed))                 # exact dominance (hard floor)
+              b[cc] <- max(b[cc], max(vapply(placed, function(y)
+                max(a[y] * s_j + b[y] - a[cc] * s_j), numeric(1))) + 0.05)
+          }
           L <- outer(a, s_j) + b
+          # recentre on the INCOMPARABLE classes (constant shift keeps
+          # dominance/crossings; puts the crossing pair at mid-probability
+          # where the margin lives - dominant classes may saturate, they only
+          # need dominance)
+          ctr <- if (nrow(inc_pairs)) unique(as.vector(inc_pairs))
+                 else seq_len(n_classes)
+          L <- L - mean(L[ctr, ])
           P <- stats::plogis(L)
-          ok <- .po_crossing_ok(P, D, m_eff)
-          if (ok) for (x in seq_len(n_classes)) for (y in seq_len(n_classes))
-            if (x != y && D[x, y] &&
-                mean(pmax(0, P[y, ] - P[x, ])) > 1e-9) { ok <- FALSE; break }
-          if (ok) break
+          pr <- inc_pairs
+          m_got <- if (nrow(pr)) min(vapply(seq_len(nrow(pr)), function(k) {
+            x <- pr[k, 1]; y <- pr[k, 2]
+            min(mean(pmax(0, P[x, ] - P[y, ])), mean(pmax(0, P[y, ] - P[x, ])))
+          }, numeric(1))) else Inf
+          if (m_got > best_m) { best_m <- m_got; best_L <- L }
+          if (best_m >= m_eff) break
         }
+        L <- best_L
+        if (best_m < m_eff)
+          warning(sprintf(
+            "PO invariant: achieved crossing margin %.4f < target %.2f (best of 400 draws)",
+            best_m, m_eff))
       }
     }
     if (model == "PO_ITEMS") {

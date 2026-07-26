@@ -15,28 +15,42 @@ K       <- as.integer(Sys.getenv("AUDIT_K", "30"))
 B       <- as.integer(Sys.getenv("AUDIT_B", "49"))
 cores   <- as.integer(Sys.getenv("AUDIT_CORES", "8"))
 n_items <- 8L
-models  <- c("UN","MON","IIO","DM","LCR","RM")
+# "PO" is the seventh truth: partial class order in TI&D's own idiom
+# (simulate_responses("PO"), free items, margin 0.10 - a middle value; the
+# margin sweep in po_validation.R maps the detection floor). SCORING for PO
+# truth: correct iff selected == "UN" AND the class poset test rejects
+# (class_shape == "partial") - the six-model `selected` cannot express PO, the
+# calibrated refinement carries it, and BOTH selectors now run that test.
+models  <- c("UN","MON","IIO","DM","LCR","RM","PO")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
-              LCR="quant",RM="quant")
+              LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
 grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
 
 run <- function(k) {
   cs <- grid[k,]; f <- file.path(out, sprintf("%s_%s_%03d.csv", SEL, cs$model, cs$rep))
   if (file.exists(f)) return(invisible())
-  d <- simulate_responses(cs$model, n_persons=1500, n_items=n_items,
+  d <- if (cs$model == "PO")
+    simulate_responses("PO", n_persons=1500, n_items=n_items, n_classes=3,
+                       poset="V", po_margin=0.10, seed=7000*cs$rep + 7L)
+  else simulate_responses(cs$model, n_persons=1500, n_items=n_items,
                           n_classes=3, seed=7000*cs$rep + match(cs$model, models))
   d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
-  sel <- tryCatch(switch(SEL,
+  r <- tryCatch(switch(SEL,
       lattice  = select_model_ll(d, n_classes=2:6, B=B, n_starts=5,
                    boot_n_starts=2L, method="lattice", seed=1, mc.cores=1L,
-                   verbose=FALSE)$selected,
+                   verbose=FALSE),
       hybrid   = select_model_hybrid(d, n_classes=3L, B=B,
-                   lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE)$selected),
-    error=function(e) NA_character_)
+                   lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE)),
+    error=function(e) NULL)
+  sel <- if (is.null(r)) NA_character_ else r$selected
+  g <- function(x, fld) if (is.null(x)) NA else x[[fld]]
   write.csv(data.frame(selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
     rep=cs$rep, selected=sel,
-    selected_scale=if (is.na(sel)) NA else scale_of[sel]), f, row.names=FALSE)
+    selected_scale=if (is.na(sel)) NA else scale_of[sel],
+    class_shape=g(r$poset$class,"shape"), class_p=g(r$poset$class,"p"),
+    item_shape=g(r$poset$item,"shape"), item_p=g(r$poset$item,"p")),
+    f, row.names=FALSE)
 }
 cat("Audit [", SEL, "]:", nrow(grid), "datasets (J=8, N=1500, K=", K, ", B=", B, ")\n")
 invisible(parallel::mclapply(seq_len(nrow(grid)),
