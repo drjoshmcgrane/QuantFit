@@ -59,8 +59,16 @@ miss <- need[!vapply(need, requireNamespace, logical(1), quietly = TRUE)]
 if (length(miss)) install.packages(miss, repos = "https://cloud.r-project.org")'
 
 phase "Install packaged QuantFit"
-TARBALL="$(ls "$BUNDLE"/QuantFit_*.tar.gz | sort | tail -1)"
-R CMD INSTALL "$TARBALL" || { echo "INSTALL FAILED"; exit 1; }
+# Prefer the PREBUILT BINARY (.tgz, arm64/R-4.5, no compiler needed - the uni
+# Mac's CommandLineTools SDK is mismatched with its clang, so source
+# compilation fails there); fall back to the source tarball.
+BIN="$(ls "$BUNDLE"/QuantFit_*.tgz 2>/dev/null | sort | tail -1)"
+SRC="$(ls "$BUNDLE"/QuantFit_*.tar.gz 2>/dev/null | sort | tail -1)"
+if [ -n "$BIN" ]; then
+  R CMD INSTALL "$BIN" || { echo "BINARY INSTALL FAILED"; exit 1; }
+else
+  R CMD INSTALL "$SRC" || { echo "INSTALL FAILED"; exit 1; }
+fi
 
 OUT="$BUNDLE/tid_realdata_results"; mkdir -p "$OUT"
 export TIDF_BASELINE="$BUNDLE/tid_lattice_baseline"
