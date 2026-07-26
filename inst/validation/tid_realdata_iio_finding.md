@@ -58,7 +58,18 @@ The lattice's IIO ceiling is now measured four independent ways and agrees:
 **39% here, 45% (simulated, same-code), 42% (prior full TI&D run), 41% (TI&D's
 own human raters)**.
 
-## Full coverage of the run (clean conditions, nI 6/12, full N = 5000)
+## FINAL full-coverage table (uni Mac batch, clean nI 6/12, full N = 5000, 108/108)
+
+The quant cells were completed on an uninterrupted machine (Phase 2 of the
+stable-machine batch). Per-model, of 18 each (hybrid / lattice):
+UN 18/18 · MON 17/18 · **IIO 13/7** · DM 17/16 · **LCR 16/15** · **RM 16/15**.
+**Exact: hybrid 97/108 (90%) vs lattice 89/108 (82%)**; scale-type 98% vs 95%;
+McNemar overall 12:4, p = 0.077. False quantitativeness promotions: hybrid 0,
+lattice 1. The real-data quant half confirms the shared-edge argument: hybrid
+and lattice are statistically identical on LCR/RM, and the hybrid's overall
+lead is carried by IIO.
+
+## Coverage of the earlier laptop-only run (superseded by the table above)
 
 | truth | covered | hybrid | lattice |
 |-------|---------|--------|---------|
