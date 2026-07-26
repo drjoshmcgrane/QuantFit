@@ -34,7 +34,6 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Depends: R (>= 4.3)
 Imports:
-    diptest,
     Rcpp,
     methods,
     parallel,
@@ -50,6 +49,7 @@ LinkingTo:
     RcppArmadillo,
     nloptr
 Suggests:
+    diptest,
     testthat (>= 3.0.0),
     mirt,
     knitr,

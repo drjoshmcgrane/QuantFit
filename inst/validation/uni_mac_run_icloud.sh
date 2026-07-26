@@ -53,6 +53,11 @@ if find "$BUNDLE" -name "*.icloud" | grep -q .; then
     echo "ERROR: bundle still not fully downloaded"; exit 1; }
 fi
 
+phase "Install missing CRAN dependencies"
+Rscript -e 'need <- c("Rcpp","alabama","nloptr","numDeriv")
+miss <- need[!vapply(need, requireNamespace, logical(1), quietly = TRUE)]
+if (length(miss)) install.packages(miss, repos = "https://cloud.r-project.org")'
+
 phase "Install packaged QuantFit"
 TARBALL="$(ls "$BUNDLE"/QuantFit_*.tar.gz | sort | tail -1)"
 R CMD INSTALL "$TARBALL" || { echo "INSTALL FAILED"; exit 1; }
