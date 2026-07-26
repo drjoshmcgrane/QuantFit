@@ -29,7 +29,30 @@ below, because *which* datasets are missing is itself the key signal.
 Both selectors largely collapse. The hybrid degrades somewhat less (MON +5,
 IIO +2) but this is a slower collapse, not robustness.
 
-## The structural difference: what happens to RM data
+## RESOLVED (uni Mac run, full coverage 108/108): the quant edge does NOT rescue RM
+
+The 18 previously-stalled datasets completed on an uninterrupted machine.
+**Misspecified RM -> RM: 0/18** (lattice baseline: 0/18). Every RM dataset that
+reached DM (7/18 - see correction below) ran the full quantitative edge and the
+LCR-vs-DM equivalence test REJECTED the Rasch structure each time: the verdict
+stays DM. So "fails better" does not become "partially survives" - under this
+misspecification the quantitative signature is genuinely destroyed, not hidden.
+
+Final non-clean table (108/108): hybrid 36/108 (33%) vs lattice 29/108 (27%).
+Two positives survive in full: the hybrid still fails one rung closer (RM -> DM
+7/18 where the lattice scatters to MON/UN), and across TEN full quant-edge runs
+on misspecified data there were ZERO false promotions to LCR/RM - both true-DM
+datasets that ran the edge were correctly retained at DM. The
+conservative-direction property holds through the complete pipeline.
+
+**CORRECTION of an earlier inference**: this finding previously claimed all 18
+missing datasets "reached the 2x2's DM and stalled at the quant edge" (hence
+"DM structure preserved on 14/18 RM"). That was an over-inference from absence:
+several had simply never been attempted (queued behind slow datasets when the
+interruptions hit) and resolved to MON in ~15 s once run. The true DM-reaching
+count is **7/18 RM** (plus 2/2 DM-truth and 1 LCR-truth).
+
+## The structural difference: what happens to RM data (superseded above)
 
 | the 18 misspecified RM datasets | verdict |
 |---------------------------------|---------|
