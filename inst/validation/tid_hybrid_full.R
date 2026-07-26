@@ -33,8 +33,10 @@ cores <- as.integer(Sys.getenv("TIDF_CORES","8"))
 # the exact datasets the lattice baseline covers. tid_results/ lives in the
 # working directory on the original machine; on other machines (e.g. the uni
 # Mac) fall back to the copy committed inside the package repo.
-res_dir <- if (dir.exists("tid_results")) "tid_results" else
-  "QuantFit/inst/validation/tid_lattice_baseline"
+res_dir <- Sys.getenv("TIDF_BASELINE", "")
+if (!nzchar(res_dir))
+  res_dir <- if (dir.exists("tid_results")) "tid_results" else
+    "QuantFit/inst/validation/tid_lattice_baseline"
 prior <- do.call(rbind, lapply(list.files(res_dir, full.names = TRUE), read.csv))
 prior <- prior[!is.na(prior$lc_selected) & prior$lc_selected != "", ]
 # TIDF_SET: "clean"  = the clean conditions (the head-to-head vs the lattice)
