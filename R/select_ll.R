@@ -711,6 +711,13 @@ print.qleqtest <- function(x, ...) {
 #'   and Diakow's successive-comparison diagram. `"joint"` is retained as a
 #'   faster alternative that tests DM directly against UN before falling back
 #'   to the single-constraint models.
+#' @param poset Logical (default `TRUE`): after the ordinal layer, compute the
+#'   purely additive partial-order refinement on whichever side(s) were left
+#'   unordered (UN verdict: class and item posets; IIO: class; MON: item). It
+#'   never alters `selected`; results are returned in `poset` (see
+#'   [select_model_hybrid()] for the machinery and its calibration).
+#' @param poset_eps Per-pair dominance tolerance for the poset refinement, on
+#'   the probability scale (default 0.01, anchored at N = 1500 and N-scaled).
 #' @param min_effect Degenerate-null retention threshold for the edge tests
 #'   (default 1). When a test rejects but even the null distribution's 95th
 #'   percentile LR is below `min_effect`, the bootstrap itself certifies the two
@@ -866,7 +873,8 @@ print.qleqtest <- function(x, ...) {
 select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                             B = 99, n_starts = 5, boot_n_starts = NULL,
                             method = c("lattice", "joint"), severity = FALSE,
-                            min_effect = 1.0, seed = NULL,
+                            min_effect = 1.0, poset = TRUE, poset_eps = 0.01,
+                            seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
                             ...) {
 
@@ -1107,6 +1115,25 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   selected <- ordinal_selected
   interpretation <- ordinal_interp
 
+  # Purely additive POSET refinement of the ordinal verdict (shared machinery
+  # with select_model_hybrid; see the block comment in R/select_hybrid.R).
+  # Distinguishes a genuine antichain from a PARTIAL order on whichever side(s)
+  # the lattice left unordered: UN -> class + item posets, IIO -> class,
+  # MON -> item. Never alters `selected`. Runs at the lattice's own selected C.
+  poset_out <- NULL
+  if (isTRUE(poset)) {
+    ps <- switch(ordinal_selected, UN = c("class", "item"),
+                 IIO = "class", MON = "item", NULL)
+    if (!is.null(ps)) {
+      if (verbose) cat("Poset refinement (", paste(ps, collapse = "+"), ")...\n")
+      poset_out <- tryCatch(.poset_refine(data, n_classes,
+                     B, n_starts, use_cpp,
+                     poset_eps * sqrt(1500 / nrow(data)), alpha,
+                     if (!is.null(seed)) seed + 9000L else NULL, sides = ps),
+                     error = function(e) NULL)
+    }
+  }
+
   lcr_dm_test <- rm_lcr_test <- NULL
   quant_fits <- NULL
   if (identical(ordinal_selected, "DM")) {
@@ -1234,6 +1261,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       n_classes_table = n_classes_table,
       rm_vs_lcr = rm_lcr_test,
       lcr_vs_dm = lcr_dm_test,
+      poset = poset_out,
       quant_fits = quant_fits,
       severity = severity
     ),
@@ -1257,7 +1285,18 @@ print.qlselect_ll <- function(x, ...) {
         if (!is.null(x$n_classes_table)) "(selected by BIC)" else "", "\n")
   }
   cat("Method =", if (is.null(x$method)) "joint" else x$method,
-      "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n\n")
+      "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n")
+  if (!is.null(x$poset$class))
+    cat(sprintf("Class poset    : %d/%d pairs comparable, p %.3f -> %s%s\n",
+                x$poset$class$comparable, x$poset$class$total, x$poset$class$p,
+                x$poset$class$shape,
+                if (!is.na(x$poset$class$type))
+                  paste0(" [", x$poset$class$type, "]") else ""))
+  if (!is.null(x$poset$item))
+    cat(sprintf("Item poset     : %d/%d pairs comparable, p %.3f -> %s\n",
+                x$poset$item$comparable, x$poset$item$total, x$poset$item$p,
+                x$poset$item$shape))
+  cat("\n")
 
   if (nrow(x$tests) > 0) {
     cat("Decision path (calibrated edge tests):\n")

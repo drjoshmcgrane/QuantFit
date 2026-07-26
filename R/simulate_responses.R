@@ -50,7 +50,11 @@
 #' testing the partial-order refinement of [select_model_hybrid()].
 #'
 #' @param model One of `"UN"`, `"MON"`, `"IIO"`, `"DM"`, `"LCR"`, `"RM"`,
-#'   `"PO"` (partial class order; see the dedicated section).
+#'   `"PO"` (partial class order; see the dedicated section), or `"PO_ITEMS"`
+#'   (the mirror: classes totally ordered - MON holds exactly - while ITEMS are
+#'   partially ordered; `poset` is then over items, keywords `"layers2"` /
+#'   `"single"` or a J x J dominance matrix; routes to the MON cell, where the
+#'   item-poset refinement must catch what the six-model verdict cannot say).
 #' @param n_persons Number of respondents.
 #' @param n_items Number of items.
 #' @param n_classes Number of latent classes (ignored for `"RM"`).
@@ -65,9 +69,15 @@
 #'   `D[a, b] = TRUE` meaning class `a` dominates class `b` (must be
 #'   irreflexive and acyclic; transitive closure is taken). Must be neither a
 #'   chain (use `"MON"`) nor an antichain (use `"UN"`).
-#' @param po_margin For `model = "PO"`: minimum crossing depth, on the
-#'   probability scale, required of every incomparable class pair in both
-#'   directions (rejection-sampled; default 0.05).
+#' @param po_margin For `"PO"`/`"PO_ITEMS"`: minimum crossing depth, on the
+#'   probability scale, required of every incomparable pair in both directions
+#'   (rejection-sampled; default 0.05).
+#' @param item_order For `model = "PO"` only: `"free"` (default) leaves the item
+#'   side unconstrained, routing to the UN cell; `"invariant"` builds class
+#'   lines over one shared sorted item spine (`L = a_c s_j + b_c`, `a_c > 0`),
+#'   so invariant item ordering HOLDS while class dominance follows the poset -
+#'   routing to the IIO cell, where only the class-poset refinement can express
+#'   the truth.
 #' @param seed Optional random seed.
 #'
 #' @return An integer matrix of responses (`n_persons` rows, `n_items` columns),
@@ -85,11 +95,13 @@
 #' @seealso [select_model_ll()], [quant_fit()]
 #' @export
 simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
-                                         "PO"),
+                                         "PO", "PO_ITEMS"),
                                n_persons = 500, n_items = 10, n_classes = 3,
                                n_cat = 2L, class_probs = NULL,
-                               poset = "V", po_margin = 0.05, seed = NULL) {
-  model <- match.arg(model)
+                               poset = "V", po_margin = 0.05,
+                               item_order = c("free", "invariant"),
+                               seed = NULL) {
+  model <- match.arg(model); item_order <- match.arg(item_order)
   if (!is.null(seed)) set.seed(seed)
   n_cat <- as.integer(n_cat)
   if (n_cat < 2L) stop("n_cat must be >= 2")
@@ -101,7 +113,7 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
 
   params <- list()
 
-  if (model %in% c("UN", "MON", "IIO", "DM", "PO")) {
+  if (model %in% c("UN", "MON", "IIO", "DM", "PO", "PO_ITEMS")) {
     if (is.null(class_probs)) class_probs <- rep(1 / n_classes, n_classes)
     L <- matrix(stats::runif(n_classes * n_items, -4, 4), n_classes, n_items)
     if (model %in% c("MON", "DM")) L <- apply(L, 2L, sort)          # classes ordered
@@ -112,11 +124,66 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
       # regenerate until every incomparable pair crosses in BOTH directions by
       # at least po_margin on the probability scale, so no incomparable pair can
       # be read as dominated by accident.
-      repeat {
-        L <- .po_assign(matrix(stats::runif(n_classes * n_items, -4, 4),
-                               n_classes, n_items), D)
-        if (.po_crossing_ok(stats::plogis(L), D, po_margin)) break
+      if (item_order == "free") {
+        repeat {
+          L <- .po_assign(matrix(stats::runif(n_classes * n_items, -4, 4),
+                                 n_classes, n_items), D)
+          if (.po_crossing_ok(stats::plogis(L), D, po_margin)) break
+        }
+      } else {
+        # item_order = "invariant": class lines over one shared sorted item
+        # spine, L[c, j] = a_c * s_j + b_c with a_c > 0, so each row is sorted
+        # (invariant item ordering HOLDS) while class dominance follows the
+        # poset: comparable pairs must not cross within the spine's range,
+        # incomparable pairs must cross. This is the PO analogue of the IIO
+        # row-sort, and it routes to the IIO cell - where the class-poset
+        # refinement must catch what the six-model verdict cannot express.
+        # class crossings must clear the MON axis's own detection floor
+        # (resample-q05 vs eps ~ 0.01 treats mean-violations < ~0.1 as noise),
+        # otherwise the data route to DM instead of the IIO cell
+        m_eff <- max(po_margin, 0.12)
+        repeat {
+          s_j <- sort(stats::runif(n_items, -2.5, 2.5))
+          a <- stats::runif(n_classes, 0.4, 1.6)
+          b <- stats::runif(n_classes, -2, 2)
+          L <- outer(a, s_j) + b
+          P <- stats::plogis(L)
+          ok <- .po_crossing_ok(P, D, m_eff)
+          if (ok) for (x in seq_len(n_classes)) for (y in seq_len(n_classes))
+            if (x != y && D[x, y] &&
+                mean(pmax(0, P[y, ] - P[x, ])) > 1e-9) { ok <- FALSE; break }
+          if (ok) break
+        }
       }
+    }
+    if (model == "PO_ITEMS") {
+      # The MIRROR: classes totally ordered (MON holds), items PARTIALLY
+      # ordered. theta_c is a well-separated chain; per class, item effects are
+      # assigned along a random linear extension of the ITEM poset with spread
+      # strictly smaller than the class spacing, so every column stays sorted
+      # (exact class monotonicity) while item pairs dominate iff comparable in
+      # the poset. Routes to the MON cell, where the item-poset refinement must
+      # catch the structure. `poset` here is over ITEMS (keywords: "layers2" =
+      # top half dominates bottom half, halves internally incomparable;
+      # "single"; or a J x J dominance matrix).
+      Di <- .po_resolve_item_poset(poset, n_items)
+      delta <- 2.2                                   # class spacing
+      theta <- (seq_len(n_classes) - (n_classes + 1) / 2) * delta
+      # capped best-of search (joint crossing over many pairs is a rare event
+      # for a single draw); the achieved margin is recorded in params
+      best <- NULL; best_m <- -Inf
+      for (it in seq_len(2000L)) {
+        E <- t(.po_assign(t(matrix(stats::runif(n_classes * n_items,
+               -delta / 2 + 0.08, delta / 2 - 0.08), n_classes, n_items)), Di))
+        Lc <- matrix(theta, n_classes, n_items) + E
+        mc <- .po_item_min_crossing(stats::plogis(Lc), Di)
+        if (mc > best_m) { best_m <- mc; best <- Lc }
+        if (mc >= max(po_margin, 0.10)) break
+      }
+      L <- best
+      if (best_m < max(po_margin, 0.10))
+        warning("PO_ITEMS: achieved crossing margin ", signif(best_m, 3),
+                " < po_margin ", po_margin, " (best of 2000 draws)")
     }
     cls <- sample.int(n_classes, n_persons, replace = TRUE, prob = class_probs)
     resp <- matrix(0L, n_persons, n_items)
@@ -225,4 +292,37 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
         mean(pmax(0, P[b, ] - P[a, ])) < margin) return(FALSE)
   }
   TRUE
+}
+
+# Item-side poset resolution for "PO_ITEMS": keywords over ITEMS, or a J x J
+# dominance matrix (validated as for classes). "layers2": the first half of the
+# items dominates the second half; halves internally incomparable.
+.po_resolve_item_poset <- function(poset, J) {
+  if (is.character(poset) && length(poset) == 1L) {
+    D <- matrix(FALSE, J, J)
+    if (identical(poset, "layers2") || identical(poset, "V")) {
+      if (J < 4L) stop("item poset \"layers2\" needs n_items >= 4")
+      top <- seq_len(J %/% 2L); bot <- setdiff(seq_len(J), top)
+      D[top, bot] <- TRUE
+    } else if (identical(poset, "single")) {
+      if (J < 3L) stop("item poset \"single\" needs n_items >= 3")
+      D[1L, 2L] <- TRUE
+    } else stop("unknown item poset keyword: ", poset,
+                " (use \"layers2\", \"single\", or a J x J matrix)")
+    D
+  } else .po_resolve_poset(poset, J)
+}
+
+# Crossing depth for an incomparable ITEM pair: the MAX single-class reversal
+# in each direction (with only C classes, a mean-over-classes requirement is
+# jointly near-unsatisfiable across many pairs; a crossing exists with the
+# depth of its largest reversal). Returns the minimum depth over all
+# incomparable pairs and both directions.
+.po_item_min_crossing <- function(P, D) {
+  J <- ncol(P); m <- Inf
+  for (j in seq_len(J - 1L)) for (k in (j + 1L):J) {
+    if (D[j, k] || D[k, j]) next
+    m <- min(m, max(P[, j] - P[, k]), max(P[, k] - P[, j]))
+  }
+  m
 }

@@ -5,7 +5,7 @@
 \title{Simulate item responses from a specified latent-structure model}
 \usage{
 simulate_responses(
-  model = c("UN", "MON", "IIO", "DM", "LCR", "RM", "PO"),
+  model = c("UN", "MON", "IIO", "DM", "LCR", "RM", "PO", "PO_ITEMS"),
   n_persons = 500,
   n_items = 10,
   n_classes = 3,
@@ -13,12 +13,17 @@ simulate_responses(
   class_probs = NULL,
   poset = "V",
   po_margin = 0.05,
+  item_order = c("free", "invariant"),
   seed = NULL
 )
 }
 \arguments{
 \item{model}{One of \code{"UN"}, \code{"MON"}, \code{"IIO"}, \code{"DM"}, \code{"LCR"}, \code{"RM"},
-\code{"PO"} (partial class order; see the dedicated section).}
+\code{"PO"} (partial class order; see the dedicated section), or \code{"PO_ITEMS"}
+(the mirror: classes totally ordered - MON holds exactly - while ITEMS are
+partially ordered; \code{poset} is then over items, keywords \code{"layers2"} /
+\code{"single"} or a J x J dominance matrix; routes to the MON cell, where the
+item-poset refinement must catch what the six-model verdict cannot say).}
 
 \item{n_persons}{Number of respondents.}
 
@@ -40,9 +45,16 @@ incomparable) - or a \verb{n_classes x n_classes} logical matrix \code{D} with
 irreflexive and acyclic; transitive closure is taken). Must be neither a
 chain (use \code{"MON"}) nor an antichain (use \code{"UN"}).}
 
-\item{po_margin}{For \code{model = "PO"}: minimum crossing depth, on the
-probability scale, required of every incomparable class pair in both
-directions (rejection-sampled; default 0.05).}
+\item{po_margin}{For \code{"PO"}/\code{"PO_ITEMS"}: minimum crossing depth, on the
+probability scale, required of every incomparable pair in both directions
+(rejection-sampled; default 0.05).}
+
+\item{item_order}{For \code{model = "PO"} only: \code{"free"} (default) leaves the item
+side unconstrained, routing to the UN cell; \code{"invariant"} builds class
+lines over one shared sorted item spine (\verb{L = a_c s_j + b_c}, \code{a_c > 0}),
+so invariant item ordering HOLDS while class dominance follows the poset -
+routing to the IIO cell, where only the class-poset refinement can express
+the truth.}
 
 \item{seed}{Optional random seed.}
 }

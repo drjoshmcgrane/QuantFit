@@ -15,6 +15,8 @@ select_model_ll(
   method = c("lattice", "joint"),
   severity = FALSE,
   min_effect = 1,
+  poset = TRUE,
+  poset_eps = 0.01,
   seed = NULL,
   use_cpp = TRUE,
   mc.cores = 1L,
@@ -75,6 +77,15 @@ post-hoc override.}
 percentile LR is below \code{min_effect}, the bootstrap itself certifies the two
 models indistinguishable on these data, and the constrained model is
 retained by parsimony rather than rejected on a negligible effect.}
+
+\item{poset}{Logical (default \code{TRUE}): after the ordinal layer, compute the
+purely additive partial-order refinement on whichever side(s) were left
+unordered (UN verdict: class and item posets; IIO: class; MON: item). It
+never alters \code{selected}; results are returned in \code{poset} (see
+\code{\link[=select_model_hybrid]{select_model_hybrid()}} for the machinery and its calibration).}
+
+\item{poset_eps}{Per-pair dominance tolerance for the poset refinement, on
+the probability scale (default 0.01, anchored at N = 1500 and N-scaled).}
 
 \item{seed}{Optional integer seed; makes the whole procedure
 deterministic.}
