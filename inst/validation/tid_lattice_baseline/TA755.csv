@@ -1,0 +1,2 @@
+"id","genM","nI","slope","dCor","nId2","rep","clean","lc_selected","lc_scale","C_used","cc_p","cc_reject","cc_attrib","kara_p","kara_reject","secs_lc","secs_cc","secs_kara","err"
+755,"IIO",6,2,0,0,2,TRUE,"IIO","ordinal",2,NA,NA,NA,0.6154,FALSE,752,44.8,492,"cc;"
