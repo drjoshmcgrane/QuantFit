@@ -70,6 +70,12 @@ detectable separation from the null. The default is \code{FALSE}: the
 automated TI&D lattice then follows the corrected edge p-values without a
 post-hoc override.}
 
+\item{min_effect}{Degenerate-null retention threshold for the edge tests
+(default 1). When a test rejects but even the null distribution's 95th
+percentile LR is below \code{min_effect}, the bootstrap itself certifies the two
+models indistinguishable on these data, and the constrained model is
+retained by parsimony rather than rejected on a negligible effect.}
+
 \item{seed}{Optional integer seed; makes the whole procedure
 deterministic.}
 

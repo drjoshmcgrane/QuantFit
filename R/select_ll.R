@@ -711,6 +711,11 @@ print.qleqtest <- function(x, ...) {
 #'   and Diakow's successive-comparison diagram. `"joint"` is retained as a
 #'   faster alternative that tests DM directly against UN before falling back
 #'   to the single-constraint models.
+#' @param min_effect Degenerate-null retention threshold for the edge tests
+#'   (default 1). When a test rejects but even the null distribution's 95th
+#'   percentile LR is below `min_effect`, the bootstrap itself certifies the two
+#'   models indistinguishable on these data, and the constrained model is
+#'   retained by parsimony rather than rejected on a negligible effect.
 #' @param severity Logical; when `TRUE`, a significant edge rejection can be
 #'   overridden if a second bootstrap from the fitted general model shows no
 #'   detectable separation from the null. The default is `FALSE`: the

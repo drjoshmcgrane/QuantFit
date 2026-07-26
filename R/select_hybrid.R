@@ -289,6 +289,9 @@
 #'   detection; the cost is only at artificially low class separation
 #'   (< ~1 logit), where weak IIO and near-collapsed DM are genuinely
 #'   indistinguishable - an identifiability limit, not a tuning target.
+#' @param alpha Significance level for the quantitative-edge decisions
+#'   (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
+#'   calibrations (`mon_eps` for MON; the IIO axis's bootstrap p at 0.05).
 #' @param lr_boot_n_starts Multistart count for the LR-edge bootstrap null refits
 #'   (default 2, matching the validated lattice run; keeps a single quant-edge
 #'   dataset tractable).
