@@ -5,17 +5,20 @@
 \title{Simulate item responses from a specified latent-structure model}
 \usage{
 simulate_responses(
-  model = c("UN", "MON", "IIO", "DM", "LCR", "RM"),
+  model = c("UN", "MON", "IIO", "DM", "LCR", "RM", "PO"),
   n_persons = 500,
   n_items = 10,
   n_classes = 3,
   n_cat = 2L,
   class_probs = NULL,
+  poset = "V",
+  po_margin = 0.05,
   seed = NULL
 )
 }
 \arguments{
-\item{model}{One of \code{"UN"}, \code{"MON"}, \code{"IIO"}, \code{"DM"}, \code{"LCR"}, \code{"RM"}.}
+\item{model}{One of \code{"UN"}, \code{"MON"}, \code{"IIO"}, \code{"DM"}, \code{"LCR"}, \code{"RM"},
+\code{"PO"} (partial class order; see the dedicated section).}
 
 \item{n_persons}{Number of respondents.}
 
@@ -27,6 +30,19 @@ simulate_responses(
 
 \item{class_probs}{Optional class mixing proportions (length \code{n_classes});
 defaults to equal.}
+
+\item{poset}{For \code{model = "PO"} only: the class partial order. Either a
+keyword - \code{"V"} (one maximal class dominates all others, which are mutually
+incomparable; the default), \code{"Lambda"} (all classes dominate one minimal
+class), \code{"single"} (class 1 dominates class 2; everything else
+incomparable) - or a \verb{n_classes x n_classes} logical matrix \code{D} with
+\code{D[a, b] = TRUE} meaning class \code{a} dominates class \code{b} (must be
+irreflexive and acyclic; transitive closure is taken). Must be neither a
+chain (use \code{"MON"}) nor an antichain (use \code{"UN"}).}
+
+\item{po_margin}{For \code{model = "PO"}: minimum crossing depth, on the
+probability scale, required of every incomparable class pair in both
+directions (rejection-sampled; default 0.05).}
 
 \item{seed}{Optional random seed.}
 }
@@ -65,6 +81,28 @@ with discrete, separated class locations (LCR) or a continuous
 \eqn{\theta \sim N(0, 1)} (RM). When \code{n_cat = 2} every model reduces to the
 dichotomous generator.
 }
+\section{The partial-order model (\code{"PO"})}{
+
+TI&D's generators are one \eqn{C \times J} matrix of \eqn{U(-4,4)} logits
+with each column (item) fully sorted for MON and left unsorted for UN.
+Sorting a column imposes the CHAIN (total class order); not sorting is the
+ANTICHAIN. \code{"PO"} is the natural interpolation within the same idiom: each
+column's values are sorted descending and assigned to classes along a
+\strong{random linear extension of a specified partial order}, drawn independently
+per item. Whenever \eqn{a \succeq b} in the poset, \eqn{a} precedes \eqn{b}
+in \emph{every} linear extension, so \eqn{L_{aj} \ge L_{bj}} for all items -
+\eqn{a} dominates \eqn{b} exactly. Incomparable pairs receive random relative
+order per item and therefore cross (a rejection loop - the same device TI&D
+use for LCR class separation - guarantees each incomparable pair crosses in
+both directions by at least \code{po_margin} on the probability scale). The chain
+poset reproduces \code{"MON"} exactly and the antichain reproduces \code{"UN"}, so
+\code{"PO"} nests both endpoints. The item side is left unconstrained (as in UN
+and MON), so the class structure is the only signal: the resulting data
+violate class monotonicity (a crossing pair exists) yet carry real dominance
+structure that the six-model set cannot express - the ground truth for
+testing the partial-order refinement of \code{\link[=select_model_hybrid]{select_model_hybrid()}}.
+}
+
 \examples{
 # doubly monotone dichotomous data, 3 classes
 d <- simulate_responses("DM", n_persons = 300, n_items = 8, n_classes = 3,

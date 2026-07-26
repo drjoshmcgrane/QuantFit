@@ -29,13 +29,45 @@
 #' \eqn{\theta \sim N(0, 1)} (RM). When `n_cat = 2` every model reduces to the
 #' dichotomous generator.
 #'
-#' @param model One of `"UN"`, `"MON"`, `"IIO"`, `"DM"`, `"LCR"`, `"RM"`.
+#' @section The partial-order model (`"PO"`):
+#' TI&D's generators are one \eqn{C \times J} matrix of \eqn{U(-4,4)} logits
+#' with each column (item) fully sorted for MON and left unsorted for UN.
+#' Sorting a column imposes the CHAIN (total class order); not sorting is the
+#' ANTICHAIN. `"PO"` is the natural interpolation within the same idiom: each
+#' column's values are sorted descending and assigned to classes along a
+#' **random linear extension of a specified partial order**, drawn independently
+#' per item. Whenever \eqn{a \succeq b} in the poset, \eqn{a} precedes \eqn{b}
+#' in *every* linear extension, so \eqn{L_{aj} \ge L_{bj}} for all items -
+#' \eqn{a} dominates \eqn{b} exactly. Incomparable pairs receive random relative
+#' order per item and therefore cross (a rejection loop - the same device TI&D
+#' use for LCR class separation - guarantees each incomparable pair crosses in
+#' both directions by at least `po_margin` on the probability scale). The chain
+#' poset reproduces `"MON"` exactly and the antichain reproduces `"UN"`, so
+#' `"PO"` nests both endpoints. The item side is left unconstrained (as in UN
+#' and MON), so the class structure is the only signal: the resulting data
+#' violate class monotonicity (a crossing pair exists) yet carry real dominance
+#' structure that the six-model set cannot express - the ground truth for
+#' testing the partial-order refinement of [select_model_hybrid()].
+#'
+#' @param model One of `"UN"`, `"MON"`, `"IIO"`, `"DM"`, `"LCR"`, `"RM"`,
+#'   `"PO"` (partial class order; see the dedicated section).
 #' @param n_persons Number of respondents.
 #' @param n_items Number of items.
 #' @param n_classes Number of latent classes (ignored for `"RM"`).
 #' @param n_cat Number of ordered response categories (2 = dichotomous).
 #' @param class_probs Optional class mixing proportions (length `n_classes`);
 #'   defaults to equal.
+#' @param poset For `model = "PO"` only: the class partial order. Either a
+#'   keyword - `"V"` (one maximal class dominates all others, which are mutually
+#'   incomparable; the default), `"Lambda"` (all classes dominate one minimal
+#'   class), `"single"` (class 1 dominates class 2; everything else
+#'   incomparable) - or a `n_classes x n_classes` logical matrix `D` with
+#'   `D[a, b] = TRUE` meaning class `a` dominates class `b` (must be
+#'   irreflexive and acyclic; transitive closure is taken). Must be neither a
+#'   chain (use `"MON"`) nor an antichain (use `"UN"`).
+#' @param po_margin For `model = "PO"`: minimum crossing depth, on the
+#'   probability scale, required of every incomparable class pair in both
+#'   directions (rejection-sampled; default 0.05).
 #' @param seed Optional random seed.
 #'
 #' @return An integer matrix of responses (`n_persons` rows, `n_items` columns),
@@ -52,9 +84,11 @@
 #'
 #' @seealso [select_model_ll()], [quant_fit()]
 #' @export
-simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM"),
+simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
+                                         "PO"),
                                n_persons = 500, n_items = 10, n_classes = 3,
-                               n_cat = 2L, class_probs = NULL, seed = NULL) {
+                               n_cat = 2L, class_probs = NULL,
+                               poset = "V", po_margin = 0.05, seed = NULL) {
   model <- match.arg(model)
   if (!is.null(seed)) set.seed(seed)
   n_cat <- as.integer(n_cat)
@@ -67,11 +101,23 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM"),
 
   params <- list()
 
-  if (model %in% c("UN", "MON", "IIO", "DM")) {
+  if (model %in% c("UN", "MON", "IIO", "DM", "PO")) {
     if (is.null(class_probs)) class_probs <- rep(1 / n_classes, n_classes)
     L <- matrix(stats::runif(n_classes * n_items, -4, 4), n_classes, n_items)
     if (model %in% c("MON", "DM")) L <- apply(L, 2L, sort)          # classes ordered
     if (model %in% c("IIO", "DM")) L <- t(apply(L, 1L, sort))       # items ordered
+    if (model == "PO") {
+      D <- .po_resolve_poset(poset, n_classes)
+      # Rejection loop (TI&D's own device, cf. their LCR separation loop):
+      # regenerate until every incomparable pair crosses in BOTH directions by
+      # at least po_margin on the probability scale, so no incomparable pair can
+      # be read as dominated by accident.
+      repeat {
+        L <- .po_assign(matrix(stats::runif(n_classes * n_items, -4, 4),
+                               n_classes, n_items), D)
+        if (.po_crossing_ok(stats::plogis(L), D, po_margin)) break
+      }
+    }
     cls <- sample.int(n_classes, n_persons, replace = TRUE, prob = class_probs)
     resp <- matrix(0L, n_persons, n_items)
     for (j in seq_len(n_items)) {
@@ -85,6 +131,7 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM"),
       }
     }
     params <- list(L = L, tau = tau, class = cls, class_probs = class_probs)
+    if (model == "PO") params$poset <- D
 
   } else {  # LCR, RM: partial credit model
     b <- stats::runif(n_items, -2, 2)                              # item locations
@@ -114,4 +161,68 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM"),
   attr(resp, "model") <- model
   attr(resp, "params") <- params
   resp
+}
+
+# --- helpers for the "PO" (partial class order) generator -------------------
+# Resolve a poset spec to a strict-dominance logical matrix D (D[a,b]: a >= b),
+# transitively closed, validated as irreflexive/acyclic and neither chain nor
+# antichain.
+.po_resolve_poset <- function(poset, C) {
+  if (is.character(poset) && length(poset) == 1L) {
+    D <- matrix(FALSE, C, C)
+    if (identical(poset, "V")) {
+      if (C < 3L) stop("poset \"V\" needs n_classes >= 3")
+      D[1L, 2:C] <- TRUE                       # class 1 dominates all others
+    } else if (identical(poset, "Lambda")) {
+      if (C < 3L) stop("poset \"Lambda\" needs n_classes >= 3")
+      D[2:C, 1L] <- TRUE                       # all others dominate class 1
+    } else if (identical(poset, "single")) {
+      if (C < 3L) stop("poset \"single\" needs n_classes >= 3")
+      D[1L, 2L] <- TRUE                        # only 1 >= 2; rest incomparable
+    } else stop("unknown poset keyword: ", poset)
+  } else {
+    D <- matrix(as.logical(poset), C, C)
+    if (any(is.na(D))) stop("poset matrix must be logical")
+    if (any(diag(D))) stop("poset must be irreflexive")
+    # transitive closure (Warshall)
+    for (k in seq_len(C)) for (a in seq_len(C)) if (D[a, k])
+      D[a, ] <- D[a, ] | D[k, ]
+    if (any(D & t(D))) stop("poset contains a cycle")
+  }
+  n_comp <- sum(D[upper.tri(D)] | t(D)[upper.tri(D)])
+  if (n_comp == 0L) stop("poset is an antichain - use model = \"UN\"")
+  if (n_comp == C * (C - 1L) / 2L) stop("poset is a chain - use model = \"MON\"")
+  D
+}
+
+# Assign each column's values (sorted descending) to classes along a random
+# linear extension of D, drawn independently per item: comparable pairs then
+# dominate identically on every item; incomparable pairs get random relative
+# order per item. Chain -> exactly the MON column sort; antichain -> UN.
+.po_assign <- function(L, D) {
+  C <- nrow(L)
+  for (j in seq_len(ncol(L))) {
+    vals <- sort(L[, j], decreasing = TRUE)
+    remaining <- seq_len(C); ext <- integer(0)
+    while (length(remaining)) {                 # random topological order
+      maximal <- remaining[vapply(remaining, function(b)
+        !any(D[remaining, b]), logical(1))]
+      pick <- if (length(maximal) == 1L) maximal else sample(maximal, 1L)
+      ext <- c(ext, pick); remaining <- setdiff(remaining, pick)
+    }
+    L[ext, j] <- vals                           # largest value -> first placed
+  }
+  L
+}
+
+# Every incomparable pair must cross in BOTH directions by >= margin on the
+# probability scale (mean over items of the one-sided exceedance).
+.po_crossing_ok <- function(P, D, margin) {
+  C <- nrow(P)
+  for (a in seq_len(C - 1L)) for (b in (a + 1L):C) {
+    if (D[a, b] || D[b, a]) next
+    if (mean(pmax(0, P[a, ] - P[b, ])) < margin ||
+        mean(pmax(0, P[b, ] - P[a, ])) < margin) return(FALSE)
+  }
+  TRUE
 }
