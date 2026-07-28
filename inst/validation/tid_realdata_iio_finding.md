@@ -58,16 +58,33 @@ The lattice's IIO ceiling is now measured four independent ways and agrees:
 **39% here, 45% (simulated, same-code), 42% (prior full TI&D run), 41% (TI&D's
 own human raters)**.
 
-## FINAL full-coverage table (uni Mac batch, clean nI 6/12, full N = 5000, 108/108)
+## DEFINITIVE full-coverage table (all phases complete: clean nI 6/12/24, N = 5000, 162/162)
 
-The quant cells were completed on an uninterrupted machine (Phase 2 of the
-stable-machine batch). Per-model, of 18 each (hybrid / lattice):
-UN 18/18 · MON 17/18 · **IIO 13/7** · DM 17/16 · **LCR 16/15** · **RM 16/15**.
-**Exact: hybrid 97/108 (90%) vs lattice 89/108 (82%)**; scale-type 98% vs 95%;
-McNemar overall 12:4, p = 0.077. False quantitativeness promotions: hybrid 0,
-lattice 1. The real-data quant half confirms the shared-edge argument: hybrid
-and lattice are statistically identical on LCR/RM, and the hybrid's overall
-lead is carried by IIO.
+Phase 3 (nI = 24, finished 2026-07-27 on the uni Mac) completes every clean
+cell at all three test lengths. Per nI, "hybrid n/total | lattice n":
+
+| nI | UN | MON | IIO | DM | LCR | RM |
+|----|----|-----|-----|----|-----|----|
+| 6  | 9/9\|9 | 8/9\|9 | **8/9\|4** | 8/9\|7 | 9/9\|8 | 9/9\|9 |
+| 12 | 9/9\|9 | 9/9\|9 | **5/9\|3** | 9/9\|9 | 7/9\|7 | 7/9\|6 |
+| 24 | 9/9\|9 | 9/9\|9 | **6/9\|5** | 7/9\|8 | 7/9\|7 | **7/9\|3** |
+
+**Exact: hybrid 142/162 (88%) vs lattice 130/162 (80%); McNemar 20:8,
+p = 0.036 — SIGNIFICANT at full coverage** (the partial-coverage 12:4
+p = 0.077 resolved in the same direction with the added power). Scale-type
+96% vs 96%. False quantitativeness promotions: hybrid 0, lattice 1.
+Pooled per truth (of 27): UN 27|27 · MON 26|27 · **IIO 19|12** · DM 24|24 ·
+LCR 23|22 · **RM 23|18**. The hybrid's lead is carried by IIO (as
+throughout) plus an RM gap that OPENS at nI = 24 (7/9 vs 3/9): the
+lattice's long-test RM cells collapse where the hybrid's single quant edge
+holds. LCR is a statistical tie everywhere, consistent with the shared-edge
+argument.
+
+### Historical note (partial coverage, nI 6/12 only, 108/108)
+
+Exact hybrid 97/108 (90%) vs lattice 89/108 (82%), McNemar 12:4 p = 0.077;
+per-model of 18: UN 18/18 · MON 17/18 · IIO 13/7 · DM 17/16 · LCR 16/15 ·
+RM 16/15.
 
 ## Coverage of the earlier laptop-only run (superseded by the table above)
 
