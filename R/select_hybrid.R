@@ -52,10 +52,13 @@
   p <- colMeans(data, na.rm = TRUE); ord <- order(p, decreasing = TRUE)
   total <- rowSums(data, na.rm = TRUE); mag <- 0
   for (ai in seq_len(J - 1L)) for (bi in (ai + 1L):J) {
-    a <- ord[ai]; b <- ord[bi]; rest <- total - data[, a] - data[, b]
+    a <- ord[ai]; b <- ord[bi]
+    okp <- !is.na(data[, a]) & !is.na(data[, b])  # pairwise complete (masked
+    rest <- total[okp] - data[okp, a] - data[okp, b]  # data; identical to the
+    da <- data[okp, a]; db <- data[okp, b]        # old path when nothing is NA)
     for (r in sort(unique(rest))) {
       g <- rest == r; if (sum(g) < min_group) next
-      d <- mean(data[g, b]) - mean(data[g, a])   # overall-harder item now easier
+      d <- mean(db[g]) - mean(da[g])              # overall-harder item now easier
       if (d > 0) mag <- mag + d * sum(g)
     }
   }
@@ -73,6 +76,17 @@
     .manifest_iio_stat(.impose_mask(simulate_from_qlfit(dm, n), data)), numeric(1))
   p <- (1 + sum(null >= obs)) / (B + 1)
   list(stat = obs, p = p, holds = p > 0.05)
+}
+
+# item_probs comes back as a J x C matrix from the dichotomous engine but as a
+# per-item list of class x category matrices from the masked/polytomous engine
+# (any NA in the data routes there). Normalise to the J x C expected-score
+# matrix - identical to P(X = 1) in the dichotomous case.
+.hyb_item_probs <- function(fit) {
+  P <- fit$item_probs
+  if (is.matrix(P)) return(P)
+  do.call(rbind, lapply(P, function(m)
+    as.numeric(m %*% (seq_len(ncol(m)) - 1L))))
 }
 
 # --- POSET refinements (class side AND item side) ---------------------------
@@ -174,16 +188,17 @@
   if (C < 3L) sides <- setdiff(sides, "class")
   if (!length(sides)) return(NULL)
   fit0 <- refit_model_type("UN", data, C, n_starts, use_cpp)
-  P0 <- fit0$item_probs                            # items x classes
+  P0 <- .hyb_item_probs(fit0)                      # items x classes
   pc <- pmax(fit0$class_probs, 0); pc <- pc / sum(pc)
   J <- nrow(P0)
   sim_refit_count <- function(Pnull, counter) {
     cls <- sample.int(C, n, replace = TRUE, prob = pc)
     sim <- matrix(stats::rbinom(n * J, 1, t(Pnull)[cls, , drop = FALSE]), n, J)
     storage.mode(sim) <- "integer"
+    sim <- .impose_mask(sim, data)   # null replicates share observed missingness
     f <- tryCatch(refit_model_type("UN", sim, C, n_starts, use_cpp),
                   error = function(e) NULL)
-    if (is.null(f)) NA_real_ else counter(f$item_probs)
+    if (is.null(f)) NA_real_ else counter(.hyb_item_probs(f))
   }
   if (!is.null(seed)) set.seed(seed)
   out <- list()
@@ -236,7 +251,7 @@
 }
 .manifest_mon_stat <- function(data, C, n_starts, use_cpp) {
   un <- refit_model_type("UN", as.matrix(data), C, n_starts, use_cpp)
-  P <- un$item_probs                              # items x classes
+  P <- .hyb_item_probs(un)                        # items x classes
   J <- nrow(P)
   down <- function(o) sum(pmax(0, -t(apply(P[, o, drop = FALSE], 1, diff))))
   ords <- if (C <= 5L) .class_orderings(C) else matrix(order(colMeans(P)), 1L)
@@ -366,7 +381,13 @@
 #' conceptually and empirically worse. It has been removed. Double cancellation
 #' remains available as its own route via [cc_bootstrap_null()].
 #'
-#' @param data Binary response matrix (persons x items).
+#' @param data Binary response matrix (persons x items). `NA` entries are
+#'   permitted and treated as missing at random: all fits use the masked
+#'   likelihood, the manifest IIO statistic is computed on pairwise-complete
+#'   responses, and every bootstrap / permutation-null replicate has the
+#'   observed missingness mask re-imposed (rank-matched, as in
+#'   [select_model_ll()]), so the calibrations see the same masking the
+#'   observed statistics do.
 #' @param n_classes Number of latent classes (or a range; the median is used
 #'   for the constraint fits). Default 3.
 #' @param B Bootstrap replicates per axis and per quantitative edge (default 49).
@@ -414,7 +435,12 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                 lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                 use_cpp = TRUE,
                                 mc.cores = 1L, seed = NULL, verbose = FALSE) {
-  data <- validate_data_any(data, allow_na = FALSE)
+  data <- validate_data_any(data, allow_na = TRUE)
+  if (anyNA(data)) {
+    message("Data contain NA responses: fits use the masked likelihood and ",
+            "every bootstrap/null replicate preserves the observed ",
+            "missingness mask (MAR assumed; see the missing-data design).")
+  }
   C <- as.integer(stats::median(n_classes)); if (C < 2L) C <- 2L
   J <- ncol(data)
   s <- function(off) if (is.null(seed)) NULL else seed + off

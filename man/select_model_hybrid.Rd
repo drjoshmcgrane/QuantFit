@@ -20,7 +20,13 @@ select_model_hybrid(
 )
 }
 \arguments{
-\item{data}{Binary response matrix (persons x items).}
+\item{data}{Binary response matrix (persons x items). \code{NA} entries are
+permitted and treated as missing at random: all fits use the masked
+likelihood, the manifest IIO statistic is computed on pairwise-complete
+responses, and every bootstrap / permutation-null replicate has the
+observed missingness mask re-imposed (rank-matched, as in
+\code{\link[=select_model_ll]{select_model_ll()}}), so the calibrations see the same masking the
+observed statistics do.}
 
 \item{n_classes}{Number of latent classes (or a range; the median is used
 for the constraint fits). Default 3.}
