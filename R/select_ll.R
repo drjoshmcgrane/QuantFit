@@ -1008,9 +1008,14 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
     # retain the constrained model by parsimony. Cheap (reuses the null) and it
     # cleanly separates the pathology (null q95 ~ 0.04 on true-DM data) from
     # genuine violations (null q95 ~ 12-18 on true-IIO data).
+    # PRACTICAL-EQUIVALENCE GUARD (audit 2026-07-28): the retention requires
+    # the OBSERVED LR to be negligible too - a degenerate null with a LARGE
+    # observed LR is a genuine violation the null failed to anticipate, not a
+    # spurious rejection, and must stand.
     null_q95 <- if (length(t$null_distribution))
       stats::quantile(t$null_distribution, 0.95, names = FALSE) else NA_real_
-    degenerate <- isTRUE(!ok && is.finite(null_q95) && null_q95 < min_effect)
+    degenerate <- isTRUE(!ok && is.finite(null_q95) && null_q95 < min_effect &&
+                         t$statistic < min_effect)
     if (degenerate) ok <- TRUE
     if (!ok && isTRUE(severity)) {
       g_null <- ll_general_null(

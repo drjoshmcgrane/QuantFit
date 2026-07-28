@@ -1,3 +1,33 @@
+# QuantFit 0.3.3
+
+Audit-response release (external statistical review, 2026-07-28). Three
+correctness fixes that change selector behaviour, plus honest-reporting
+corrections:
+
+* `.impose_mask()` now rank-matches missingness masks on the OBSERVED MEAN
+  (rate-adjusted score) instead of the raw observed total. Total-based
+  matching mechanically attached heavy masks to low-scoring simulated persons,
+  manufacturing ability-dependent missingness under genuine MCAR (induced
+  r ~ -0.26 at 25% missing); mean-based matching restores r ~ 0 under MCAR
+  while preserving the direction of genuine score-dependent MAR (attenuated -
+  the observed mean is a noisy ability proxy).
+* The degenerate-null retention in both selectors' quantitative edges now
+  requires the OBSERVED LR to be below `min_effect` as well as the null's 95th
+  percentile: a practical-equivalence rule (both scales negligible), no longer
+  a null-scale-only override that could retain a constrained model against a
+  large observed discrepancy.
+* The hybrid IIO axis simulates its null from the fitted IIO model (the
+  hypothesis under test) instead of the fitted DM model, which additionally
+  imposed class monotonicity - a misspecified composite null for
+  IIO-but-non-MON data.
+* `select_model_hybrid()` accepts `NA` responses (MAR; masked likelihood,
+  pairwise-complete IIO statistic, mask-preserving null replicates) and gains
+  a `quant_edge_failed` flag; axis-fit failure now errors instead of being
+  silently read as an IIO violation, and quant-edge failure warns instead of
+  silently standing as DM.
+* New testthat coverage for the hybrid selector, the mask-transfer
+  properties, and the masked-engine shape normaliser.
+
 # QuantFit 0.3.2
 
 * `select_model_ll()` now defaults to the complete adjacent-edge

@@ -19,8 +19,8 @@
 #   IIO axis  invariant item ordering. Do item response functions cross when
 #             persons are ordered by rest-score? A model-free crossing
 #             magnitude, calibrated by a parametric null in which item ordering
-#             is imposed (simulate under the fitted DM). Small p => IIO
-#             violated.
+#             is imposed (simulate under the fitted IIO model - IIO alone, the
+#             hypothesis under test). Small p => IIO violated.
 #   MON axis  class / person monotonicity. MON holds iff SOME class ordering
 #             makes every item's class-probability monotone, so the statistic
 #             is the MINIMUM total downward movement over all class orderings -
@@ -67,13 +67,18 @@
 
 .manifest_iio_holds <- function(data, C, B, n_starts, use_cpp, seed) {
   obs <- .manifest_iio_stat(data)
-  dm <- tryCatch(refit_model_type("DM", as.matrix(data), C, n_starts, use_cpp),
-                 error = function(e) NULL)
-  if (is.null(dm)) return(list(p = NA_real_, holds = NA))
+  # Null simulated under the FITTED IIO model - the hypothesis is IIO alone.
+  # (Simulating from DM, as before the 2026-07-28 audit, additionally imposed
+  # class monotonicity: a misspecified, overly restrictive composite null for
+  # IIO-but-non-MON data.)
+  iio_fit <- tryCatch(refit_model_type("IIO", as.matrix(data), C, n_starts,
+                                       use_cpp), error = function(e) NULL)
+  if (is.null(iio_fit)) return(list(p = NA_real_, holds = NA))
   if (!is.null(seed)) set.seed(seed)
   n <- nrow(data)
   null <- vapply(seq_len(B), function(b)
-    .manifest_iio_stat(.impose_mask(simulate_from_qlfit(dm, n), data)), numeric(1))
+    .manifest_iio_stat(.impose_mask(simulate_from_qlfit(iio_fit, n), data)),
+    numeric(1))
   p <- (1 + sum(null >= obs)) / (B + 1)
   list(stat = obs, p = p, holds = p > 0.05)
 }
@@ -319,7 +324,8 @@
   adequate <- t$p_value > alpha
   q95 <- if (length(t$null_distribution))
     stats::quantile(t$null_distribution, 0.95, names = FALSE) else NA_real_
-  if (!adequate && is.finite(q95) && q95 < min_effect) adequate <- TRUE
+  if (!adequate && is.finite(q95) && q95 < min_effect &&
+      t$statistic < min_effect) adequate <- TRUE   # both scales negligible
   out$lcr_vs_dm <- t
   out$supports_quant <- adequate
   if (!adequate) { out$selected <- "DM"; return(out) }
@@ -457,6 +463,10 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   mon <- .manifest_mon_holds(data, C, max(B %/% 2L, 20L), n_starts, use_cpp,
                              mon_eps_N, s(1000L))
 
+  if (is.na(iio$holds))
+    stop("IIO axis calibration failed (constrained IIO fit did not converge); ",
+         "try more n_starts - refusing to treat numerical failure as an ",
+         "IIO violation")
   ih <- isTRUE(iio$holds); mh <- isTRUE(mon$holds)
   ordinal <- if (ih && mh) "DM" else if (ih && !mh) "IIO" else
              if (!ih && mh) "MON" else "UN"
@@ -498,6 +508,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   # (select_model_ll). We take the lattice verdict ONLY when it is quantitative;
   # if the lattice finds no quant support the 2x2's DM stands (its ordinal-layer
   # call is authoritative).
+  quant_edge_failed <- FALSE
   if (ordinal == "DM") {
     if (verbose) cat("DM vs quant: LR edge ...\n")
     add <- tryCatch(.hybrid_quant_edge(data, grain_range = lr_n_classes,
@@ -505,6 +516,14 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
              alpha = alpha, use_cpp = use_cpp, mc.cores = mc.cores,
              seed = if (!is.null(seed)) seed + 2000L else NULL,
              verbose = verbose), error = function(e) NULL)
+    if (is.null(add) || is.na(add$supports_quant)) {
+      # numerical failure, NOT evidence against quantity - flag it loudly
+      # rather than letting DM stand as if the edge had tested and retained it
+      warning("quantitative edge did not complete (bridge fits or LR ",
+              "bootstrap failed); the DM verdict is the 2x2 ordinal call ",
+              "only - quantitative structure was NOT assessed")
+      quant_edge_failed <- TRUE
+    }
     if (isTRUE(add$supports_quant) && !is.na(add$selected)) {
       selected <- add$selected
       interpretation <- if (identical(selected, "LCR"))
@@ -520,6 +539,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                  scale = unname(scale), n_classes = C,
                  iio = iio, mon = mon,
                  quant = if (exists("add", inherits = FALSE)) add else NULL,
+                 quant_edge_failed = quant_edge_failed,
                  poset = poset,
                  method = "hybrid-2x2+lr"),
             class = "qlselect_hybrid")

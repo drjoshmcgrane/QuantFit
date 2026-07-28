@@ -7,6 +7,15 @@ in `tid_realdata_iio_finding.md`) and are banned; every claim names its source
 file; superseded (pre-fix / count-era) figures appear only where marked
 historical. Last consolidated: 2026-07-28.
 
+**AUDIT NOTE (2026-07-28, external review):** three correctness fixes landed
+after the grids below were produced - mean-based mask rank-matching (the
+total-based transfer manufactured ability-dependent missingness under MCAR),
+a practical-equivalence guard on the degenerate-null retention (observed LR
+must also be negligible), and an IIO-only null for the hybrid's IIO axis
+(previously simulated from DM). Sections marked [RE-RUN PENDING/DONE] record
+which grids have been regenerated under the fixed code; unmarked simulation
+results predate the fixes and are historical until re-verified.
+
 ---
 
 ## 1. The framework
@@ -17,9 +26,12 @@ plus this package's refinement: calibrated PARTIAL-ORDER tests on whichever
 side the six-model verdict leaves unordered (section 6).
 
 Two selectors share one quantitative edge:
-- **lattice** (`select_model_ll`): LR tests over the ordinal lattice at a
-  BIC-selected class count, single quantitative gate (LCR vs UN) at
-  `alpha_quant`, power-check demotion via the general-model null.
+- **lattice** (`select_model_ll`): calibrated LR tests over the complete
+  adjacent-edge ordinal lattice at a BIC-selected class count, then the
+  published DM -> LCR -> RM succession with the LCR-vs-DM comparison at the
+  fixed Lindsay bridge grain. The severity (estimated-power) check is OPT-IN
+  (`severity = TRUE`, default FALSE); the historical single LCR-vs-UN
+  `alpha_quant` gate describes the 2026-07-12 audit era, not current code.
 - **hybrid** (`select_model_hybrid`): the 2x2 property layer (IIO crossing
   statistic + MON perm-min q05 vs `mon_eps`) routes to UN/MON/IIO/DM; from DM
   the same LR machinery (`ll_equivalence_test` at the Lindsay bridge grain
@@ -135,14 +147,13 @@ null re-imposes the observed mask rank-matched. MAR assumed throughout.
 - Hybrid: NA-capable 2026-07-28 (pairwise-complete IIO statistic, masked
   poset nulls, `.hyb_item_probs` shape fix). Smoke: MON/IIO/DM/RM verdicts
   identical complete vs 10% MAR.
-- **Deep validation** (240-run paired grid vs the complete-data audit arm;
-  `missing_data_finding.md` + `missing_data_results/`): exact 105/120 (10%
-  MAR) and 104/120 (25% MAR) vs 111/120 complete; **scale-type essentially
-  unimpaired** (110-111 vs 113); ordinal cells nearly mask-invariant; the
-  whole exact cost sits at the LCR <-> RM grain boundary (verdicts shuffle
-  within the quant family); **zero false quant promotions and zero fit
-  failures in all 240 masked runs**. Degradation is conservative - demotions
-  only, matching the misspecification study.
+- **Deep validation [RE-RUN PENDING]**: the first 240-run MCAR grid predates
+  the audit fixes and two of its claims were misreported (see the corrected
+  `missing_data_finding.md`: errors were NOT confined to the LCR <-> RM
+  boundary, and one UN -> IIO promotion occurred). Its surviving claim: zero
+  false QUANT promotions in 240 masked runs. The v2 grid (fixed code; MCAR +
+  genuine MAR-by-ability + item-dependent rates) replaces it here on
+  completion.
 
 ## 9. TI&D graded-180 pre-consensus rater data
 
