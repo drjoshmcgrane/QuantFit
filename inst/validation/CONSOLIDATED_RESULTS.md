@@ -135,8 +135,14 @@ null re-imposes the observed mask rank-matched. MAR assumed throughout.
 - Hybrid: NA-capable 2026-07-28 (pairwise-complete IIO statistic, masked
   poset nulls, `.hyb_item_probs` shape fix). Smoke: MON/IIO/DM/RM verdicts
   identical complete vs 10% MAR.
-- **Deep validation (240-run paired grid vs the complete-data audit arm,
-  10% and 25% MAR): RUNNING - table to be inserted here on completion.**
+- **Deep validation** (240-run paired grid vs the complete-data audit arm;
+  `missing_data_finding.md` + `missing_data_results/`): exact 105/120 (10%
+  MAR) and 104/120 (25% MAR) vs 111/120 complete; **scale-type essentially
+  unimpaired** (110-111 vs 113); ordinal cells nearly mask-invariant; the
+  whole exact cost sits at the LCR <-> RM grain boundary (verdicts shuffle
+  within the quant family); **zero false quant promotions and zero fit
+  failures in all 240 masked runs**. Degradation is conservative - demotions
+  only, matching the misspecification study.
 
 ## 9. TI&D graded-180 pre-consensus rater data
 
