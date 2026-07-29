@@ -40,12 +40,45 @@ tests or C > 3, and the validation design reflects that (C = 4 arms at
 feasible margins; the C = 3, J = 24 case is included as a documented
 below-tolerance boundary).
 
-## v3 validation grid results
+## v3 validation grid results (216 datasets, B = 49, K = 8; raw in
+po_validation3_results/)
 
-_[RUNNING - `po_validation.R` v3, 216 datasets: PO margins x nI, PO_INV,
-PO_ITEMS C4/C3 at feasible margins, UN/MON/IIO controls scored against
-population posets, and the crossing-antichain (XANTI) counterexample class.
-Table inserted on completion.]_
+Zero fit failures; b_eff = 49/49 in every dataset; ~10x cheaper than v2
+(one shared bootstrap per dataset; median 3-13 s).
+
+**Size.**
+
+- **XANTI (the reviewer's counterexample class - crossing antichain with
+  unequal class averages, the case that broke v2): 0/16 false partials**
+  (nI = 8 and 24), all correctly routed to UN.
+- UN control, class side: 1/24 (~4%, at alpha = 5% familywise per side).
+- IIO control, class side: 2/17 flagged, both at >= 2 POPULATION comparable
+  pairs (row-sorting creates real dominance); 0 flags among true-antichain
+  draws.
+
+**Class-side power (PO truths): 8/8 in EVERY cell** - all margins
+{.05,.10,.15} x all nI {6,12,24}, and PO_INV at all nI. The v2 nI = 6 power
+gap (~50-60%) is GONE: demonstrating the two real dominance pairs of a V is
+much easier than the collapsed statistic's task. V-type recovery: 8/8 at
+nI >= 12, 3-6/8 at nI = 6 (the type readout is point-estimate based).
+Routing: PO -> UN 72/72; PO_INV -> IIO 23/24.
+
+**Item-side power (PO_ITEMS at feasible margins): 8/8 in every arm** -
+C=3 J=8 (achieved margin .016), C=4 J=8 (.032), C=4 J=12 (.018), and even
+the below-tolerance boundary arm C=4 J=24 (.008): the demonstrated pairs are
+the big cross-layer dominances, which don't depend on the within-layer
+crossing margin. Critically, demonstrated-pair counts are always BELOW the
+population count (e.g. 135.8 vs 182 at J=24; 8.9 vs 17 at C=4 J=8) -
+Bonferroni under-demonstrates, never over-demonstrates: no incomparable pair
+was falsely declared anywhere in the grid. Routing: PO_ITEMS -> MON 32/32.
+
+**Population-faithfulness (item side of UN/MON controls).** Random TI&D
+draws genuinely order many item pairs (~28% of pairs on UN truth, ~67% on
+MON truth), and the test demonstrates a subset of exactly those - item-side
+"partial" on such data is correct, not a false positive. Consequence for
+interpretation: in the UN cell the item-side BINARY verdict will usually be
+"partial" on any realistic data; the information is in the demonstrated pair
+set, not the binary.
 
 ## Historical: v2 machinery description (superseded)
 

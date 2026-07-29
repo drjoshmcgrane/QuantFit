@@ -93,7 +93,15 @@ Source: `tid_realdata_iio_finding.md`, `tid_hybrid_full.R`,
   **zero false quant claims in every misspecified run**
   (`misspecification_finding.md`).
 
-## 5. Partial order (the seventh structure) [RE-VALIDATION RUNNING]
+## 5. Partial order (the seventh structure) [RE-VALIDATED under v3]
+
+**v3 headline (2026-07-29, dominance-demonstration redesign;
+`po_validation_finding.md`): XANTI counterexample 0/16 false partials; UN
+class-side size 1/24; class power 8/8 in every PO cell including nI = 6;
+item power 8/8 at feasible margins with demonstrated pairs always below the
+population count (Bonferroni never over-demonstrates); routing PO -> UN
+72/72, PO_INV -> IIO 23/24, PO_ITEMS -> MON 32/32; zero failures, b_eff
+49/49.**
 
 **2026-07-29: the v2 test and its results below are WITHDRAWN** (external
 review: the statistic collapsed to average-profile differences; the
