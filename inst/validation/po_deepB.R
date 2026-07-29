@@ -10,12 +10,13 @@ METHOD <- "max-T-studentized-v4"
 # stamped build SHA, and generation refuses to run when the installed build
 # does not match this checkout's stamp or the expected method version.
 bi <- quantfit_build_info()
-dcf <- tryCatch(read.dcf("DESCRIPTION", fields = "GitSHA")[1, 1],
-                error = function(e) NA_character_)
+dcf <- tryCatch(trimws(unname(read.dcf("DESCRIPTION",
+                fields = "GitSHA")[1, 1])), error = function(e) NA_character_)
 if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
   stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
        "stamp-then-install workflow before generating evidence")
-if (!is.na(dcf) && !identical(dcf, "unstamped") && !identical(bi$sha, dcf))
+if (!is.na(dcf) && !identical(dcf, "unstamped") &&
+    !identical(trimws(unname(bi$sha)), dcf))
   stop("installed QuantFit build (", bi$sha, ") does not match this ",
        "checkout's stamp (", dcf, "); reinstall before generating evidence")
 if (!identical(bi$po_method, METHOD))
