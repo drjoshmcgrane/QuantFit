@@ -57,12 +57,24 @@ obsolete.
 
 ## 3. Hybrid vs lattice, same code, same data (paired grids)
 
-Source: `audit_selector.R` + `audit_k20_results/`, `hybrid_audit` findings.
+Source: `audit_selector.R`; **POST-FIX grid `audit_k20_postfix/`** (run
+2026-07-29 under the fully fixed code: mean-based mask matching, IIO-only
+null, practical-equivalence guard, dominance-demonstration posets);
+pre-fix grid retained in `audit_k20_results/`.
 
-- **Complete K=20 paired grid** (J=8, B=49): **IIO 18/20 (90%) hybrid vs 9/20
-  (45%) lattice, McNemar 9:0, p = 0.0039** - the load-bearing result. Overall
-  111/120 vs 103/120 (p = 0.057). DM boundary held: DM 10/10 vs 7/10 for the
-  removed double-cancellation variant (why the LR edge stays).
+- **POST-FIX K=20 paired grid** (J=8, B=49): overall **hybrid 112/120 vs
+  lattice 104/120**, McNemar 11:3 (p = 0.057); **IIO 18/20 vs 9/20**.
+  Fix-stability: exactly ONE changed verdict per selector vs the pre-fix
+  same-seed grid (both RM improvements) - the audit fixes bound the impact
+  on all earlier grids at ~1/120, which is why the TI&D real-data table is
+  annotated rather than re-run.
+- **PO arm under the redesigned poset test** (J=8, margin 0.10, scored as
+  selected UN + class demonstration): **hybrid 20/20, lattice 19/20**;
+  18/20 correct V types, mean demonstrated pairs 1.9 (truth: 2). The old
+  machinery's J=8 floor (13/20) was an artifact of the invalid statistic.
+- Pre-fix reference numbers: overall 111/120 vs 103/120, IIO 18/20 vs 9/20,
+  McNemar 9:0 p = 0.0039 on the IIO cell. DM boundary held: DM 10/10 vs
+  7/10 for the removed double-cancellation variant (why the LR edge stays).
 - **Test length** (`test-length-recovery-finding`): J=20 rescues LCR (+30
   points) but NOT IIO - the IIO limit is class-count-, not item-, bound.
 - **IIO ceiling measured four independent ways**: 39% (real TI&D), 45%

@@ -44,12 +44,13 @@ run <- function(k) {
                    lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE)),
     error=function(e) NULL)
   sel <- if (is.null(r)) NA_character_ else r$selected
-  g <- function(x, fld) if (is.null(x)) NA else x[[fld]]
+  g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   write.csv(data.frame(selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
     rep=cs$rep, selected=sel,
     selected_scale=if (is.na(sel)) NA else scale_of[sel],
-    class_shape=g(r$poset$class,"shape"), class_p=g(r$poset$class,"p"),
-    item_shape=g(r$poset$item,"shape"), item_p=g(r$poset$item,"p")),
+    class_shape=g(r$poset$class,"shape"), class_comp=g(r$poset$class,"comparable"),
+    class_type=g(r$poset$class,"type"),
+    item_shape=g(r$poset$item,"shape"), item_comp=g(r$poset$item,"comparable")),
     f, row.names=FALSE)
 }
 cat("Audit [", SEL, "]:", nrow(grid), "datasets (J=8, N=1500, K=", K, ", B=", B, ")\n")
