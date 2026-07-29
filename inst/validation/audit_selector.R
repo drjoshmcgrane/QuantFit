@@ -25,15 +25,25 @@ models  <- c("UN","MON","IIO","DM","LCR","RM","PO")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
-SHA <- Sys.getenv("AUD_SHA", "")
-if (!nzchar(SHA)) {
-  SHA <- tryCatch(suppressWarnings(system("git rev-parse --short HEAD",
-           intern = TRUE, ignore.stderr = TRUE)), error = function(e) character(0))
-  if (length(SHA) != 1L || !nzchar(SHA))
-    stop("cannot determine the package SHA (not a git checkout?): set the ",
-         "AUD_SHA environment variable explicitly")
-}
 METHOD <- "max-T-studentized-v4"
+# BUILD VERIFICATION (round 8): the row SHA is the INSTALLED package's
+# stamped build SHA, and generation refuses to run when the installed build
+# does not match this checkout's stamp or the expected method version.
+bi <- quantfit_build_info()
+dcf <- tryCatch(read.dcf("DESCRIPTION", fields = "GitSHA")[1, 1],
+                error = function(e) NA_character_)
+if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
+  stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
+       "stamp-then-install workflow before generating evidence")
+if (!is.na(dcf) && !identical(dcf, "unstamped") && !identical(bi$sha, dcf))
+  stop("installed QuantFit build (", bi$sha, ") does not match this ",
+       "checkout's stamp (", dcf, "); reinstall before generating evidence")
+if (!identical(bi$po_method, METHOD))
+  stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
+       METHOD, ")")
+SHA <- bi$sha
+CONFIG <- sprintf("B=%d;K=%d;J=%d;N=1500;alpha=0.05;posetfloor=99",
+                  B, K, n_items)
 grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
 
 run <- function(k) {
@@ -41,7 +51,8 @@ run <- function(k) {
   if (file.exists(f)) {
     prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
     if (!is.null(prev) && identical(prev$method, METHOD) &&
-        identical(prev$sha, SHA)) return(invisible())
+        identical(prev$sha, SHA) && identical(prev$config, CONFIG))
+      return(invisible())
     unlink(f)                      # stale method/build: regenerate
   }
   d <- if (cs$model == "PO")
@@ -59,7 +70,7 @@ run <- function(k) {
     error=function(e) NULL)
   sel <- if (is.null(r)) NA_character_ else r$selected
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
-  write.csv(data.frame(method=METHOD, sha=SHA,
+  write.csv(data.frame(method=METHOD, sha=SHA, config=CONFIG,
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
     rep=cs$rep, selected=sel,
     selected_scale=if (is.na(sel)) NA else scale_of[sel],

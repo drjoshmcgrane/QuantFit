@@ -90,15 +90,7 @@ test_that("poset refinement handles polytomous data (categorical bootstrap)", {
 })
 
 test_that("relation consistency logic: transitive, missing-edge, cycle", {
-  ok <- QuantFit:::.poset_refine   # just to assert internals exist
-  ro <- function(pr, nn) {
-    D <- matrix(FALSE, nn, nn)
-    if (nrow(pr)) D[cbind(pr$dominant, pr$dominated)] <- TRUE
-    R <- D
-    for (i in seq_len(nn)) R <- R | ((R %*% R) > 0)
-    if (any(diag(R))) return(FALSE)
-    all((R & !D) == FALSE)
-  }
+  ro <- QuantFit:::.poset_relation_ok   # the PRODUCTION helper
   expect_true(ro(data.frame(dominant = c(1, 1, 2), dominated = c(2, 3, 3)), 3))
   expect_false(ro(data.frame(dominant = c(1, 2), dominated = c(2, 3)), 3))  # gap
   expect_false(ro(data.frame(dominant = c(1, 2, 3), dominated = c(2, 3, 1)), 3))

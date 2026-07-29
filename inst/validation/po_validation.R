@@ -33,16 +33,24 @@ out   <- Sys.getenv("PO_OUT", "po_validation4_out"); dir.create(out, showWarning
 # the inference method marker, and the poset bootstrap depth; the skip-if-
 # exists resume check REFUSES to reuse a file whose method/SHA disagree with
 # the current build, so superseded results can never be silently recycled.
-SHA <- Sys.getenv("PO_SHA", "")
-if (!nzchar(SHA)) {
-  SHA <- tryCatch(suppressWarnings(system("git rev-parse --short HEAD",
-           intern = TRUE, ignore.stderr = TRUE)), error = function(e) character(0))
-  if (length(SHA) != 1L || !nzchar(SHA))
-    stop("cannot determine the package SHA (not a git checkout?): set the ",
-         "PO_SHA environment variable explicitly")
-}
 METHOD <- "max-T-studentized-v4"
-stopifnot(is.function(QuantFit:::.poset_align))   # build actually carries v4
+# BUILD VERIFICATION (round 8): the row SHA is the INSTALLED package's
+# stamped build SHA, and generation refuses to run when the installed build
+# does not match this checkout's stamp or the expected method version.
+bi <- quantfit_build_info()
+dcf <- tryCatch(read.dcf("DESCRIPTION", fields = "GitSHA")[1, 1],
+                error = function(e) NA_character_)
+if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
+  stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
+       "stamp-then-install workflow before generating evidence")
+if (!is.na(dcf) && !identical(dcf, "unstamped") && !identical(bi$sha, dcf))
+  stop("installed QuantFit build (", bi$sha, ") does not match this ",
+       "checkout's stamp (", dcf, "); reinstall before generating evidence")
+if (!identical(bi$po_method, METHOD))
+  stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
+       METHOD, ")")
+SHA <- bi$sha
+CONFIG <- sprintf("B=%d;N=%d;K=%d;KX=%d;alpha=0.05;posetfloor=99", B, NR, K, KX)
 
 KX <- as.integer(Sys.getenv("PO_KX", "100"))             # antichain-size reps
 grid <- rbind(
@@ -126,7 +134,8 @@ run <- function(k) {
   if (file.exists(f)) {
     prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
     if (!is.null(prev) && identical(prev$method, METHOD) &&
-        identical(prev$sha, SHA)) return(invisible())
+        identical(prev$sha, SHA) && identical(prev$config, CONFIG))
+      return(invisible())
     unlink(f)                       # stale schema/method/build: regenerate
   }
   d <- gen(cs$truth, cs$C, cs$margin, cs$nI, cs$rep)
@@ -140,7 +149,7 @@ run <- function(k) {
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   pstr <- function(x) if (is.null(x) || !nrow(x$pairs)) "" else
     paste(sprintf("%d>%d", x$pairs$dominant, x$pairs$dominated), collapse = ";")
-  write.csv(data.frame(method = METHOD, sha = SHA,
+  write.csv(data.frame(method = METHOD, sha = SHA, config = CONFIG,
     poset_b = if (!is.null(r$poset$class)) g(r$poset$class, "b_eff") else
               g(r$poset$item, "b_eff"),
     truth = cs$truth, C = cs$C, margin = cs$margin,

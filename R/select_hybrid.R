@@ -176,6 +176,19 @@
 # profiles alike. eps is the axis-calibrated tolerance (mon_eps, N-scaled),
 # entering exactly as in the MON axis. Refits that fail are dropped and
 # reported via b_eff; below max(20, B/2) the refinement refuses to answer.
+# The demonstrated relation is PAIRWISE eps-dominance, which need not be
+# transitive; this check verifies it assembles into a strict partial order
+# (acyclic; transitive closure adds no edge beyond the demonstrated set).
+# Package-level so tests exercise the PRODUCTION logic, not a copy.
+.poset_relation_ok <- function(pr, nn) {
+  if (!nrow(pr)) return(TRUE)
+  D <- matrix(FALSE, nn, nn); D[cbind(pr$dominant, pr$dominated)] <- TRUE
+  R <- D
+  for (i in seq_len(nn)) R <- R | ((R %*% R) > 0)    # transitive closure
+  if (any(diag(R))) return(FALSE)                    # cycle
+  all((R & !D) == FALSE)                             # closure adds no edge
+}
+
 .poset_align <- function(Pb, P0) {
   C <- ncol(P0)
   perms <- .class_orderings(C)
@@ -294,18 +307,6 @@
     }
     pr
   }
-  # The demonstrated relation is PAIRWISE eps-dominance, which need not be
-  # transitive; verify it assembles into a strict partial order (acyclic and
-  # transitively closed within the demonstrated set) and REPORT the check
-  # instead of assuming it.
-  relation_ok <- function(pr, nn) {
-    if (!nrow(pr)) return(TRUE)
-    D <- matrix(FALSE, nn, nn); D[cbind(pr$dominant, pr$dominated)] <- TRUE
-    R <- D
-    for (i in seq_len(nn)) R <- R | ((R %*% R) > 0)  # transitive closure
-    if (any(diag(R))) return(FALSE)                  # cycle
-    all(D[R]) || all((R & !D) == FALSE)              # closure adds no edge
-  }
   out <- list()
   if ("class" %in% sides) {
     idx <- t(utils::combn(C, 2L))
@@ -313,7 +314,7 @@
     pr <- decide_side(idx, viol)
     D <- matrix(FALSE, C, C)
     if (nrow(pr)) D[cbind(pr$dominant, pr$dominated)] <- TRUE
-    tr_ok <- relation_ok(pr, C)
+    tr_ok <- .poset_relation_ok(pr, C)
     # a non-transitive demonstrated set is a collection of pairwise
     # eps-dominances, NOT a partial order - labelled as its own shape
     shape <- if (nrow(pr) == 0L) "antichain" else
@@ -327,7 +328,7 @@
     idx <- t(utils::combn(J, 2L))
     viol <- function(P, x, y) mean(pmax(0, P[y, ] - P[x, ]))   # V(x >= y)
     pr <- decide_side(idx, viol)
-    tr_ok <- relation_ok(pr, J)
+    tr_ok <- .poset_relation_ok(pr, J)
     out$item <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
       b_eff = b_eff, eps = eps, transitive = tr_ok,
       shape = if (nrow(pr) == 0L) "antichain" else

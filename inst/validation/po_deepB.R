@@ -5,14 +5,23 @@
 suppressMessages(library(QuantFit))
 `%||%` <- function(a, b) if (is.null(a)) b else a
 out <- Sys.getenv("PODEEP_OUT", "po_deepB_out"); dir.create(out, showWarnings = FALSE)
-SHA <- Sys.getenv("PO_SHA", "")
-if (!nzchar(SHA)) {
-  SHA <- tryCatch(suppressWarnings(system("git rev-parse --short HEAD",
-           intern = TRUE, ignore.stderr = TRUE)), error = function(e) character(0))
-  if (length(SHA) != 1L || !nzchar(SHA))
-    stop("cannot determine the package SHA (not a git checkout?): set the ",
-         "PO_SHA environment variable explicitly")
-}
+METHOD <- "max-T-studentized-v4"
+# BUILD VERIFICATION (round 8): the row SHA is the INSTALLED package's
+# stamped build SHA, and generation refuses to run when the installed build
+# does not match this checkout's stamp or the expected method version.
+bi <- quantfit_build_info()
+dcf <- tryCatch(read.dcf("DESCRIPTION", fields = "GitSHA")[1, 1],
+                error = function(e) NA_character_)
+if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
+  stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
+       "stamp-then-install workflow before generating evidence")
+if (!is.na(dcf) && !identical(dcf, "unstamped") && !identical(bi$sha, dcf))
+  stop("installed QuantFit build (", bi$sha, ") does not match this ",
+       "checkout's stamp (", dcf, "); reinstall before generating evidence")
+if (!identical(bi$po_method, METHOD))
+  stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
+       METHOD, ")")
+SHA <- bi$sha
 anchors <- expand.grid(truth = c("PO", "XANTI", "NEARANTI", "PO_ITEMS"),
                        rep = 1:8, stringsAsFactors = FALSE)
 gen <- function(tr, rep) {
