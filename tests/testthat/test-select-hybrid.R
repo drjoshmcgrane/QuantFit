@@ -88,3 +88,26 @@ test_that("quant edge completes on DM truth and reports its evidence", {
     expect_false(is.null(r$quant$rm_vs_lcr))
   }
 })
+
+test_that("unavailable RM-vs-LCR bootstrap sets rm_stage_failed", {
+  skip_on_cran()
+  # force the unavailable state: the comparison returns non-NULL with
+  # available = FALSE (the every-replicate-failed case); the edge must flag
+  # rm_stage_failed even though it falls back to BIC for the verdict
+  d <- simulate_responses("LCR", n_persons = 400, n_items = 6, n_classes = 2,
+                          seed = 91)
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  testthat::local_mocked_bindings(
+    ll_equivalence_test = function(...) structure(
+      list(statistic = 0.1, p_value = 1, null_distribution = c(0.5, 1, 2)),
+      class = "qleqtest"),
+    rm_vs_lcr_test = function(...) list(available = FALSE,
+                                        profiled_C = NA_integer_),
+    .package = "QuantFit")
+  out <- QuantFit:::.hybrid_quant_edge(d, grain_range = 2:3, B = 9,
+    n_starts = 2L, boot_n_starts = 1L, alpha = 0.05, use_cpp = TRUE,
+    mc.cores = 1L, seed = 1)
+  expect_true(out$supports_quant)
+  expect_true(out$rm_stage_failed)
+  expect_true(out$selected %in% c("LCR", "RM"))   # BIC fallback verdict, flagged
+})

@@ -354,7 +354,11 @@
            use_cpp = use_cpp, observed_fits = lcr_profile, mc.cores = mc.cores,
            seed = sd_(8000L)), error = function(e) NULL)
   out$rm_vs_lcr <- rl
-  if (is.null(rl)) out$rm_stage_failed <- TRUE
+  # the calibrated comparison is unavailable BOTH when the call errors (NULL)
+  # and when it returns available = FALSE (e.g. every bootstrap replicate
+  # failed) - in either case the discrete/continuous verdict rests on the raw
+  # BIC fallback, not the calibrated test, and must be flagged
+  if (is.null(rl) || !isTRUE(rl$available)) out$rm_stage_failed <- TRUE
   if (!is.null(rl)) {
     if (isTRUE(rl$available) && !is.na(rl$profiled_C)) out$C <- rl$profiled_C
     rm_pref <- if (!isTRUE(rl$available))
