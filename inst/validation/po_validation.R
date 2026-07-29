@@ -34,7 +34,7 @@ out   <- Sys.getenv("PO_OUT", "po_validation4_out"); dir.create(out, showWarning
 # exists resume check REFUSES to reuse a file whose method/SHA disagree with
 # the current build, so superseded results can never be silently recycled.
 METHOD <- "max-T-studentized-v4"
-source("inst/validation/validation_provenance.R")
+source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)
 SHA <- prov$sha
 HEAD_SHA <- prov$head
@@ -65,37 +65,8 @@ gen <- function(tr, C, m, nI, rep) {
   sd <- 51000L + 977L * rep + 13L * nI + round(100 * ifelse(is.na(m), 0, m)) +
         7L * C + match(tr, c("PO","PO_INV","PO_ITEMS","UN","MON","IIO",
                              "XANTI","NEARANTI","PO_POLY"))
-  if (tr %in% c("XANTI", "NEARANTI")) {
-    # crossing antichains with unequal averages: increasing / shifted
-    # decreasing / alternating logit profiles - zero population dominance.
-    # NEARANTI's profile scale is TUNED (bisection, deterministic) so the
-    # MINIMUM pairwise crossing depth sits at ~0.015, genuinely just above
-    # the eps = 0.01 tolerance - boundary size calibration.
-    set.seed(sd)
-    if (tr == "XANTI") { sc <- 1.6; sh <- c(0.35, 0.15) } else {
-      depth_at <- function(scl) {
-        b <- seq(-scl, scl, length.out = nI)
-        Pt <- rbind(plogis(b), plogis(rev(b) + 0.24 * scl),
-                    plogis(b * rep_len(c(-1, 1), nI) + 0.12 * scl))
-        m <- Inf
-        for (a in 1:2) for (bb in (a + 1):3)
-          m <- min(m, min(mean(pmax(0, Pt[a, ] - Pt[bb, ])),
-                          mean(pmax(0, Pt[bb, ] - Pt[a, ]))))
-        m
-      }
-      sc <- stats::uniroot(function(x) depth_at(x) - 0.015,
-                           c(0.02, 1.5))$root
-      sh <- c(0.24, 0.12) * sc
-    }
-    base <- seq(-sc, sc, length.out = nI)
-    P <- rbind(plogis(base), plogis(rev(base) + sh[1]),
-               plogis(base * rep_len(c(-1, 1), nI) + sh[2]))
-    cls <- sample.int(3L, NR, replace = TRUE)
-    d <- matrix(rbinom(NR * nI, 1, P[cls, ]), NR, nI)
-    storage.mode(d) <- "integer"
-    attr(d, "params") <- list(L = qlogis(P))
-    return(d)
-  }
+  if (tr %in% c("XANTI", "NEARANTI"))
+    return(qf_gen_anti(tr, nI, NR, rep, C))
   if (tr == "PO_POLY")
     return(simulate_responses("PO", n_persons = NR, n_items = nI,
              n_classes = C, n_cat = 4, poset = "V", po_margin = m, seed = sd))
@@ -144,9 +115,20 @@ run <- function(k) {
                   tau = attr(d, "params")$tau %||% 0)
   ach <- attr(d, "params")$po_achieved
   t0 <- proc.time()[3]
-  r <- tryCatch(suppressWarnings(select_model_hybrid(d, n_classes = cs$C,
-         B = B, mc.cores = 1L, seed = 1, verbose = FALSE)),
-       error = function(e) NULL)
+  r <- withCallingHandlers(
+         select_model_hybrid(d, n_classes = cs$C, B = B, mc.cores = 1L,
+                             seed = 1, verbose = FALSE),
+         warning = function(w) {
+           if (grepl("poset refinement failed|quantitative edge",
+                     conditionMessage(w)))
+             stop("selector warning treated as failure: ",
+                  conditionMessage(w))
+           invokeRestart("muffleWarning")
+         })
+  if (is.null(r) || is.na(r$selected))
+    stop("selector returned no verdict")
+  if (r$selected %in% c("UN", "IIO", "MON") && is.null(r$poset))
+    stop("poset refinement missing for an ordinal-cell verdict")
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   pstr <- function(x) if (is.null(x) || !nrow(x$pairs)) "" else
     paste(sprintf("%d>%d", x$pairs$dominant, x$pairs$dominated), collapse = ";")

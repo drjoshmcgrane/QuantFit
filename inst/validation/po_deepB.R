@@ -6,7 +6,7 @@ suppressMessages(library(QuantFit))
 `%||%` <- function(a, b) if (is.null(a)) b else a
 out <- Sys.getenv("PODEEP_OUT", "po_deepB_out"); dir.create(out, showWarnings = FALSE)
 METHOD <- "max-T-studentized-v4"
-source("inst/validation/validation_provenance.R")
+source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)
 SHA <- prov$sha
 HEAD_SHA <- prov$head
@@ -21,17 +21,9 @@ gen <- function(tr, rep) {
   if (tr == "PO_ITEMS") return(simulate_responses("PO_ITEMS", n_persons = NR,
     n_items = 8, n_classes = 4, poset = "layers2", po_margin = NULL,
     seed = 51000L + 977L*rep + 13L*8L + 28L + 3L))
-  sd <- 51000L + 977L*rep + 13L*8L + 21L + match(tr, c("PO","PO_INV","PO_ITEMS",
-        "UN","MON","IIO","XANTI","NEARANTI","PO_POLY"))
-  set.seed(sd)
-  sc <- if (tr == "XANTI") 1.6 else 0.5
-  sh <- if (tr == "XANTI") c(0.35, 0.15) else c(0.12, 0.06)
-  base <- seq(-sc, sc, length.out = 8)
-  P <- rbind(plogis(base), plogis(rev(base) + sh[1]),
-             plogis(base * rep_len(c(-1, 1), 8) + sh[2]))
-  cls <- sample.int(3L, NR, replace = TRUE)
-  d <- matrix(rbinom(NR * 8, 1, P[cls, ]), NR, 8)
-  storage.mode(d) <- "integer"; d
+  # XANTI / NEARANTI come from the SHARED generator (identical seeds and
+  # construction to the v4 grid, including the tuned 0.015 boundary)
+  qf_gen_anti(tr, 8L, NR, rep, 3L)
 }
 res <- parallel::mclapply(seq_len(nrow(anchors)), function(k) {
   cs <- anchors[k, ]

@@ -11,6 +11,8 @@
 # Resumable: one CSV per (selector, model, rep).
 suppressMessages(library(QuantFit))
 SEL     <- Sys.getenv("SELECTOR", "lattice")
+if (!SEL %in% c("lattice", "hybrid"))
+  stop("SELECTOR must be 'lattice' or 'hybrid'; got '", SEL, "'")
 K       <- as.integer(Sys.getenv("AUDIT_K", "30"))
 B       <- as.integer(Sys.getenv("AUDIT_B", "49"))
 cores   <- as.integer(Sys.getenv("AUDIT_CORES", "8"))
@@ -26,7 +28,7 @@ scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
 METHOD <- "max-T-studentized-v4"
-source("inst/validation/validation_provenance.R")
+source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)
 SHA <- prov$sha
 HEAD_SHA <- prov$head
@@ -54,7 +56,9 @@ run <- function(k) {
       hybrid   = select_model_hybrid(d, n_classes=3L, B=B,
                    lr_boot_n_starts=2L, mc.cores=1L, seed=1, verbose=FALSE)),
     error=function(e) NULL)
-  sel <- if (is.null(r)) NA_character_ else r$selected
+  if (is.null(r)) stop("selector returned NULL (fit or bootstrap failure)")
+  sel <- r$selected
+  if (is.na(sel)) stop("selector returned NA verdict")
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   write.csv(data.frame(method=METHOD, sha=SHA, head=HEAD_SHA, config=CONFIG,
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
