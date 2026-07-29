@@ -24,15 +24,22 @@ qf_provenance_check <- function(method_expected) {
   if (length(head_sha) != 1L || !nzchar(head_sha))
     stop("cannot resolve HEAD (not a git checkout?) - fail-closed")
   st <- suppressWarnings(system(paste("git diff --quiet", paste0(sha, "..HEAD"),
-          "-- R src inst tests NAMESPACE"), ignore.stderr = TRUE))
+          "-- . \':(exclude)DESCRIPTION\'"), ignore.stderr = TRUE))
   if (!identical(st, 0L))
-    stop("tracked package/validation files changed since stamped build ",
-         sha, " (HEAD ", head_sha, "); re-stamp and reinstall")
+    stop("committed files (any path except DESCRIPTION) changed since ",
+         "stamped build ", sha, " (HEAD ", head_sha, "); re-stamp and ",
+         "reinstall")
+  strip_stamp <- function(x) x[!grepl("^GitSHA:", x)]
+  d_stamp <- suppressWarnings(system(paste0("git show ", sha, ":DESCRIPTION"),
+               intern = TRUE, ignore.stderr = TRUE))
+  if (!identical(strip_stamp(d_stamp), strip_stamp(readLines("DESCRIPTION"))))
+    stop("DESCRIPTION (beyond the GitSHA stamp) changed since stamped ",
+         "build ", sha, "; re-stamp and reinstall")
   # DIRTY-STATE check: staged, unstaged, and untracked files in relevant
   # paths all invalidate provenance (the runners themselves are read from
   # the working tree)
   dirty <- suppressWarnings(system(
-    "git status --porcelain -- R src inst tests NAMESPACE DESCRIPTION",
+    "git status --porcelain",
     intern = TRUE, ignore.stderr = TRUE))
   if (length(dirty))
     stop("working tree is dirty in provenance-relevant paths:\n  ",

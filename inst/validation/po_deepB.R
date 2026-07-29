@@ -25,15 +25,32 @@ gen <- function(tr, rep) {
   # construction to the v4 grid, including the tuned 0.015 boundary)
   qf_gen_anti(tr, 8L, NR, rep, 3L)
 }
-res <- parallel::mclapply(seq_len(nrow(anchors)), function(k) {
+res <- parallel::mclapply(seq_len(nrow(anchors)), function(k) tryCatch({
   cs <- anchors[k, ]
   d <- gen(cs$truth, cs$rep)
   C <- if (cs$truth == "PO_ITEMS") 4L else 3L
   pstr <- function(x) if (is.null(x) || !nrow(x$pairs)) "" else
     paste(sprintf("%d>%d", x$pairs$dominant, x$pairs$dominated), collapse = ";")
   one <- function(pb) {
-    r <- suppressWarnings(select_model_hybrid(d, n_classes = C, B = 49,
-           poset_B = pb, mc.cores = 1L, seed = 1, verbose = FALSE))
+    r <- withCallingHandlers(
+      select_model_hybrid(d, n_classes = C, B = 49, poset_B = pb,
+                          mc.cores = 1L, seed = 1, verbose = FALSE),
+      warning = function(w) {
+        if (grepl("poset refinement failed|quantitative edge|RM-vs-LCR",
+                  conditionMessage(w)))
+          stop("selector warning treated as failure: ", conditionMessage(w))
+        invokeRestart("muffleWarning")
+      })
+    if (is.null(r) || is.na(r$selected)) stop("selector returned no verdict")
+    # the anchor's EXPECTED side must be present with adequate depth -
+    # unavailable comparisons must never count as stable
+    side <- if (cs$truth == "PO_ITEMS") r$poset$item else r$poset$class
+    if (is.null(side))
+      stop("expected poset side missing (truth ", cs$truth, ", selected ",
+           r$selected, ")")
+    if (is.null(side$b_eff) || side$b_eff < max(99L, floor(0.9 * pb)))
+      stop("poset b_eff ", side$b_eff, " below requirement for poset_B ", pb)
+    if (is.na(side$shape)) stop("poset shape unavailable")
     c(cls_shape = r$poset$class$shape %||% NA,
       cls_pairs = pstr(r$poset$class),
       it_shape  = r$poset$item$shape %||% NA,
@@ -48,7 +65,17 @@ res <- parallel::mclapply(seq_len(nrow(anchors)), function(k) {
              ishape99 = a["it_shape"], ishape499 = b["it_shape"],
              ipairs99 = a["it_pairs"], ipairs499 = b["it_pairs"],
              stable = identical(a, b))
-}, mc.cores = 8, mc.preschedule = FALSE)
+}, error = function(e) sprintf("anchor %d (%s rep %d): %s", k,
+       anchors$truth[k], anchors$rep[k], conditionMessage(e))),
+  mc.cores = 8, mc.preschedule = FALSE)
+ok <- vapply(res, function(x) is.data.frame(x), logical(1))
+fails <- res[!ok]
+if (length(fails)) {
+  write.csv(data.frame(error = vapply(fails, as.character, character(1))),
+            file.path(out, "FAILURES.csv"), row.names = FALSE)
+  cat("DEEPB FAILED:", length(fails), "anchors errored\n")
+  quit(save = "no", status = 1L)
+}
 d <- do.call(rbind, res)
 write.csv(d, file.path(out, "deepB_anchors.csv"), row.names = FALSE)
 cat(sprintf("deep-B anchors: %d/%d decisions identical at B 99 vs 499\n",

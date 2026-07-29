@@ -10,6 +10,7 @@
 # same-code paired comparisons (the IIO claim is the load-bearing one).
 # Resumable: one CSV per (selector, model, rep).
 suppressMessages(library(QuantFit))
+`%||%` <- function(a, b) if (is.null(a)) b else a
 SEL     <- Sys.getenv("SELECTOR", "lattice")
 if (!SEL %in% c("lattice", "hybrid"))
   stop("SELECTOR must be 'lattice' or 'hybrid'; got '", SEL, "'")
@@ -59,6 +60,18 @@ run <- function(k) {
   if (is.null(r)) stop("selector returned NULL (fit or bootstrap failure)")
   sel <- r$selected
   if (is.na(sel)) stop("selector returned NA verdict")
+  # SUBROUTE validation: a clean top-level label must not hide an internally
+  # failed refinement or quantitative stage
+  if (sel %in% c("UN", "IIO", "MON")) {
+    if (is.null(r$poset))
+      stop("poset refinement missing for ordinal-cell verdict ", sel)
+    beff <- if (!is.null(r$poset$class)) r$poset$class$b_eff else
+            r$poset$item$b_eff
+    if (is.null(beff) || beff < 99L)
+      stop("poset b_eff ", beff %||% NA, " below the 99 floor")
+  }
+  if (isTRUE(r$quant_edge_failed))
+    stop("quantitative edge failed behind verdict ", sel)
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   write.csv(data.frame(method=METHOD, sha=SHA, head=HEAD_SHA, config=CONFIG,
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
