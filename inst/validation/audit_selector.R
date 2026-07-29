@@ -27,7 +27,11 @@ n_items <- 8L
 models  <- c("UN","MON","IIO","DM","LCR","RM","PO")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
-out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
+out <- Sys.getenv("AUD_OUT", file.path("..", "qf_evidence", "audit_out"))
+if (startsWith(normalizePath(out, mustWork = FALSE), normalizePath(getwd())))
+  stop("AUD_OUT must live OUTSIDE the git checkout (results are untracked ",
+       "files and would trip the dirty-tree provenance gate)")
+dir.create(out, showWarnings = FALSE, recursive = TRUE)
 METHOD <- "max-T-studentized-v4"
 source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)
@@ -72,6 +76,8 @@ run <- function(k) {
   }
   if (isTRUE(r$quant_edge_failed))
     stop("quantitative edge failed behind verdict ", sel)
+  if (isTRUE(r$rm_stage_failed) || isTRUE(r$quant$rm_stage_failed))
+    stop("RM-vs-LCR stage failed/uncalibrated behind verdict ", sel)
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   write.csv(data.frame(method=METHOD, sha=SHA, head=HEAD_SHA, config=CONFIG,
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],

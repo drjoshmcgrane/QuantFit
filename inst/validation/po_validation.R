@@ -28,7 +28,10 @@ K     <- as.integer(Sys.getenv("PO_K", "8"))
 NR    <- as.integer(Sys.getenv("PO_N", "1500"))
 B     <- as.integer(Sys.getenv("PO_B", "49"))
 cores <- as.integer(Sys.getenv("PO_CORES", "8"))
-out   <- Sys.getenv("PO_OUT", "po_validation4_out"); dir.create(out, showWarnings = FALSE)
+out <- Sys.getenv("PO_OUT", file.path("..", "qf_evidence", "po_validation4_out"))
+if (startsWith(normalizePath(out, mustWork = FALSE), normalizePath(getwd())))
+  stop("PO_OUT must live OUTSIDE the git checkout (dirty-tree provenance)")
+dir.create(out, showWarnings = FALSE, recursive = TRUE)
 # PROVENANCE CANARIES (review round 6): every row records the package git SHA,
 # the inference method marker, and the poset bootstrap depth; the skip-if-
 # exists resume check REFUSES to reuse a file whose method/SHA disagree with

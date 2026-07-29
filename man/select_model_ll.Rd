@@ -119,6 +119,12 @@ step was not reached or a fit failed).}
 \item{fits}{Named list of the fitted models (failed fits are NULL).}
 \item{lcr_vs_dm,rm_vs_lcr}{Detailed quantitative-edge test objects, or
 \code{NULL} when an edge was not reached.}
+\item{quant_edge_failed}{TRUE when the bridge fits failed and the
+DM verdict was never tested against LCR (quantitative structure
+NOT assessed).}
+\item{rm_stage_failed}{TRUE when the RM-vs-LCR stage did not run or
+its bootstrap comparison was unavailable (BIC fallback; the
+discrete/continuous verdict is uncalibrated).}
 \item{quant_fits}{The fixed-grain DM/LCR bridge fits and profiled LCR
 fits used by the quantitative layer.}
 \item{alpha, B}{The settings used.}

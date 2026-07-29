@@ -4,7 +4,12 @@
 # statistic; this measures how much the decisions move as it deepens.
 suppressMessages(library(QuantFit))
 `%||%` <- function(a, b) if (is.null(a)) b else a
-out <- Sys.getenv("PODEEP_OUT", "po_deepB_out"); dir.create(out, showWarnings = FALSE)
+out <- Sys.getenv("PODEEP_OUT", file.path("..", "qf_evidence", "po_deepB_out"))
+if (startsWith(normalizePath(out, mustWork = FALSE), normalizePath(getwd())))
+  stop("PODEEP_OUT must live OUTSIDE the git checkout (dirty-tree provenance)")
+dir.create(out, showWarnings = FALSE, recursive = TRUE)
+# never leave a stale success aggregate beside a fresh failure manifest
+unlink(file.path(out, c("deepB_anchors.csv", "FAILURES.csv")))
 METHOD <- "max-T-studentized-v4"
 source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)

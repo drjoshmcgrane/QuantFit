@@ -753,6 +753,12 @@ print.qleqtest <- function(x, ...) {
 #'     \item{fits}{Named list of the fitted models (failed fits are NULL).}
 #'     \item{lcr_vs_dm,rm_vs_lcr}{Detailed quantitative-edge test objects, or
 #'       `NULL` when an edge was not reached.}
+#'     \item{quant_edge_failed}{TRUE when the bridge fits failed and the
+#'       DM verdict was never tested against LCR (quantitative structure
+#'       NOT assessed).}
+#'     \item{rm_stage_failed}{TRUE when the RM-vs-LCR stage did not run or
+#'       its bootstrap comparison was unavailable (BIC fallback; the
+#'       discrete/continuous verdict is uncalibrated).}
 #'     \item{quant_fits}{The fixed-grain DM/LCR bridge fits and profiled LCR
 #'       fits used by the quantitative layer.}
 #'     \item{alpha, B}{The settings used.}
@@ -1149,6 +1155,8 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
 
   lcr_dm_test <- rm_lcr_test <- NULL
   quant_fits <- NULL
+  quant_edge_failed <- FALSE          # bridge fits / LCR-vs-DM never ran
+  rm_stage_failed <- FALSE            # RM-vs-LCR unavailable behind LCR/RM
   if (identical(ordinal_selected, "DM")) {
     if (anyNA(data)) {
       warning("The TI&D LCR/Rasch support-point equivalence assumes complete ",
@@ -1205,6 +1213,12 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       LCR_BIC = lcr_bic, LCR_profile = lcr_profile)
 
     lcr_ok <- FALSE
+    if (is.null(lcr_bridge) || is.null(dm_bridge)) {
+      quant_edge_failed <- TRUE
+      warning("lattice quantitative edge did not complete (bridge fits ",
+              "failed); the DM verdict reflects the ordinal lattice only - ",
+              "quantitative structure was NOT assessed")
+    }
     if (!is.null(lcr_bridge) && !is.null(dm_bridge)) {
       if (verbose) cat("Quantitative edge: testing LCR vs DM...\n")
       lcr_ok <- isTRUE(test_adequate(
@@ -1220,6 +1234,11 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       if (!is.null(lcr_best)) bics["LCR"] <- BIC(lcr_best)
       if (!is.null(fits$RM)) bics["RM"] <- BIC(fits$RM)
 
+      if (is.null(fits$RM) || is.null(lcr_best)) {
+        rm_stage_failed <- TRUE
+        warning("RM-vs-LCR stage did not run (missing RM or LCR fit); the ",
+                "LCR verdict reflects the bridge test only")
+      }
       # Final published edge: located/discrete LCR versus continuous RM.
       if (!is.null(fits$RM) && !is.null(lcr_best)) {
         if (verbose) cat("Quantitative edge: testing RM vs LCR...\n")
@@ -1250,6 +1269,12 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                      else if (rl$select_lcr) "discrete (LCR) supported"
                      else "continuous (RM) preferred",
           stringsAsFactors = FALSE))
+        if (!isTRUE(rl$available)) {
+          rm_stage_failed <- TRUE
+          warning("RM-vs-LCR bootstrap comparison unavailable; falling back ",
+                  "to raw BIC - the discrete/continuous verdict is NOT ",
+                  "calibrated")
+        }
         rm_pref <- if (!isTRUE(rl$available)) bics["RM"] <= bics["LCR"]
                    else !rl$select_lcr
         if (isTRUE(rm_pref)) {
@@ -1274,6 +1299,8 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       n_classes_table = n_classes_table,
       rm_vs_lcr = rm_lcr_test,
       lcr_vs_dm = lcr_dm_test,
+      quant_edge_failed = quant_edge_failed,
+      rm_stage_failed = rm_stage_failed,
       poset = poset_out,
       quant_fits = quant_fits,
       severity = severity
