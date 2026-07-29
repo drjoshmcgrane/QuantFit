@@ -11,6 +11,7 @@ select_model_hybrid(
   n_starts = 5L,
   mon_eps = 0.01,
   alpha = 0.05,
+  min_effect = 1,
   lr_boot_n_starts = 2L,
   lr_n_classes = 2:6,
   use_cpp = TRUE,
@@ -48,6 +49,14 @@ indistinguishable - an identifiability limit, not a tuning target.}
 \item{alpha}{Significance level for the quantitative-edge decisions
 (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
 calibrations (\code{mon_eps} for MON; the IIO axis's bootstrap p at 0.05).}
+
+\item{min_effect}{Practical-equivalence threshold (log-likelihood-ratio
+units) for the degenerate-null retention on the LCR-vs-DM edge: a
+significant rejection is overridden ONLY when both the observed LR and
+the null's 95th percentile fall below it - i.e. the effect and its
+reference scale are both negligible. Default 1 (matching
+\code{\link[=select_model_ll]{select_model_ll()}}); set 0 to disable the retention entirely. A
+judgment call, deliberately public.}
 
 \item{lr_boot_n_starts}{Multistart count for the LR-edge bootstrap null refits
 (default 2, matching the validated lattice run; keeps a single quant-edge

@@ -18,7 +18,12 @@ test_that(".impose_mask preserves masks without manufacturing MAR under MCAR", {
   expect_lt(abs(cor(th2, rowSums(is.na(m)))), 0.06)
 })
 
-test_that(".impose_mask preserves the direction of genuine MAR-by-ability", {
+test_that(".impose_mask preserves the direction of score-dependent missingness", {
+  # NOTE: masking here depends on latent theta, which is MNAR relative to the
+  # observed responses - deliberately, as a DIRECTION-PRESERVATION property
+  # check for the rank matching (the strongest dependence available). The
+  # genuinely-MAR anchor-half mechanism is exercised in
+  # inst/validation/missing_data_validation.R.
   set.seed(12); N <- 4000; J <- 8
   th <- rnorm(N)
   P <- stats::plogis(outer(th, seq(-1.5, 1.5, length.out = J), "-"))
@@ -77,4 +82,9 @@ test_that("quant edge completes on DM truth and reports its evidence", {
   expect_true(r$selected %in% c("UN", "MON", "IIO", "DM", "LCR", "RM"))
   expect_false(r$quant_edge_failed)
   expect_s3_class(r$quant$lcr_vs_dm, "qleqtest")
+  # a quantitative verdict must carry a completed RM stage (or the flag)
+  if (r$selected %in% c("LCR", "RM")) {
+    expect_false(isTRUE(r$quant$rm_stage_failed))
+    expect_false(is.null(r$quant$rm_vs_lcr))
+  }
 })

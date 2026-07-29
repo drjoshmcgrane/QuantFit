@@ -309,7 +309,7 @@
                                          use_cpp = use_cpp, seed = sd_(6000L)))
   out <- list(supports_quant = NA, selected = NA_character_,
               bridge_C = bridge_C, grain_grid = grain_grid,
-              lcr_vs_dm = NULL, rm_vs_lcr = NULL)
+              lcr_vs_dm = NULL, rm_vs_lcr = NULL, rm_stage_failed = FALSE)
   if (is.null(dm_bridge) || is.null(lcr_bridge)) return(out)
 
   # LCR vs DM at the bridge grain, with the same degenerate-null retention the
@@ -344,13 +344,17 @@
   profile_C <- grain_grid[pick]; lcr_best <- lcr_profile[[pick]]
   rm_fit <- ok("RM", fit_rm(data, verbose = FALSE))
   out$selected <- "LCR"; out$C <- profile_C; out$LCR <- lcr_best
-  if (is.null(rm_fit) || is.null(lcr_best)) return(out)
+  if (is.null(rm_fit) || is.null(lcr_best)) {
+    out$rm_stage_failed <- TRUE      # LCR verdict reflects the bridge test
+    return(out)                      # only; RM continuity was NOT assessed
+  }
   if (verbose) cat("Quantitative edge: RM vs LCR ...\n")
   rl <- tryCatch(rm_vs_lcr_test(data, rm_fit, lcr_best, profile_C, B = B,
            C_range = grain_grid, alpha = alpha, n_starts = boot_n_starts,
            use_cpp = use_cpp, observed_fits = lcr_profile, mc.cores = mc.cores,
            seed = sd_(8000L)), error = function(e) NULL)
   out$rm_vs_lcr <- rl
+  if (is.null(rl)) out$rm_stage_failed <- TRUE
   if (!is.null(rl)) {
     if (isTRUE(rl$available) && !is.na(rl$profiled_C)) out$C <- rl$profiled_C
     rm_pref <- if (!isTRUE(rl$available))
@@ -410,6 +414,13 @@
 #' @param alpha Significance level for the quantitative-edge decisions
 #'   (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
 #'   calibrations (`mon_eps` for MON; the IIO axis's bootstrap p at 0.05).
+#' @param min_effect Practical-equivalence threshold (log-likelihood-ratio
+#'   units) for the degenerate-null retention on the LCR-vs-DM edge: a
+#'   significant rejection is overridden ONLY when both the observed LR and
+#'   the null's 95th percentile fall below it - i.e. the effect and its
+#'   reference scale are both negligible. Default 1 (matching
+#'   [select_model_ll()]); set 0 to disable the retention entirely. A
+#'   judgment call, deliberately public.
 #' @param lr_boot_n_starts Multistart count for the LR-edge bootstrap null refits
 #'   (default 2, matching the validated lattice run; keeps a single quant-edge
 #'   dataset tractable).
@@ -437,7 +448,7 @@
 #'   [cc_bootstrap_null()] for the conjoint-cancellation route.
 #' @export
 select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
-                                mon_eps = 0.01, alpha = 0.05,
+                                mon_eps = 0.01, alpha = 0.05, min_effect = 1,
                                 lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                 use_cpp = TRUE,
                                 mc.cores = 1L, seed = NULL, verbose = FALSE) {
@@ -515,13 +526,20 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
              B = B, n_starts = n_starts, boot_n_starts = lr_boot_n_starts,
              alpha = alpha, use_cpp = use_cpp, mc.cores = mc.cores,
              seed = if (!is.null(seed)) seed + 2000L else NULL,
-             verbose = verbose), error = function(e) NULL)
+             min_effect = min_effect, verbose = verbose),
+             error = function(e) NULL)
     if (is.null(add) || is.na(add$supports_quant)) {
       # numerical failure, NOT evidence against quantity - flag it loudly
       # rather than letting DM stand as if the edge had tested and retained it
       warning("quantitative edge did not complete (bridge fits or LR ",
               "bootstrap failed); the DM verdict is the 2x2 ordinal call ",
               "only - quantitative structure was NOT assessed")
+      quant_edge_failed <- TRUE
+    }
+    if (isTRUE(add$rm_stage_failed)) {
+      warning("RM-vs-LCR stage did not complete (fit_rm or the comparison ",
+              "failed); a quantitative verdict reflects the LCR-vs-DM bridge ",
+              "test only - discrete-vs-continuous was NOT assessed")
       quant_edge_failed <- TRUE
     }
     if (isTRUE(add$supports_quant) && !is.na(add$selected)) {

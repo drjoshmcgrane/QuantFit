@@ -52,9 +52,10 @@ validate_data_any <- function(data, allow_na = FALSE) {
   # simulated persons - manufacturing ability-dependent missingness absent
   # from the data (audit 2026-07-28: induced r ~ -0.26 at 25% MCAR; mean-based
   # matching restores r ~ 0 while still preserving genuine score-dependent
-  # MAR). All-NA rows have mean NaN and sort last - their (full) masks land on
-  # the highest-scoring simulated rows; harmless, and such rows carry no
-  # likelihood contribution anyway.
+  # MAR). CAVEAT: all-NA rows have mean NaN and sort last, so their full masks
+  # land on the highest-scoring simulated rows - a systematic (if small) bias
+  # whenever fully-missing persons are retained; negligible at the validated
+  # J = 8 / 10-25% missingness regime, but not "harmless" in general.
   os <- order(rowMeans(obs, na.rm = TRUE))
   ss <- order(rowMeans(sim))
   m2 <- matrix(FALSE, nrow(sim), ncol(sim))

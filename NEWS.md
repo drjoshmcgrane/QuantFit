@@ -27,6 +27,12 @@ corrections:
   silently standing as DM.
 * New testthat coverage for the hybrid selector, the mask-transfer
   properties, and the masked-engine shape normaliser.
+* Follow-up review round: `rm_stage_failed` flags a quantitative verdict
+  whose RM-vs-LCR stage did not complete (previously LCR could be reported
+  with continuity unassessed and no signal); `min_effect` is now a public,
+  documented argument of `select_model_hybrid()` (was a hidden internal
+  default); the all-NA-row bias of mean-based mask matching is documented
+  as a caveat rather than called harmless.
 
 # QuantFit 0.3.2
 

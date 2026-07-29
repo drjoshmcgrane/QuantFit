@@ -10,3 +10,4 @@ src/*.so
 tests/testthat/_problems/
 QuantFit.Rcheck/
 *.tar.gz
+QuantFit_0.3.3.tgz
