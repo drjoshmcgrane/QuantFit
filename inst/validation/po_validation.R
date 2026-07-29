@@ -33,9 +33,14 @@ out   <- Sys.getenv("PO_OUT", "po_validation4_out"); dir.create(out, showWarning
 # the inference method marker, and the poset bootstrap depth; the skip-if-
 # exists resume check REFUSES to reuse a file whose method/SHA disagree with
 # the current build, so superseded results can never be silently recycled.
-SHA <- Sys.getenv("PO_SHA",
-  tryCatch(system("git rev-parse --short HEAD", intern = TRUE),
-           error = function(e) "unknown"))
+SHA <- Sys.getenv("PO_SHA", "")
+if (!nzchar(SHA)) {
+  SHA <- tryCatch(suppressWarnings(system("git rev-parse --short HEAD",
+           intern = TRUE, ignore.stderr = TRUE)), error = function(e) character(0))
+  if (length(SHA) != 1L || !nzchar(SHA))
+    stop("cannot determine the package SHA (not a git checkout?): set the ",
+         "PO_SHA environment variable explicitly")
+}
 METHOD <- "max-T-studentized-v4"
 stopifnot(is.function(QuantFit:::.poset_align))   # build actually carries v4
 

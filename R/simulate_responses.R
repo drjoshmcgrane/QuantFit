@@ -125,6 +125,11 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
     L <- matrix(stats::runif(n_classes * n_items, -4, 4), n_classes, n_items)
     if (model %in% c("MON", "DM")) L <- apply(L, 2L, sort)          # classes ordered
     if (model %in% c("IIO", "DM")) L <- t(apply(L, 1L, sort))       # items ordered
+    if (model %in% c("PO", "PO_ITEMS") && !is.null(po_margin) &&
+        (length(po_margin) != 1L || !is.finite(po_margin) ||
+         po_margin < 0 || po_margin >= 0.5))
+      stop("po_margin must be a single value in [0, 0.5); got ",
+           paste(po_margin, collapse = ","))
     if (model == "PO") {
       D <- .po_resolve_poset(poset, n_classes)
       # Rejection loop (TI&D's own device, cf. their LCR separation loop):
@@ -133,9 +138,6 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
       # be read as dominated by accident.
       if (item_order == "free") {
         m_req <- if (is.null(po_margin)) 0.05 else po_margin
-        if (m_req >= 0.5)
-          stop("po_margin must be < 0.5 (crossing depths are probability",
-               " masses); got ", m_req)
         found <- FALSE
         for (att in seq_len(5000L)) {
           L <- .po_assign(matrix(stats::runif(n_classes * n_items, -4, 4),

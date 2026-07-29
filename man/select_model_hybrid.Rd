@@ -60,9 +60,10 @@ reference scale are both negligible. Default 1 (matching
 judgment call, deliberately public.}
 
 \item{poset_B}{Bootstrap replicates for the poset refinement's aligned
-UN bootstrap (default \code{NULL} = \code{max(B, 99)}; the refinement never runs
-below 99). Raise to 499+ for a final analysis - the simultaneous
-quantile is a top-order statistic and deepens with B.}
+UN bootstrap (default \code{NULL} = \code{max(B, 99)}). The 99-replicate floor is
+ENFORCED - explicit smaller values are raised to 99. Raise to 499+ for a
+final analysis - the simultaneous quantile is a top-order statistic and
+deepens with B.}
 
 \item{lr_boot_n_starts}{Multistart count for the LR-edge bootstrap null refits
 (default 2, matching the validated lattice run; keeps a single quant-edge

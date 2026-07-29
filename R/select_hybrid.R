@@ -203,7 +203,10 @@
   # (1 - alpha/2) quantile of a max-deviation statistic, so B need not scale
   # with the pair count - but the top order statistic of B = 49 is thin, so
   # the refinement enforces its own floor of 99 replicates.
-  B_pos <- if (is.null(poset_B)) max(B, 99L) else as.integer(poset_B)
+  if (!is.null(poset_B) && (length(poset_B) != 1L || !is.finite(poset_B) ||
+                            poset_B < 1))
+    stop("poset_B must be a finite positive scalar")
+  B_pos <- if (is.null(poset_B)) max(B, 99L) else max(as.integer(poset_B), 99L)
   poly <- !is.matrix(fit0$item_probs)              # masked / polytomous engine
   sim_one <- function() {
     cls <- sample.int(C, n, replace = TRUE, prob = pc)
@@ -507,9 +510,10 @@
 #'   (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
 #'   calibrations (`mon_eps` for MON; the IIO axis's bootstrap p at 0.05).
 #' @param poset_B Bootstrap replicates for the poset refinement's aligned
-#'   UN bootstrap (default `NULL` = `max(B, 99)`; the refinement never runs
-#'   below 99). Raise to 499+ for a final analysis - the simultaneous
-#'   quantile is a top-order statistic and deepens with B.
+#'   UN bootstrap (default `NULL` = `max(B, 99)`). The 99-replicate floor is
+#'   ENFORCED - explicit smaller values are raised to 99. Raise to 499+ for a
+#'   final analysis - the simultaneous quantile is a top-order statistic and
+#'   deepens with B.
 #' @param min_effect Practical-equivalence threshold (log-likelihood-ratio
 #'   units) for the degenerate-null retention on the LCR-vs-DM edge: a
 #'   significant rejection is overridden ONLY when both the observed LR and

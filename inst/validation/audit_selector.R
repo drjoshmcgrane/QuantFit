@@ -25,15 +25,25 @@ models  <- c("UN","MON","IIO","DM","LCR","RM","PO")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
-SHA <- Sys.getenv("AUD_SHA",
-  tryCatch(system("git rev-parse --short HEAD", intern = TRUE),
-           error = function(e) "unknown"))
+SHA <- Sys.getenv("AUD_SHA", "")
+if (!nzchar(SHA)) {
+  SHA <- tryCatch(suppressWarnings(system("git rev-parse --short HEAD",
+           intern = TRUE, ignore.stderr = TRUE)), error = function(e) character(0))
+  if (length(SHA) != 1L || !nzchar(SHA))
+    stop("cannot determine the package SHA (not a git checkout?): set the ",
+         "AUD_SHA environment variable explicitly")
+}
 METHOD <- "max-T-studentized-v4"
 grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
 
 run <- function(k) {
   cs <- grid[k,]; f <- file.path(out, sprintf("%s_%s_%03d.csv", SEL, cs$model, cs$rep))
-  if (file.exists(f)) return(invisible())
+  if (file.exists(f)) {
+    prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
+    if (!is.null(prev) && identical(prev$method, METHOD) &&
+        identical(prev$sha, SHA)) return(invisible())
+    unlink(f)                      # stale method/build: regenerate
+  }
   d <- if (cs$model == "PO")
     simulate_responses("PO", n_persons=1500, n_items=n_items, n_classes=3,
                        poset="V", po_margin=0.10, seed=7000*cs$rep + 7L)

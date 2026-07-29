@@ -5,9 +5,14 @@
 suppressMessages(library(QuantFit))
 `%||%` <- function(a, b) if (is.null(a)) b else a
 out <- Sys.getenv("PODEEP_OUT", "po_deepB_out"); dir.create(out, showWarnings = FALSE)
-SHA <- Sys.getenv("PO_SHA",
-  tryCatch(system("git rev-parse --short HEAD", intern = TRUE),
-           error = function(e) "unknown"))
+SHA <- Sys.getenv("PO_SHA", "")
+if (!nzchar(SHA)) {
+  SHA <- tryCatch(suppressWarnings(system("git rev-parse --short HEAD",
+           intern = TRUE, ignore.stderr = TRUE)), error = function(e) character(0))
+  if (length(SHA) != 1L || !nzchar(SHA))
+    stop("cannot determine the package SHA (not a git checkout?): set the ",
+         "PO_SHA environment variable explicitly")
+}
 anchors <- expand.grid(truth = c("PO", "XANTI", "NEARANTI", "PO_ITEMS"),
                        rep = 1:8, stringsAsFactors = FALSE)
 gen <- function(tr, rep) {

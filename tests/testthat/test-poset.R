@@ -88,3 +88,38 @@ test_that("poset refinement handles polytomous data (categorical bootstrap)", {
                 c("partial", "antichain", "nontransitive_dominance"))
   expect_true(is.logical(r$class$transitive))
 })
+
+test_that("relation consistency logic: transitive, missing-edge, cycle", {
+  ok <- QuantFit:::.poset_refine   # just to assert internals exist
+  ro <- function(pr, nn) {
+    D <- matrix(FALSE, nn, nn)
+    if (nrow(pr)) D[cbind(pr$dominant, pr$dominated)] <- TRUE
+    R <- D
+    for (i in seq_len(nn)) R <- R | ((R %*% R) > 0)
+    if (any(diag(R))) return(FALSE)
+    all((R & !D) == FALSE)
+  }
+  expect_true(ro(data.frame(dominant = c(1, 1, 2), dominated = c(2, 3, 3)), 3))
+  expect_false(ro(data.frame(dominant = c(1, 2), dominated = c(2, 3)), 3))  # gap
+  expect_false(ro(data.frame(dominant = c(1, 2, 3), dominated = c(2, 3, 1)), 3))
+})
+
+test_that("poset_B floor of 99 is enforced against explicit smaller values", {
+  skip_on_cran()
+  d <- simulate_responses("PO", n_persons = 400, n_items = 6, n_classes = 3,
+                          poset = "V", po_margin = 0.05, seed = 61)
+  r <- QuantFit:::.poset_refine(d, C = 3L, B = 9L, n_starts = 2L,
+        use_cpp = TRUE, eps = 0.01, alpha = 0.05, seed = 5, sides = "class",
+        poset_B = 50L)
+  expect_gte(r$class$b_eff, 90L)   # floor raised 50 -> 99 (minus rare failures)
+  expect_error(QuantFit:::.poset_refine(d, C = 3L, B = 9L, n_starts = 2L,
+        use_cpp = TRUE, eps = 0.01, alpha = 0.05, seed = 5, sides = "class",
+        poset_B = -1), "finite positive")
+})
+
+test_that("po_margin range is validated", {
+  expect_error(simulate_responses("PO", n_persons = 100, n_items = 6,
+    n_classes = 3, poset = "V", po_margin = -0.1, seed = 1), "0, 0.5")
+  expect_error(simulate_responses("PO", n_persons = 100, n_items = 6,
+    n_classes = 3, poset = "V", po_margin = 0.7, seed = 1), "0, 0.5")
+})
