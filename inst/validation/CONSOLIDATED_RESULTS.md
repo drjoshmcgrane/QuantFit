@@ -65,13 +65,16 @@ pre-fix grid retained in `audit_k20_results/`.
 - **POST-FIX K=20 paired grid** (J=8, B=49): overall **hybrid 112/120 vs
   lattice 104/120**, McNemar 11:3 (p = 0.057); **IIO 18/20 vs 9/20**.
   Fix-stability: exactly ONE changed verdict per selector vs the pre-fix
-  same-seed grid (both RM improvements) - the audit fixes bound the impact
-  on all earlier grids at ~1/120, which is why the TI&D real-data table is
-  annotated rather than re-run.
-- **PO arm under the redesigned poset test** (J=8, margin 0.10, scored as
-  selected UN + class demonstration): **hybrid 20/20, lattice 19/20**;
-  18/20 correct V types, mean demonstrated pairs 1.9 (truth: 2). The old
-  machinery's J=8 floor (13/20) was an artifact of the invalid statistic.
+  same-seed grid (both RM improvements). This demonstrates stability FOR
+  THIS SIMULATION DESIGN (J = 8, N = 1500, C = 3 truths); it is evidence
+  about, not a bound on, other collections. The TI&D real-data table
+  (section 4) therefore remains annotated as PRE-FIX evidence; a full
+  re-run (~30 h uni Mac) is the outstanding decision, weighed against
+  this stability result.
+- **PO arm**: figures produced under the round-4 (pairwise-Bonferroni)
+  implementation are superseded; the arm is re-run under the round-6
+  max-T build with provenance canaries and its results replace this line
+  on completion.
 - Pre-fix reference numbers: overall 111/120 vs 103/120, IIO 18/20 vs 9/20,
   McNemar 9:0 p = 0.0039 on the IIO cell. DM boundary held: DM 10/10 vs
   7/10 for the removed double-cancellation variant (why the LR edge stays).
