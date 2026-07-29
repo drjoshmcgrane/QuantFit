@@ -12,7 +12,7 @@ simulate_responses(
   n_cat = 2L,
   class_probs = NULL,
   poset = "V",
-  po_margin = 0.05,
+  po_margin = NULL,
   item_order = c("free", "invariant"),
   seed = NULL
 )
@@ -45,9 +45,16 @@ incomparable) - or a \verb{n_classes x n_classes} logical matrix \code{D} with
 irreflexive and acyclic; transitive closure is taken). Must be neither a
 chain (use \code{"MON"}) nor an antichain (use \code{"UN"}).}
 
-\item{po_margin}{For \code{"PO"}/\code{"PO_ITEMS"}: minimum crossing depth, on the
-probability scale, required of every incomparable pair in both directions
-(rejection-sampled; default 0.05).}
+\item{po_margin}{Minimum crossing depth, on the probability scale, required
+of every incomparable pair in both directions. An EXPLICIT value is a
+hard requirement: generation STOPS if it cannot be met (no silent
+shortfall). \code{NULL} (default) means: \code{"PO"} uses 0.05 (always achievable
+by its rejection loop); \code{"PO"} with \code{item_order = "invariant"} targets
+0.12 and ACCEPTS its constructive best (recorded in
+\code{params$po_achieved}); \code{"PO_ITEMS"} accepts the constructive maximum for
+the geometry (also recorded) - its ceiling shrinks with items per level,
+so explicit requests at long tests typically error with the feasible
+maximum in the message.}
 
 \item{item_order}{For \code{model = "PO"} only: \code{"free"} (default) leaves the item
 side unconstrained, routing to the UN cell; \code{"invariant"} builds class

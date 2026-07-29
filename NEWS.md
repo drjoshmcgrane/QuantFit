@@ -4,6 +4,19 @@ Audit-response release (external statistical review, 2026-07-28/29). Three
 correctness fixes that change selector behaviour, honest-reporting
 corrections, and a full redesign of the partial-order refinement:
 
+* **Partial-order inference is a studentized simultaneous max-statistic
+  bootstrap** (review round 5): per-pair Bonferroni tails at alpha/(2m) were
+  unresolvable at practical B; the max-statistic construction calibrates one
+  (1 - alpha/2) quantile per family with per-direction studentization, and
+  the refinement enforces an internal floor of 99 bootstrap replicates. The
+  polytomous/masked bootstrap now samples CATEGORIES from the fitted
+  per-category probabilities (expected scores were previously fed to rbinom
+  as probabilities, breaking every polytomous refit); expected scores are
+  normalised to [0, 1] so eps lives on one scale. The demonstrated relation
+  is checked for acyclicity/transitive closure and reported via
+  `transitive` (pairwise eps-dominance need not form a poset). Every PO
+  generator now either meets an explicitly requested margin or STOPS;
+  `po_margin = NULL` (new default) accepts each generator's recorded best.
 * **Partial-order tests redesigned** (review round 4). The former
   "dominance-asymmetry" statistic algebraically collapsed to the absolute
   difference of side-average probabilities and carried no crossing

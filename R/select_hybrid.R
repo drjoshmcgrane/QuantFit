@@ -86,12 +86,14 @@
 # item_probs comes back as a J x C matrix from the dichotomous engine but as a
 # per-item list of class x category matrices from the masked/polytomous engine
 # (any NA in the data routes there). Normalise to the J x C expected-score
-# matrix - identical to P(X = 1) in the dichotomous case.
+# matrix on [0, 1] (expected score / (K - 1)) - identical to P(X = 1) in the
+# dichotomous case, and keeping every dominance tolerance (eps) on one scale
+# for polytomous items.
 .hyb_item_probs <- function(fit) {
   P <- fit$item_probs
   if (is.matrix(P)) return(P)
   do.call(rbind, lapply(P, function(m)
-    as.numeric(m %*% (seq_len(ncol(m)) - 1L))))
+    as.numeric(m %*% (seq_len(ncol(m)) - 1L)) / max(1L, ncol(m) - 1L)))
 }
 
 # --- POSET refinements (class side AND item side) ---------------------------
@@ -158,10 +160,12 @@
 #   ONE parametric bootstrap from the fitted UN table (B refits, class labels
 #   aligned back to the observed fit by best-permutation profile matching)
 #   yields the sampling distribution of every directed V. A pair is declared
-#   COMPARABLE iff, at Bonferroni-corrected one-sided levels alpha/(2m) over
-#   the m pairs of its side, the upper bound of one direction's violation is
-#   <= eps (dominance demonstrated to the axis tolerance) while the lower
-#   bound of the reverse is > eps (a real gap - two identical profiles are
+#   COMPARABLE iff, under SIMULTANEOUS max-statistic bootstrap bounds over all
+#   directed pairs of its side (one calibrated (1 - alpha/2) quantile of the
+#   max deviation per direction - resolvable at modest B, unlike per-pair
+#   Bonferroni tails), the upper bound of one direction's violation is <= eps
+#   (dominance demonstrated to the axis tolerance) while the lower bound of
+#   the reverse is > eps (a real gap - two identical profiles are
 #   incomparable, not mutually dominant).
 #
 # "partial" = at least one demonstrated pair; "antichain" = none demonstrated
@@ -195,39 +199,109 @@
   pc <- pmax(fit0$class_probs, 0); pc <- pc / sum(pc)
   J <- nrow(P0)
   if (!is.null(seed)) set.seed(seed)
-  boots <- vector("list", B)                       # ONE bootstrap, both sides
-  for (b in seq_len(B)) {
+  # Inferential resolution: the simultaneous construction below calibrates ONE
+  # (1 - alpha/2) quantile of a max-deviation statistic, so B need not scale
+  # with the pair count - but the top order statistic of B = 49 is thin, so
+  # the refinement enforces its own floor of 99 replicates.
+  B_pos <- max(B, 99L)
+  poly <- !is.matrix(fit0$item_probs)              # masked / polytomous engine
+  sim_one <- function() {
     cls <- sample.int(C, n, replace = TRUE, prob = pc)
-    sim <- matrix(stats::rbinom(n * J, 1, t(P0)[cls, , drop = FALSE]), n, J)
-    storage.mode(sim) <- "integer"
-    sim <- .impose_mask(sim, data)   # replicates share observed missingness
-    f <- tryCatch(refit_model_type("UN", sim, C, n_starts, use_cpp),
+    if (poly) {
+      # categorical sampling from the fitted per-category probabilities -
+      # expected scores are NOT probabilities and must never feed rbinom
+      sim <- matrix(0L, n, J)
+      for (j in seq_len(J)) {
+        Pm <- fit0$item_probs[[j]]                 # C x K categories
+        for (cc in seq_len(C)) {
+          who <- which(cls == cc)
+          if (length(who))
+            sim[who, j] <- sample.int(ncol(Pm), length(who), replace = TRUE,
+                                      prob = Pm[cc, ]) - 1L
+        }
+      }
+    } else {
+      sim <- matrix(stats::rbinom(n * J, 1, t(P0)[cls, , drop = FALSE]), n, J)
+      storage.mode(sim) <- "integer"
+    }
+    .impose_mask(sim, data)                        # share observed missingness
+  }
+  boots <- vector("list", B_pos)
+  for (b in seq_len(B_pos)) {
+    f <- tryCatch(refit_model_type("UN", sim_one(), C, n_starts, use_cpp),
                   error = function(e) NULL)
     boots[[b]] <- if (is.null(f)) NULL else .poset_align(.hyb_item_probs(f), P0)
   }
   boots <- Filter(Negate(is.null), boots)
   b_eff <- length(boots)
-  if (b_eff < max(20L, B %/% 2L))
-    stop("poset refinement: only ", b_eff, "/", B, " bootstrap UN refits ",
+  if (b_eff < max(20L, B_pos %/% 2L))
+    stop("poset refinement: only ", b_eff, "/", B_pos, " bootstrap UN refits ",
          "succeeded - refusing to report a poset verdict from a broken ",
          "reference distribution")
+  # SIMULTANEOUS STUDENTIZED MAX-STATISTIC BOUNDS (2026-07-29 round 5;
+  # replaces per-pair Bonferroni tails, which finite B cannot resolve once the
+  # pair count is large): with Vhat the observed directed violation masses,
+  # V^(b) their aligned bootstrap replicates and s_k each direction's
+  # bootstrap sd,
+  #   u* = q_{1-alpha/2} of max_k (V^(b)_k - Vhat_k) / s_k
+  #   l* = q_{1-alpha/2} of max_k (Vhat_k - V^(b)_k) / s_k
+  # give simultaneous bounds Vhat_k + u* s_k and Vhat_k - l* s_k for the whole
+  # family at once. x-dominates-y is DEMONSTRATED iff
+  #   Vhat_xy + u* s_xy <= eps  (violation of "x >= y" excluded to tolerance)
+  #   Vhat_yx - l* s_yx >  eps  (the reverse direction carries a real gap).
+  # One calibrated quantile per family, resolvable at B ~ 99 regardless of m;
+  # studentization stops loose (crossing) directions inflating the bound for
+  # tight (dominated) ones.
   decide_side <- function(idx, viol) {
     m <- nrow(idx)
-    a2 <- alpha / (2 * m)                          # Bonferroni, one-sided
+    # collect observed and bootstrap V for all 2m directed pairs
+    vhat <- numeric(2L * m)
+    for (k in seq_len(m)) {
+      vhat[2L * k - 1L] <- viol(P0, idx[k, 1], idx[k, 2])
+      vhat[2L * k]      <- viol(P0, idx[k, 2], idx[k, 1])
+    }
+    Vb <- matrix(0, b_eff, 2L * m)
+    for (b in seq_len(b_eff)) {
+      Pb <- boots[[b]]
+      for (k in seq_len(m)) {
+        Vb[b, 2L * k - 1L] <- viol(Pb, idx[k, 1], idx[k, 2])
+        Vb[b, 2L * k]      <- viol(Pb, idx[k, 2], idx[k, 1])
+      }
+    }
+    # STUDENTIZED max-statistic: per-direction bootstrap scale, one
+    # simultaneous quantile. Without studentization the loose (crossing)
+    # directions inflate the max and destroy power for the tight (dominated)
+    # ones; with it each direction gets a bound proportional to its own
+    # sampling noise. Zero-variance directions (violation identically 0
+    # across refits) get a floor so the bound collapses to vhat itself.
+    sk <- pmax(apply(Vb, 2L, stats::sd), 1e-6)
+    dev <- sweep(sweep(Vb, 2L, vhat, "-"), 2L, sk, "/")
+    u_q <- stats::quantile(apply(dev,  1L, max), 1 - alpha / 2, names = FALSE)
+    l_q <- stats::quantile(apply(-dev, 1L, max), 1 - alpha / 2, names = FALSE)
+    up <- vhat + u_q * sk                          # simultaneous upper bounds
+    lo <- vhat - l_q * sk                          # simultaneous lower bounds
     pr <- data.frame(dominant = integer(0), dominated = integer(0))
     for (k in seq_len(m)) {
       x <- idx[k, 1]; y <- idx[k, 2]
-      vxy <- vapply(boots, function(P) viol(P, x, y), numeric(1))
-      vyx <- vapply(boots, function(P) viol(P, y, x), numeric(1))
-      x_dom <- stats::quantile(vxy, 1 - a2, names = FALSE) <= eps &&
-               stats::quantile(vyx, a2,     names = FALSE) >  eps
-      y_dom <- stats::quantile(vyx, 1 - a2, names = FALSE) <= eps &&
-               stats::quantile(vxy, a2,     names = FALSE) >  eps
+      x_dom <- up[2L * k - 1L] <= eps && lo[2L * k] > eps
+      y_dom <- up[2L * k] <= eps && lo[2L * k - 1L] > eps
       if (xor(x_dom, y_dom))
         pr <- rbind(pr, data.frame(dominant = if (x_dom) x else y,
                                    dominated = if (x_dom) y else x))
     }
     pr
+  }
+  # The demonstrated relation is PAIRWISE eps-dominance, which need not be
+  # transitive; verify it assembles into a strict partial order (acyclic and
+  # transitively closed within the demonstrated set) and REPORT the check
+  # instead of assuming it.
+  relation_ok <- function(pr, nn) {
+    if (!nrow(pr)) return(TRUE)
+    D <- matrix(FALSE, nn, nn); D[cbind(pr$dominant, pr$dominated)] <- TRUE
+    R <- D
+    for (i in seq_len(nn)) R <- R | ((R %*% R) > 0)  # transitive closure
+    if (any(diag(R))) return(FALSE)                  # cycle
+    all(D[R]) || all((R & !D) == FALSE)              # closure adds no edge
   }
   out <- list()
   if ("class" %in% sides) {
@@ -237,17 +311,18 @@
     D <- matrix(FALSE, C, C)
     if (nrow(pr)) D[cbind(pr$dominant, pr$dominated)] <- TRUE
     shape <- if (nrow(pr) >= 1L) "partial" else "antichain"
+    tr_ok <- relation_ok(pr, C)
     out$class <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
-      b_eff = b_eff, eps = eps, shape = shape,
-      type = if (identical(shape, "partial")) .class_poset_type(D)
-             else NA_character_)
+      b_eff = b_eff, eps = eps, shape = shape, transitive = tr_ok,
+      type = if (identical(shape, "partial") && tr_ok)
+        .class_poset_type(D) else NA_character_)
   }
   if ("item" %in% sides) {
     idx <- t(utils::combn(J, 2L))
     viol <- function(P, x, y) mean(pmax(0, P[y, ] - P[x, ]))   # V(x >= y)
     pr <- decide_side(idx, viol)
     out$item <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
-      b_eff = b_eff, eps = eps,
+      b_eff = b_eff, eps = eps, transitive = relation_ok(pr, J),
       shape = if (nrow(pr) >= 1L) "partial" else "antichain")
   }
   out
@@ -451,10 +526,10 @@
 #' @return A list with `selected`, `interpretation`, `scale`, `n_classes`, the
 #'   two axis results (`iio`, `mon`), `poset` (partial-order refinements of the
 #'   ordinal verdict: `$class` and/or `$item`, each with `shape` ("partial"
-#'   iff at least one dominance pair is DEMONSTRATED at Bonferroni-corrected
-#'   one-sided levels from an aligned parametric bootstrap of the fitted UN
-#'   table; "antichain" records a failure to demonstrate any pair, not a
-#'   certified absence), `comparable` (demonstrated pair count), `total`,
+#'   iff at least one dominance pair is DEMONSTRATED under simultaneous
+#'   max-statistic bootstrap bounds from an aligned parametric bootstrap of
+#'   the fitted UN table (internal floor of 99 replicates); "antichain"
+#'   records a failure to demonstrate any pair, not a certified absence), `comparable` (demonstrated pair count), `total`,
 #'   `pairs` (the demonstrated dominances), `b_eff` (successful bootstrap
 #'   refits), `eps` (the axis-calibrated tolerance used), and for the C = 3
 #'   class side a descriptive isomorphism `type` of "single"/"V"/"Lambda";
@@ -524,12 +599,12 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
     notes <- character(0)
     if (!is.null(poset$class) && identical(poset$class$shape, "partial"))
       notes <- c(notes, paste0(poset$class$comparable, " of ", poset$class$total,
-        " class pairs demonstrated (Bonferroni ", signif(alpha, 2), ", B_eff ",
+        " class pairs demonstrated (simultaneous ", signif(alpha, 2), ", B_eff ",
         poset$class$b_eff, ")",
         if (!is.na(poset$class$type)) paste0(" (", poset$class$type, ")") else ""))
     if (!is.null(poset$item) && identical(poset$item$shape, "partial"))
       notes <- c(notes, paste0(poset$item$comparable, " of ", poset$item$total,
-        " item pairs demonstrated (Bonferroni ", signif(alpha, 2), ", B_eff ",
+        " item pairs demonstrated (simultaneous ", signif(alpha, 2), ", B_eff ",
         poset$item$b_eff, ")"))
     if (length(notes))
       interpretation <- paste0(interpretation, " + PARTIAL ORDER [",

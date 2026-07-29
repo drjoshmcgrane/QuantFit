@@ -74,3 +74,16 @@ test_that("PO free records its achieved crossing margin", {
   expect_gte(p$po_achieved, 0.05)
   expect_false(is.null(p$poset))
 })
+
+test_that("poset refinement handles polytomous data (categorical bootstrap)", {
+  skip_on_cran()
+  # pre-fix defect: expected scores were fed to rbinom as probabilities -
+  # every polytomous bootstrap refit failed (0/29) and the refinement refused
+  d <- simulate_responses("PO", n_persons = 800, n_items = 6, n_classes = 3,
+                          n_cat = 4, poset = "V", po_margin = 0.05, seed = 41)
+  r <- QuantFit:::.poset_refine(d, C = 3L, B = 29L, n_starts = 2L,
+        use_cpp = TRUE, eps = 0.01, alpha = 0.05, seed = 5, sides = "class")
+  expect_true(r$class$b_eff >= 50L)   # internal floor is 99; most must succeed
+  expect_true(r$class$shape %in% c("partial", "antichain"))
+  expect_true(is.logical(r$class$transitive))
+})

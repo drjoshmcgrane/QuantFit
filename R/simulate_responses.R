@@ -69,9 +69,16 @@
 #'   `D[a, b] = TRUE` meaning class `a` dominates class `b` (must be
 #'   irreflexive and acyclic; transitive closure is taken). Must be neither a
 #'   chain (use `"MON"`) nor an antichain (use `"UN"`).
-#' @param po_margin For `"PO"`/`"PO_ITEMS"`: minimum crossing depth, on the
-#'   probability scale, required of every incomparable pair in both directions
-#'   (rejection-sampled; default 0.05).
+#' @param po_margin Minimum crossing depth, on the probability scale, required
+#'   of every incomparable pair in both directions. An EXPLICIT value is a
+#'   hard requirement: generation STOPS if it cannot be met (no silent
+#'   shortfall). `NULL` (default) means: `"PO"` uses 0.05 (always achievable
+#'   by its rejection loop); `"PO"` with `item_order = "invariant"` targets
+#'   0.12 and ACCEPTS its constructive best (recorded in
+#'   `params$po_achieved`); `"PO_ITEMS"` accepts the constructive maximum for
+#'   the geometry (also recorded) - its ceiling shrinks with items per level,
+#'   so explicit requests at long tests typically error with the feasible
+#'   maximum in the message.
 #' @param item_order For `model = "PO"` only: `"free"` (default) leaves the item
 #'   side unconstrained, routing to the UN cell; `"invariant"` builds class
 #'   lines over one shared sorted item spine (`L = a_c s_j + b_c`, `a_c > 0`),
@@ -98,7 +105,7 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
                                          "PO", "PO_ITEMS"),
                                n_persons = 500, n_items = 10, n_classes = 3,
                                n_cat = 2L, class_probs = NULL,
-                               poset = "V", po_margin = 0.05,
+                               poset = "V", po_margin = NULL,
                                item_order = c("free", "invariant"),
                                seed = NULL) {
   model <- match.arg(model); item_order <- match.arg(item_order)
@@ -125,10 +132,11 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
       # at least po_margin on the probability scale, so no incomparable pair can
       # be read as dominated by accident.
       if (item_order == "free") {
+        m_req <- if (is.null(po_margin)) 0.05 else po_margin
         repeat {
           L <- .po_assign(matrix(stats::runif(n_classes * n_items, -4, 4),
                                  n_classes, n_items), D)
-          if (.po_crossing_ok(stats::plogis(L), D, po_margin)) break
+          if (.po_crossing_ok(stats::plogis(L), D, m_req)) break
         }
       } else {
         # item_order = "invariant": class lines over one shared sorted item
@@ -149,7 +157,7 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
         # construction, and each incomparable pair's crossing point is placed
         # deliberately inside the spine. Capped best-of loop; achieved margin
         # recorded, warning if it falls short (mirrors PO_ITEMS).
-        m_eff <- max(po_margin, 0.12)
+        m_eff <- if (is.null(po_margin)) 0.12 else po_margin
         n_dom <- rowSums(D)                     # how many classes each dominates
         best_L <- NULL; best_m <- -Inf
         inc_pairs <- which(upper.tri(D) & !(D | t(D)), arr.ind = TRUE)
@@ -197,10 +205,13 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
           if (best_m >= m_eff) break
         }
         L <- best_L
-        if (best_m < m_eff)
-          warning(sprintf(
-            "PO invariant: achieved crossing margin %.4f < target %.2f (best of 400 draws)",
-            best_m, m_eff))
+        if (!is.null(po_margin) && best_m < m_eff)
+          stop(sprintf(
+            paste0("PO invariant: requested po_margin %.3f is not achievable ",
+                   "(best of 400 constructive draws: %.4f). Request <= %.3f ",
+                   "or pass po_margin = NULL to accept the constructive ",
+                   "best (recorded in params$po_achieved)."),
+            m_eff, best_m, best_m))
       }
     }
     if (model == "PO_ITEMS") {
@@ -265,7 +276,7 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
           Lc <- matrix(theta, n_classes, n_items) + E
           mc <- .po_item_min_crossing(stats::plogis(Lc), Di)
           if (mc > best_m) { best_m <- mc; best <- Lc }
-          if (mc >= po_margin) break
+          if (mc >= (if (is.null(po_margin)) Inf else po_margin)) break
         }
         L <- best
       }
@@ -276,7 +287,7 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
           stop("PO_ITEMS: internal error - comparable pair (", j, ",", k,
                ") not dominated exactly")
       achieved <- .po_item_min_crossing(Pchk, Di)
-      if (is.finite(achieved) && achieved < po_margin)
+      if (!is.null(po_margin) && is.finite(achieved) && achieved < po_margin)
         stop("PO_ITEMS: requested po_margin ", po_margin, " is not achievable",
              " at J = ", n_items, ", C = ", n_classes, " (achieved ",
              signif(achieved, 3), "). The crossing-margin ceiling shrinks",
