@@ -23,11 +23,21 @@
 #                         deeply, averages differ, zero dominance - SIZE for
 #                         exactly the case that broke v2
 suppressMessages(library(QuantFit))
+`%||%` <- function(a, b) if (is.null(a)) b else a
 K     <- as.integer(Sys.getenv("PO_K", "8"))
 NR    <- as.integer(Sys.getenv("PO_N", "1500"))
 B     <- as.integer(Sys.getenv("PO_B", "49"))
 cores <- as.integer(Sys.getenv("PO_CORES", "8"))
-out   <- Sys.getenv("PO_OUT", "po_validation3_out"); dir.create(out, showWarnings = FALSE)
+out   <- Sys.getenv("PO_OUT", "po_validation4_out"); dir.create(out, showWarnings = FALSE)
+# PROVENANCE CANARIES (review round 6): every row records the package git SHA,
+# the inference method marker, and the poset bootstrap depth; the skip-if-
+# exists resume check REFUSES to reuse a file whose method/SHA disagree with
+# the current build, so superseded results can never be silently recycled.
+SHA <- Sys.getenv("PO_SHA",
+  tryCatch(system("git rev-parse --short HEAD", intern = TRUE),
+           error = function(e) "unknown"))
+METHOD <- "max-T-studentized-v4"
+stopifnot(is.function(QuantFit:::.poset_align))   # build actually carries v4
 
 KX <- as.integer(Sys.getenv("PO_KX", "100"))             # antichain-size reps
 grid <- rbind(
@@ -85,8 +95,13 @@ gen <- function(tr, C, m, nI, rep) {
     simulate_responses(tr, n_persons = NR, n_items = nI, n_classes = C,
                        seed = sd))
 }
-pop_pairs <- function(L, eps = 0.01) {
-  P <- stats::plogis(L); C <- nrow(P); J <- ncol(P); cl <- 0L; it <- 0L
+pop_pairs <- function(L, eps = 0.01, tau = 0) {
+  # population table on the SAME estimand the test uses: normalised expected
+  # scores sum_k plogis(L - tau_k) / (K - 1); dichotomous (tau = 0) reduces
+  # to plogis(L)
+  m <- length(tau)
+  P <- Reduce(`+`, lapply(tau, function(tk) stats::plogis(L - tk))) / max(1L, m)
+  C <- nrow(P); J <- ncol(P); cl <- 0L; it <- 0L
   for (a in seq_len(C - 1L)) for (b in (a + 1L):C) {
     ab <- mean(pmax(0, P[b, ] - P[a, ])) <= eps
     ba <- mean(pmax(0, P[a, ] - P[b, ])) <= eps
@@ -103,9 +118,15 @@ run <- function(k) {
   f <- file.path(out, sprintf("v_%s_C%d_%s_%02d_%02d.csv", cs$truth, cs$C,
                               ifelse(is.na(cs$margin), "na", cs$margin),
                               cs$nI, cs$rep))
-  if (file.exists(f)) return(invisible())
+  if (file.exists(f)) {
+    prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
+    if (!is.null(prev) && identical(prev$method, METHOD) &&
+        identical(prev$sha, SHA)) return(invisible())
+    unlink(f)                       # stale schema/method/build: regenerate
+  }
   d <- gen(cs$truth, cs$C, cs$margin, cs$nI, cs$rep)
-  pp <- pop_pairs(attr(d, "params")$L)
+  pp <- pop_pairs(attr(d, "params")$L,
+                  tau = attr(d, "params")$tau %||% 0)
   ach <- attr(d, "params")$po_achieved
   t0 <- proc.time()[3]
   r <- tryCatch(suppressWarnings(select_model_hybrid(d, n_classes = cs$C,
@@ -114,7 +135,10 @@ run <- function(k) {
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   pstr <- function(x) if (is.null(x) || !nrow(x$pairs)) "" else
     paste(sprintf("%d>%d", x$pairs$dominant, x$pairs$dominated), collapse = ";")
-  write.csv(data.frame(truth = cs$truth, C = cs$C, margin = cs$margin,
+  write.csv(data.frame(method = METHOD, sha = SHA,
+    poset_b = if (!is.null(r$poset$class)) g(r$poset$class, "b_eff") else
+              g(r$poset$item, "b_eff"),
+    truth = cs$truth, C = cs$C, margin = cs$margin,
     nI = cs$nI, rep = cs$rep,
     selected = if (is.null(r)) NA else r$selected,
     class_shape = g(r$poset$class, "shape"),

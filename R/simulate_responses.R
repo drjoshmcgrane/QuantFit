@@ -133,11 +133,19 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
       # be read as dominated by accident.
       if (item_order == "free") {
         m_req <- if (is.null(po_margin)) 0.05 else po_margin
-        repeat {
+        if (m_req >= 0.5)
+          stop("po_margin must be < 0.5 (crossing depths are probability",
+               " masses); got ", m_req)
+        found <- FALSE
+        for (att in seq_len(5000L)) {
           L <- .po_assign(matrix(stats::runif(n_classes * n_items, -4, 4),
                                  n_classes, n_items), D)
-          if (.po_crossing_ok(stats::plogis(L), D, m_req)) break
+          if (.po_crossing_ok(stats::plogis(L), D, m_req)) { found <- TRUE; break }
         }
+        if (!found)
+          stop("PO: no draw met po_margin = ", m_req, " within 5000 attempts",
+               " (J = ", n_items, ", C = ", n_classes, "); request a smaller",
+               " margin")
       } else {
         # item_order = "invariant": class lines over one shared sorted item
         # spine, L[c, j] = a_c * s_j + b_c with a_c > 0, so each row is sorted

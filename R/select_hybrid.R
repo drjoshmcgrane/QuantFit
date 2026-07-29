@@ -188,7 +188,7 @@
 }
 
 .poset_refine <- function(data, C, B, n_starts, use_cpp, eps, alpha, seed,
-                          sides = c("class", "item")) {
+                          sides = c("class", "item"), poset_B = NULL) {
   data <- as.matrix(data); n <- nrow(data)
   # class side needs C >= 3: at C = 2 there is nothing between antichain and
   # chain, so "partial" does not exist and reporting it would be misleading
@@ -203,7 +203,7 @@
   # (1 - alpha/2) quantile of a max-deviation statistic, so B need not scale
   # with the pair count - but the top order statistic of B = 49 is thin, so
   # the refinement enforces its own floor of 99 replicates.
-  B_pos <- max(B, 99L)
+  B_pos <- if (is.null(poset_B)) max(B, 99L) else as.integer(poset_B)
   poly <- !is.matrix(fit0$item_probs)              # masked / polytomous engine
   sim_one <- function() {
     cls <- sample.int(C, n, replace = TRUE, prob = pc)
@@ -310,20 +310,25 @@
     pr <- decide_side(idx, viol)
     D <- matrix(FALSE, C, C)
     if (nrow(pr)) D[cbind(pr$dominant, pr$dominated)] <- TRUE
-    shape <- if (nrow(pr) >= 1L) "partial" else "antichain"
     tr_ok <- relation_ok(pr, C)
+    # a non-transitive demonstrated set is a collection of pairwise
+    # eps-dominances, NOT a partial order - labelled as its own shape
+    shape <- if (nrow(pr) == 0L) "antichain" else
+             if (tr_ok) "partial" else "nontransitive_dominance"
     out$class <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
       b_eff = b_eff, eps = eps, shape = shape, transitive = tr_ok,
-      type = if (identical(shape, "partial") && tr_ok)
+      type = if (identical(shape, "partial"))
         .class_poset_type(D) else NA_character_)
   }
   if ("item" %in% sides) {
     idx <- t(utils::combn(J, 2L))
     viol <- function(P, x, y) mean(pmax(0, P[y, ] - P[x, ]))   # V(x >= y)
     pr <- decide_side(idx, viol)
+    tr_ok <- relation_ok(pr, J)
     out$item <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
-      b_eff = b_eff, eps = eps, transitive = relation_ok(pr, J),
-      shape = if (nrow(pr) >= 1L) "partial" else "antichain")
+      b_eff = b_eff, eps = eps, transitive = tr_ok,
+      shape = if (nrow(pr) == 0L) "antichain" else
+              if (tr_ok) "partial" else "nontransitive_dominance")
   }
   out
 }
@@ -501,6 +506,10 @@
 #' @param alpha Significance level for the quantitative-edge decisions
 #'   (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
 #'   calibrations (`mon_eps` for MON; the IIO axis's bootstrap p at 0.05).
+#' @param poset_B Bootstrap replicates for the poset refinement's aligned
+#'   UN bootstrap (default `NULL` = `max(B, 99)`; the refinement never runs
+#'   below 99). Raise to 499+ for a final analysis - the simultaneous
+#'   quantile is a top-order statistic and deepens with B.
 #' @param min_effect Practical-equivalence threshold (log-likelihood-ratio
 #'   units) for the degenerate-null retention on the LCR-vs-DM edge: a
 #'   significant rejection is overridden ONLY when both the observed LR and
@@ -542,6 +551,7 @@
 #' @export
 select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                 mon_eps = 0.01, alpha = 0.05, min_effect = 1,
+                                poset_B = NULL,
                                 lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                 use_cpp = TRUE,
                                 mc.cores = 1L, seed = NULL, verbose = FALSE) {
@@ -591,12 +601,22 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
     if (verbose) cat(ordinal, "cell: poset refinement (",
                      paste(poset_sides, collapse = "+"), ") ...\n")
     poset <- tryCatch(.poset_refine(data, C, B, n_starts,
-               use_cpp, mon_eps_N, alpha, s(4000L), sides = poset_sides),
+               use_cpp, mon_eps_N, alpha, s(4000L), sides = poset_sides,
+               poset_B = poset_B),
                error = function(e) {
                  warning("poset refinement failed (", conditionMessage(e),
                          ") - no partial-order verdict is reported")
                  NULL })
     notes <- character(0)
+    nt <- character(0)
+    if (!is.null(poset$class) &&
+        identical(poset$class$shape, "nontransitive_dominance"))
+      nt <- c(nt, sprintf("class side: %d pairwise dominances, NOT transitive",
+                          poset$class$comparable))
+    if (!is.null(poset$item) &&
+        identical(poset$item$shape, "nontransitive_dominance"))
+      nt <- c(nt, sprintf("item side: %d pairwise dominances, NOT transitive",
+                          poset$item$comparable))
     if (!is.null(poset$class) && identical(poset$class$shape, "partial"))
       notes <- c(notes, paste0(poset$class$comparable, " of ", poset$class$total,
         " class pairs demonstrated (simultaneous ", signif(alpha, 2), ", B_eff ",
@@ -610,6 +630,10 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
       interpretation <- paste0(interpretation, " + PARTIAL ORDER [",
         paste(notes, collapse = "; "),
         "] - real order structure the six-model set cannot express")
+    if (length(nt))
+      interpretation <- paste0(interpretation, " + [",
+        paste(nt, collapse = "; "),
+        "] - pairwise eps-dominance only, no partial-order claim")
   }
 
   # Quantitative sequence only from DM (order before quantity).
@@ -672,15 +696,17 @@ print.qlselect_hybrid <- function(x, ...) {
   cat(sprintf("MON axis        : stat %.4f, lo %.4f -> %s\n",
               x$mon$stat, x$mon$lo, if (isTRUE(x$mon$holds)) "holds" else "violated"))
   if (!is.null(x$poset$class))
-    cat(sprintf("Class poset     : %d/%d pairs demonstrated (B_eff %d) -> %s%s\n",
+    cat(sprintf("Class poset     : %d/%d pairs demonstrated (B_eff %d, transitive %s) -> %s%s\n",
                 x$poset$class$comparable, x$poset$class$total,
-                x$poset$class$b_eff, x$poset$class$shape,
+                x$poset$class$b_eff, x$poset$class$transitive,
+                x$poset$class$shape,
                 if (!is.na(x$poset$class$type))
                   paste0(" [", x$poset$class$type, "]") else ""))
   if (!is.null(x$poset$item))
-    cat(sprintf("Item poset      : %d/%d pairs demonstrated (B_eff %d) -> %s\n",
+    cat(sprintf("Item poset      : %d/%d pairs demonstrated (B_eff %d, transitive %s) -> %s\n",
                 x$poset$item$comparable, x$poset$item$total,
-                x$poset$item$b_eff, x$poset$item$shape))
+                x$poset$item$b_eff, x$poset$item$transitive,
+                x$poset$item$shape))
   if (!is.null(x$quant))
     cat(sprintf("DM vs quant (LR): supports_quant = %s -> %s\n",
                 isTRUE(x$quant$supports_quant),

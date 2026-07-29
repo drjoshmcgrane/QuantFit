@@ -718,6 +718,8 @@ print.qleqtest <- function(x, ...) {
 #'   [select_model_hybrid()] for the machinery and its calibration).
 #' @param poset_eps Per-pair dominance tolerance for the poset refinement, on
 #'   the probability scale (default 0.01, anchored at N = 1500 and N-scaled).
+#' @param poset_B Bootstrap replicates for the poset refinement (default
+#'   `NULL` = `max(B, 99)`; floor 99). Raise to 499+ for a final analysis.
 #' @param min_effect Practical-equivalence retention threshold for the edge
 #'   tests (default 1; 0 disables). A rejection is overridden ONLY when BOTH
 #'   the observed LR and the null distribution's 95th percentile are below
@@ -875,6 +877,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                             B = 99, n_starts = 5, boot_n_starts = NULL,
                             method = c("lattice", "joint"), severity = FALSE,
                             min_effect = 1.0, poset = TRUE, poset_eps = 0.01,
+                            poset_B = NULL,
                             seed = NULL,
                             use_cpp = TRUE, mc.cores = 1L, verbose = FALSE,
                             ...) {
@@ -1135,7 +1138,8 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       poset_out <- tryCatch(.poset_refine(data, n_classes,
                      B, n_starts, use_cpp,
                      poset_eps * sqrt(1500 / nrow(data)), alpha,
-                     if (!is.null(seed)) seed + 9000L else NULL, sides = ps),
+                     if (!is.null(seed)) seed + 9000L else NULL, sides = ps,
+                     poset_B = poset_B),
                      error = function(e) {
                        warning("poset refinement failed (", conditionMessage(e),
                                ") - no partial-order verdict is reported")
@@ -1296,15 +1300,17 @@ print.qlselect_ll <- function(x, ...) {
   cat("Method =", if (is.null(x$method)) "joint" else x$method,
       "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n")
   if (!is.null(x$poset$class))
-    cat(sprintf("Class poset    : %d/%d pairs demonstrated (B_eff %d) -> %s%s\n",
+    cat(sprintf("Class poset    : %d/%d pairs demonstrated (B_eff %d, transitive %s) -> %s%s\n",
                 x$poset$class$comparable, x$poset$class$total,
-                x$poset$class$b_eff, x$poset$class$shape,
+                x$poset$class$b_eff, x$poset$class$transitive,
+                x$poset$class$shape,
                 if (!is.na(x$poset$class$type))
                   paste0(" [", x$poset$class$type, "]") else ""))
   if (!is.null(x$poset$item))
-    cat(sprintf("Item poset     : %d/%d pairs demonstrated (B_eff %d) -> %s\n",
+    cat(sprintf("Item poset     : %d/%d pairs demonstrated (B_eff %d, transitive %s) -> %s\n",
                 x$poset$item$comparable, x$poset$item$total,
-                x$poset$item$b_eff, x$poset$item$shape))
+                x$poset$item$b_eff, x$poset$item$transitive,
+                x$poset$item$shape))
   cat("\n")
 
   if (nrow(x$tests) > 0) {

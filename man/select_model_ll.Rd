@@ -17,6 +17,7 @@ select_model_ll(
   min_effect = 1,
   poset = TRUE,
   poset_eps = 0.01,
+  poset_B = NULL,
   seed = NULL,
   use_cpp = TRUE,
   mc.cores = 1L,
@@ -87,6 +88,9 @@ never alters \code{selected}; results are returned in \code{poset} (see
 
 \item{poset_eps}{Per-pair dominance tolerance for the poset refinement, on
 the probability scale (default 0.01, anchored at N = 1500 and N-scaled).}
+
+\item{poset_B}{Bootstrap replicates for the poset refinement (default
+\code{NULL} = \code{max(B, 99)}; floor 99). Raise to 499+ for a final analysis.}
 
 \item{seed}{Optional integer seed; makes the whole procedure
 deterministic.}

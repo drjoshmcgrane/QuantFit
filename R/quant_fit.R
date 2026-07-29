@@ -286,9 +286,17 @@ print.quantverdict <- function(x, ...) {
                   ps$class$comparable, ps$class$total,
                   if (!is.na(ps$class$type))
                     paste0(" [", ps$class$type, "]") else ""))
+    if (!is.null(ps$class) &&
+        identical(ps$class$shape, "nontransitive_dominance"))
+      cat(sprintf("       class side: %d pairwise dominances (NOT transitive - no partial-order claim)\n",
+                  ps$class$comparable))
     if (!is.null(ps$item) && identical(ps$item$shape, "partial"))
       cat(sprintf("       item partial order : %d/%d pairs demonstrated\n",
                   ps$item$comparable, ps$item$total))
+    if (!is.null(ps$item) &&
+        identical(ps$item$shape, "nontransitive_dominance"))
+      cat(sprintf("       item side: %d pairwise dominances (NOT transitive - no partial-order claim)\n",
+                  ps$item$comparable))
   } else cat("       unavailable:", x$lc$msg, "\n")
 
   cat("[CC]   Cancellation checks vs Rasch bootstrap null (Student & Read)\n")

@@ -25,6 +25,10 @@ models  <- c("UN","MON","IIO","DM","LCR","RM","PO")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
+SHA <- Sys.getenv("AUD_SHA",
+  tryCatch(system("git rev-parse --short HEAD", intern = TRUE),
+           error = function(e) "unknown"))
+METHOD <- "max-T-studentized-v4"
 grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
 
 run <- function(k) {
@@ -45,7 +49,8 @@ run <- function(k) {
     error=function(e) NULL)
   sel <- if (is.null(r)) NA_character_ else r$selected
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
-  write.csv(data.frame(selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
+  write.csv(data.frame(method=METHOD, sha=SHA,
+    selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
     rep=cs$rep, selected=sel,
     selected_scale=if (is.na(sel)) NA else scale_of[sel],
     class_shape=g(r$poset$class,"shape"), class_comp=g(r$poset$class,"comparable"),
