@@ -87,9 +87,11 @@ test_that("impose_mask rank-matches and is a no-op on complete data", {
   sim <- matrix(rbinom(300 * 6, 1, 0.5), 300, 6)
   out <- QuantFit:::.impose_mask(sim, obs)
   expect_identical(sum(is.na(out)), sum(is.na(obs)))       # same mask size
-  # rank matching: per-person missing counts transfer by score rank
-  obs_cnt <- rowSums(is.na(obs))[order(rowSums(obs, na.rm = TRUE))]
-  out_cnt <- rowSums(is.na(out))[order(rowSums(sim))]
+  # rank matching: per-person missing counts transfer by OBSERVED-MEAN rank
+  # (raw-total matching manufactured ability-dependent missingness under
+  # MCAR - 2026-07-28 audit fix)
+  obs_cnt <- rowSums(is.na(obs))[order(rowMeans(obs, na.rm = TRUE))]
+  out_cnt <- rowSums(is.na(out))[order(rowMeans(sim))]
   expect_identical(obs_cnt, out_cnt)
   # complete observed data -> unchanged
   expect_identical(QuantFit:::.impose_mask(sim, sim), sim)

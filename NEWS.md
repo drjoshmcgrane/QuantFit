@@ -1,8 +1,26 @@
 # QuantFit 0.3.3
 
-Audit-response release (external statistical review, 2026-07-28). Three
-correctness fixes that change selector behaviour, plus honest-reporting
-corrections:
+Audit-response release (external statistical review, 2026-07-28/29). Three
+correctness fixes that change selector behaviour, honest-reporting
+corrections, and a full redesign of the partial-order refinement:
+
+* **Partial-order tests redesigned** (review round 4). The former
+  "dominance-asymmetry" statistic algebraically collapsed to the absolute
+  difference of side-average probabilities and carried no crossing
+  information, and its permutation null tested profile exchangeability, not
+  the antichain hypothesis. Replaced with direct dominance demonstration:
+  per-directed-pair violation masses from ONE aligned parametric bootstrap of
+  the fitted UN table, pairs declared comparable at Bonferroni-corrected
+  one-sided levels against the axis tolerance, "partial" = at least one
+  demonstrated pair, effective-B reported and refusal below B/2. Result
+  fields changed (`pairs`, `b_eff`, `eps` replace `stat`/`p`/`null95`/`lo`).
+  The PO_ITEMS generator is now constructive for graded posets, audits its
+  achieved crossing margin, errors (with the feasible maximum) when the
+  request is infeasible, and records the item poset, levels, and achieved
+  margin in `params`; PO records its achieved margin. `quant_fit()` prints
+  demonstrated partial orders. v2 validation claims are withdrawn; v3 grid
+  validates the redesign, including the crossing-antichain counterexample
+  class that broke v2.
 
 * `.impose_mask()` now rank-matches missingness masks on the OBSERVED MEAN
   (rate-adjusted score) instead of the raw observed total. Total-based

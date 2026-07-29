@@ -718,11 +718,12 @@ print.qleqtest <- function(x, ...) {
 #'   [select_model_hybrid()] for the machinery and its calibration).
 #' @param poset_eps Per-pair dominance tolerance for the poset refinement, on
 #'   the probability scale (default 0.01, anchored at N = 1500 and N-scaled).
-#' @param min_effect Degenerate-null retention threshold for the edge tests
-#'   (default 1). When a test rejects but even the null distribution's 95th
-#'   percentile LR is below `min_effect`, the bootstrap itself certifies the two
-#'   models indistinguishable on these data, and the constrained model is
-#'   retained by parsimony rather than rejected on a negligible effect.
+#' @param min_effect Practical-equivalence retention threshold for the edge
+#'   tests (default 1; 0 disables). A rejection is overridden ONLY when BOTH
+#'   the observed LR and the null distribution's 95th percentile are below
+#'   `min_effect` - the effect and its reference scale are both negligible, so
+#'   the constrained model is retained by parsimony rather than rejected on a
+#'   null-sized effect. A judgment call, deliberately public.
 #' @param severity Logical; when `TRUE`, a significant edge rejection can be
 #'   overridden if a second bootstrap from the fitted general model shows no
 #'   detectable separation from the null. The default is `FALSE`: the
@@ -1135,7 +1136,10 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                      B, n_starts, use_cpp,
                      poset_eps * sqrt(1500 / nrow(data)), alpha,
                      if (!is.null(seed)) seed + 9000L else NULL, sides = ps),
-                     error = function(e) NULL)
+                     error = function(e) {
+                       warning("poset refinement failed (", conditionMessage(e),
+                               ") - no partial-order verdict is reported")
+                       NULL })
     }
   }
 
@@ -1292,15 +1296,15 @@ print.qlselect_ll <- function(x, ...) {
   cat("Method =", if (is.null(x$method)) "joint" else x$method,
       "  Alpha =", x$alpha, "  Bootstrap replicates per test =", x$B, "\n")
   if (!is.null(x$poset$class))
-    cat(sprintf("Class poset    : %d/%d pairs comparable, p %.3f -> %s%s\n",
-                x$poset$class$comparable, x$poset$class$total, x$poset$class$p,
-                x$poset$class$shape,
+    cat(sprintf("Class poset    : %d/%d pairs demonstrated (B_eff %d) -> %s%s\n",
+                x$poset$class$comparable, x$poset$class$total,
+                x$poset$class$b_eff, x$poset$class$shape,
                 if (!is.na(x$poset$class$type))
                   paste0(" [", x$poset$class$type, "]") else ""))
   if (!is.null(x$poset$item))
-    cat(sprintf("Item poset     : %d/%d pairs comparable, p %.3f -> %s\n",
-                x$poset$item$comparable, x$poset$item$total, x$poset$item$p,
-                x$poset$item$shape))
+    cat(sprintf("Item poset     : %d/%d pairs demonstrated (B_eff %d) -> %s\n",
+                x$poset$item$comparable, x$poset$item$total,
+                x$poset$item$b_eff, x$poset$item$shape))
   cat("\n")
 
   if (nrow(x$tests) > 0) {

@@ -82,10 +82,16 @@ is never capped below the Lindsay bound regardless of this range.}
 \value{
 A list with \code{selected}, \code{interpretation}, \code{scale}, \code{n_classes}, the
 two axis results (\code{iio}, \code{mon}), \code{poset} (partial-order refinements of the
-ordinal verdict: \verb{$class} and/or \verb{$item}, each with \code{shape}, \code{comparable},
-\code{total}, \code{lo}, and for the C = 3 class side a descriptive isomorphism
-\code{type} of "single"/"V"/"Lambda"; class+item in the UN cell, class only in
-the IIO cell, item only in the MON cell), and, when DM was
+ordinal verdict: \verb{$class} and/or \verb{$item}, each with \code{shape} ("partial"
+iff at least one dominance pair is DEMONSTRATED at Bonferroni-corrected
+one-sided levels from an aligned parametric bootstrap of the fitted UN
+table; "antichain" records a failure to demonstrate any pair, not a
+certified absence), \code{comparable} (demonstrated pair count), \code{total},
+\code{pairs} (the demonstrated dominances), \code{b_eff} (successful bootstrap
+refits), \code{eps} (the axis-calibrated tolerance used), and for the C = 3
+class side a descriptive isomorphism \code{type} of "single"/"V"/"Lambda";
+class+item in the UN cell, class only in the IIO cell, item only in the
+MON cell), and, when DM was
 reached, \code{quant} holding the quantitative-edge evidence (\code{supports_quant},
 \code{bridge_C}, \code{lcr_vs_dm}, \code{rm_vs_lcr}, and the selected \code{LCR}/\code{RM} fit).
 }

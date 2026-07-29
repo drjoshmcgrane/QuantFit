@@ -1,0 +1,76 @@
+# Partial-order machinery (redesigned 2026-07-29 after external review:
+# dominance-demonstration bounds replaced the collapsed asymmetry statistic
+# and its exchangeability permutation null).
+
+simulate_from_table <- function(P, n, seed) {   # P = C x J class-prob table
+  set.seed(seed); C <- nrow(P); J <- ncol(P)
+  cls <- sample.int(C, n, replace = TRUE)
+  d <- matrix(rbinom(n * J, 1, P[cls, ]), n, J)
+  storage.mode(d) <- "integer"; d
+}
+
+test_that("antichain with systematic crossings and unequal means is NOT partial", {
+  skip_on_cran()
+  # The reviewer's counterexample class: every pair crosses deeply (a genuine
+  # antichain) while class AVERAGES differ - the pre-redesign statistic
+  # (which collapsed to |mean difference|) falsely rejected here.
+  J <- 8
+  base <- seq(-1.6, 1.6, length.out = J)
+  P <- rbind(plogis(base),                 # increasing
+             plogis(rev(base) + 0.35),     # decreasing, higher mean
+             plogis(base * c(-1, 1) + 0.15))  # alternating
+  d <- simulate_from_table(P, 1200, seed = 21)
+  r <- QuantFit:::.poset_refine(d, C = 3L, B = 29L, n_starts = 3L,
+        use_cpp = TRUE, eps = 0.01, alpha = 0.05, seed = 5,
+        sides = "class")
+  expect_identical(r$class$shape, "antichain")
+  expect_identical(r$class$comparable, 0L)
+})
+
+test_that("genuine V dominance is demonstrated with correct pairs", {
+  skip_on_cran()
+  # class 1 dominates classes 2 and 3 everywhere; 2 and 3 cross: type V
+  J <- 8
+  lo1 <- seq(-1.2, 1.2, length.out = J)
+  lo2 <- rev(lo1)
+  P <- rbind(plogis(pmax(lo1, lo2) + 0.9), plogis(lo1 - 0.4),
+             plogis(lo2 - 0.4))
+  d <- simulate_from_table(P, 1500, seed = 22)
+  r <- QuantFit:::.poset_refine(d, C = 3L, B = 29L, n_starts = 3L,
+        use_cpp = TRUE, eps = 0.01, alpha = 0.05, seed = 5,
+        sides = "class")
+  expect_identical(r$class$shape, "partial")
+  expect_gte(r$class$comparable, 1L)
+  expect_true(all(r$class$pairs$dominant %in% 1:3))
+  expect_true(r$class$b_eff >= 20L)
+})
+
+test_that("PO_ITEMS errors on infeasible margins and delivers exact structure", {
+  expect_error(
+    simulate_responses("PO_ITEMS", n_persons = 200, n_items = 12,
+                       n_classes = 3, poset = "layers2", po_margin = 0.10,
+                       seed = 1),
+    "not achievable")
+  d <- simulate_responses("PO_ITEMS", n_persons = 200, n_items = 8,
+                          n_classes = 3, poset = "layers2", po_margin = 0.005,
+                          seed = 1)
+  p <- attr(d, "params")
+  expect_false(is.null(p$item_poset))
+  expect_gte(p$po_achieved, 0.005)
+  P <- plogis(p$L); Di <- p$item_poset; J <- ncol(P)
+  for (j in seq_len(J)) for (k in seq_len(J)) {
+    if (j != k && Di[j, k])                       # specified dominance: exact
+      expect_true(all(P[, j] >= P[, k] - 1e-12))
+    if (j < k && !Di[j, k] && !Di[k, j])          # incomparable: real crossing
+      expect_gt(min(mean(pmax(0, P[, j] - P[, k])),
+                    mean(pmax(0, P[, k] - P[, j]))), 0)
+  }
+})
+
+test_that("PO free records its achieved crossing margin", {
+  d <- simulate_responses("PO", n_persons = 200, n_items = 8, n_classes = 3,
+                          poset = "V", po_margin = 0.05, seed = 3)
+  p <- attr(d, "params")
+  expect_gte(p$po_achieved, 0.05)
+  expect_false(is.null(p$poset))
+})

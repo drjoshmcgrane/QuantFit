@@ -204,33 +204,86 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
       }
     }
     if (model == "PO_ITEMS") {
-      # The MIRROR: classes totally ordered (MON holds), items PARTIALLY
-      # ordered. theta_c is a well-separated chain; per class, item effects are
-      # assigned along a random linear extension of the ITEM poset with spread
-      # strictly smaller than the class spacing, so every column stays sorted
-      # (exact class monotonicity) while item pairs dominate iff comparable in
-      # the poset. Routes to the MON cell, where the item-poset refinement must
-      # catch the structure. `poset` here is over ITEMS (keywords: "layers2" =
-      # top half dominates bottom half, halves internally incomparable;
-      # "single"; or a J x J dominance matrix).
+      # The MIRROR: classes totally ordered (MON holds exactly), items
+      # PARTIALLY ordered. Redesigned (2026-07-29 review): the old best-of
+      # search silently delivered margins far below request (and at J >= 24
+      # sometimes no crossing at all), so populations carried MORE comparable
+      # pairs than the requested poset. Now:
+      #   * graded posets (comparability determined by level, e.g. "layers2")
+      #     are built CONSTRUCTIVELY: one value band per level (bands ordered
+      #     with a fixed gap => exact cross-level dominance per class), and
+      #     within each band one class carries the value grid in order while
+      #     another carries it fully REVERSED - every within-band pair
+      #     provably crosses; remaining classes get random permutations.
+      #   * non-graded posets keep the capped search.
+      #   * the achieved crossing margin (min over incomparable pairs of the
+      #     best single-class reversal, probability scale) is AUDITED after
+      #     construction; if it falls below po_margin the generator STOPS with
+      #     the feasible maximum in the message - no silent shortfall.
+      #   * params records the item poset, the achieved margin, and the level
+      #     assignment. The margin ceiling shrinks with items-per-level
+      #     (~ plogis-slope x band_width / (L - 1)); long tests need small
+      #     po_margin or C > 3 by design, and the error says so.
       Di <- .po_resolve_item_poset(poset, n_items)
       delta <- 2.2                                   # class spacing
       theta <- (seq_len(n_classes) - (n_classes + 1) / 2) * delta
-      # capped best-of search (joint crossing over many pairs is a rare event
-      # for a single draw); the achieved margin is recorded in params
-      best <- NULL; best_m <- -Inf
-      for (it in seq_len(2000L)) {
-        E <- t(.po_assign(t(matrix(stats::runif(n_classes * n_items,
-               -delta / 2 + 0.08, delta / 2 - 0.08), n_classes, n_items)), Di))
-        Lc <- matrix(theta, n_classes, n_items) + E
-        mc <- .po_item_min_crossing(stats::plogis(Lc), Di)
-        if (mc > best_m) { best_m <- mc; best <- Lc }
-        if (mc >= max(po_margin, 0.10)) break
+      lev <- rep(0L, n_items)                        # longest chain below
+      repeat {
+        lev2 <- vapply(seq_len(n_items), function(j) {
+          below <- which(Di[j, ]); if (!length(below)) 0L else
+            max(lev[below]) + 1L }, integer(1))
+        if (identical(lev2, lev)) break
+        lev <- lev2
       }
-      L <- best
-      if (best_m < max(po_margin, 0.10))
-        warning("PO_ITEMS: achieved crossing margin ", signif(best_m, 3),
-                " < po_margin ", po_margin, " (best of 2000 draws)")
+      graded <- all(vapply(seq_len(n_items), function(j)
+        all(vapply(seq_len(n_items), function(k)
+          if (j == k) TRUE else Di[j, k] == (lev[j] > lev[k]), logical(1))),
+        logical(1)))
+      g0 <- 0.08; usable <- delta / 2 - g0           # half-spread bound
+      if (graded) {
+        nl <- max(lev) + 1L
+        band_gap <- 0.25
+        width <- (2 * usable - (nl - 1) * band_gap) / nl
+        lo <- -usable + (width + band_gap) * (0:(nl - 1L))
+        E <- matrix(0, n_classes, n_items)
+        mid <- order(abs(theta))[1:2]                # steepest two classes
+        for (l in 0:(nl - 1L)) {
+          it <- which(lev == l); Lk <- length(it)
+          grid <- if (Lk == 1L) lo[l + 1L] + width / 2 else
+            seq(lo[l + 1L], lo[l + 1L] + width, length.out = Lk)
+          for (c in seq_len(n_classes)) {
+            E[c, it] <- if (c == mid[1L]) grid else
+              if (c == mid[2L]) rev(grid) else sample(grid)
+          }
+        }
+        L <- matrix(theta, n_classes, n_items) + E
+      } else {
+        best <- NULL; best_m <- -Inf
+        for (it in seq_len(2000L)) {
+          E <- t(.po_assign(t(matrix(stats::runif(n_classes * n_items,
+                 -usable, usable), n_classes, n_items)), Di))
+          Lc <- matrix(theta, n_classes, n_items) + E
+          mc <- .po_item_min_crossing(stats::plogis(Lc), Di)
+          if (mc > best_m) { best_m <- mc; best <- Lc }
+          if (mc >= po_margin) break
+        }
+        L <- best
+      }
+      # AUDIT: exact dominance for every comparable pair, per class
+      Pchk <- stats::plogis(L)
+      for (j in seq_len(n_items)) for (k in seq_len(n_items))
+        if (j != k && Di[j, k] && any(Pchk[, j] < Pchk[, k] - 1e-12))
+          stop("PO_ITEMS: internal error - comparable pair (", j, ",", k,
+               ") not dominated exactly")
+      achieved <- .po_item_min_crossing(Pchk, Di)
+      if (is.finite(achieved) && achieved < po_margin)
+        stop("PO_ITEMS: requested po_margin ", po_margin, " is not achievable",
+             " at J = ", n_items, ", C = ", n_classes, " (achieved ",
+             signif(achieved, 3), "). The crossing-margin ceiling shrinks",
+             " with items per level; request po_margin <= ",
+             signif(achieved, 2), ", use fewer items, or more classes.")
+      po_items_extra <- list(item_poset = Di, item_levels = lev,
+                             po_achieved = achieved)
     }
     cls <- sample.int(n_classes, n_persons, replace = TRUE, prob = class_probs)
     resp <- matrix(0L, n_persons, n_items)
@@ -245,7 +298,19 @@ simulate_responses <- function(model = c("UN", "MON", "IIO", "DM", "LCR", "RM",
       }
     }
     params <- list(L = L, tau = tau, class = cls, class_probs = class_probs)
-    if (model == "PO") params$poset <- D
+    if (model == "PO") {
+      params$poset <- D
+      # achieved class-side crossing margin (min over incomparable pairs of
+      # the weaker crossing direction, probability scale) - recorded so
+      # validation can score against what was actually generated
+      Pp <- stats::plogis(L)
+      prs <- which(upper.tri(D) & !(D | t(D)), arr.ind = TRUE)
+      params$po_achieved <- if (nrow(prs)) min(vapply(seq_len(nrow(prs)),
+        function(k) { x <- prs[k, 1]; y <- prs[k, 2]
+          min(mean(pmax(0, Pp[x, ] - Pp[y, ])),
+              mean(pmax(0, Pp[y, ] - Pp[x, ]))) }, numeric(1))) else NA_real_
+    }
+    if (model == "PO_ITEMS") params <- c(params, po_items_extra)
 
   } else {  # LCR, RM: partial credit model
     b <- stats::runif(n_items, -2, 2)                              # item locations

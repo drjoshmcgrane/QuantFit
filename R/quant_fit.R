@@ -280,6 +280,15 @@ print.quantverdict <- function(x, ...) {
 ",
                 x$lc$selected,
                 if (identical(x$lc$selected, "RM")) "" else sprintf(" (%d classes)", x$lc$n_classes), x$lc$scale, yn(x$lc$supports_quant)))
+    ps <- x$lc$selection$poset
+    if (!is.null(ps$class) && identical(ps$class$shape, "partial"))
+      cat(sprintf("       class partial order: %d/%d pairs demonstrated%s\n",
+                  ps$class$comparable, ps$class$total,
+                  if (!is.na(ps$class$type))
+                    paste0(" [", ps$class$type, "]") else ""))
+    if (!is.null(ps$item) && identical(ps$item$shape, "partial"))
+      cat(sprintf("       item partial order : %d/%d pairs demonstrated\n",
+                  ps$item$comparable, ps$item$total))
   } else cat("       unavailable:", x$lc$msg, "\n")
 
   cat("[CC]   Cancellation checks vs Rasch bootstrap null (Student & Read)\n")

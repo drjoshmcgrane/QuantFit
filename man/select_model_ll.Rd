@@ -72,11 +72,12 @@ detectable separation from the null. The default is \code{FALSE}: the
 automated TI&D lattice then follows the corrected edge p-values without a
 post-hoc override.}
 
-\item{min_effect}{Degenerate-null retention threshold for the edge tests
-(default 1). When a test rejects but even the null distribution's 95th
-percentile LR is below \code{min_effect}, the bootstrap itself certifies the two
-models indistinguishable on these data, and the constrained model is
-retained by parsimony rather than rejected on a negligible effect.}
+\item{min_effect}{Practical-equivalence retention threshold for the edge
+tests (default 1; 0 disables). A rejection is overridden ONLY when BOTH
+the observed LR and the null distribution's 95th percentile are below
+\code{min_effect} - the effect and its reference scale are both negligible, so
+the constrained model is retained by parsimony rather than rejected on a
+null-sized effect. A judgment call, deliberately public.}
 
 \item{poset}{Logical (default \code{TRUE}): after the ordinal layer, compute the
 purely additive partial-order refinement on whichever side(s) were left

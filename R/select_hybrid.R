@@ -121,27 +121,6 @@
 # "single" (one comparable pair), "V" (one class dominates the two others),
 # "Lambda" (two classes dominate one). Point-estimate based - treat as
 # descriptive, not calibrated.
-# Continuous TEST statistics (eps-free): total dominance-asymmetry mass.
-# For each unordered pair, |mean one-way violation - mean other-way violation|:
-# symmetric crossing contributes ~0, dominance contributes ~the dominant gap.
-# Continuous (unlike the pair COUNT, which saturates at C(C-1)/2 and loses all
-# resolution to a single noisy null draw), label-invariant, and free of the
-# dominance tolerance eps - which survives only in the DESCRIPTIVE count/type.
-.class_asym <- function(P) {                      # P = items x classes
-  C <- ncol(P); m <- 0
-  for (a in seq_len(C - 1L)) for (b in (a + 1L):C)
-    m <- m + abs(mean(pmax(0, P[, b] - P[, a])) -
-                 mean(pmax(0, P[, a] - P[, b])))
-  m
-}
-.item_asym <- function(P) {                       # P = items x classes
-  J <- nrow(P); m <- 0
-  for (j in seq_len(J - 1L)) for (k in (j + 1L):J)
-    m <- m + abs(mean(pmax(0, P[k, ] - P[j, ])) -
-                 mean(pmax(0, P[j, ] - P[k, ])))
-  m
-}
-
 .class_dominance_matrix <- function(P, eps) {    # P = items x classes
   C <- ncol(P); D <- matrix(FALSE, C, C)
   for (a in seq_len(C)) for (b in seq_len(C)) if (a != b)
@@ -167,24 +146,43 @@
   }
   NA_character_
 }
-# CALIBRATED ANTICHAIN TESTS. Each side is decided the same way the 2x2 axes
-# are - by a statistic against a parametric null - giving a three-level verdict
-# per side (chain / partial / antichain) bracketed by two calibrated tests:
-# the existing total-order axis (MON for classes, IIO for items) plus the
-# antichain test below. H0 is "no side-consistent dominance":
-#   class side: simulate from the fitted UN table with each ITEM's class-
-#     probability vector independently permuted across classes - preserves each
-#     item's difficulty spread, destroys cross-item dominance consistency;
-#   item side: the mirror - each CLASS's item-probability vector permuted
-#     across items.
-# The observed comparable-pair count is compared to the null count
-# distribution; p = (1 + #{null >= obs}) / (B + 1); "partial" iff p <= alpha
-# (the corresponding total order having already been rejected by its axis).
-# Because the dominance tolerance eps enters observed and null counts
-# symmetrically, the decision is self-calibrating in eps; and the null
-# reproduces the CHANCE level of dominance (substantial on the item side when C
-# is small), so only excess consistency rejects - the count alone could not
-# distinguish chance from structure.
+# DOMINANCE-DEMONSTRATION POSET TESTS (redesigned 2026-07-29, external review).
+# The earlier "dominance-asymmetry" statistic algebraically collapsed to the
+# absolute difference of side-average probabilities (|mean(d+)| - |mean(d-)|
+# = |mean(d)|) and carried NO crossing information; its permutation null
+# tested profile exchangeability, not the antichain hypothesis. Both are gone.
+# The redesign tests the ESTIMAND directly:
+#
+#   For a directed pair (x, y), the violation mass V(x >= y) - the mean over
+#   the opposing side of pmax(0, P_y - P_x) - is ZERO iff x weakly dominates y.
+#   ONE parametric bootstrap from the fitted UN table (B refits, class labels
+#   aligned back to the observed fit by best-permutation profile matching)
+#   yields the sampling distribution of every directed V. A pair is declared
+#   COMPARABLE iff, at Bonferroni-corrected one-sided levels alpha/(2m) over
+#   the m pairs of its side, the upper bound of one direction's violation is
+#   <= eps (dominance demonstrated to the axis tolerance) while the lower
+#   bound of the reverse is > eps (a real gap - two identical profiles are
+#   incomparable, not mutually dominant).
+#
+# "partial" = at least one demonstrated pair; "antichain" = none demonstrated
+# (a failure to demonstrate, not a certified absence - stated as such in the
+# docs). There is no permutation null: the verdict is a simultaneous
+# demonstration of specific dominances with familywise control, conservative
+# under ANY antichain - crossing profiles, unequal averages, or identical
+# profiles alike. eps is the axis-calibrated tolerance (mon_eps, N-scaled),
+# entering exactly as in the MON axis. Refits that fail are dropped and
+# reported via b_eff; below max(20, B/2) the refinement refuses to answer.
+.poset_align <- function(Pb, P0) {
+  C <- ncol(P0)
+  perms <- .class_orderings(C)
+  best <- perms[1L, ]; bestd <- Inf
+  for (i in seq_len(nrow(perms))) {
+    d <- sum(abs(Pb[, perms[i, ], drop = FALSE] - P0))
+    if (d < bestd) { bestd <- d; best <- perms[i, ] }
+  }
+  Pb[, best, drop = FALSE]
+}
+
 .poset_refine <- function(data, C, B, n_starts, use_cpp, eps, alpha, seed,
                           sides = c("class", "item")) {
   data <- as.matrix(data); n <- nrow(data)
@@ -196,54 +194,64 @@
   P0 <- .hyb_item_probs(fit0)                      # items x classes
   pc <- pmax(fit0$class_probs, 0); pc <- pc / sum(pc)
   J <- nrow(P0)
-  sim_refit_count <- function(Pnull, counter) {
+  if (!is.null(seed)) set.seed(seed)
+  boots <- vector("list", B)                       # ONE bootstrap, both sides
+  for (b in seq_len(B)) {
     cls <- sample.int(C, n, replace = TRUE, prob = pc)
-    sim <- matrix(stats::rbinom(n * J, 1, t(Pnull)[cls, , drop = FALSE]), n, J)
+    sim <- matrix(stats::rbinom(n * J, 1, t(P0)[cls, , drop = FALSE]), n, J)
     storage.mode(sim) <- "integer"
-    sim <- .impose_mask(sim, data)   # null replicates share observed missingness
+    sim <- .impose_mask(sim, data)   # replicates share observed missingness
     f <- tryCatch(refit_model_type("UN", sim, C, n_starts, use_cpp),
                   error = function(e) NULL)
-    if (is.null(f)) NA_real_ else counter(.hyb_item_probs(f))
+    boots[[b]] <- if (is.null(f)) NULL else .poset_align(.hyb_item_probs(f), P0)
   }
-  if (!is.null(seed)) set.seed(seed)
+  boots <- Filter(Negate(is.null), boots)
+  b_eff <- length(boots)
+  if (b_eff < max(20L, B %/% 2L))
+    stop("poset refinement: only ", b_eff, "/", B, " bootstrap UN refits ",
+         "succeeded - refusing to report a poset verdict from a broken ",
+         "reference distribution")
+  decide_side <- function(idx, viol) {
+    m <- nrow(idx)
+    a2 <- alpha / (2 * m)                          # Bonferroni, one-sided
+    pr <- data.frame(dominant = integer(0), dominated = integer(0))
+    for (k in seq_len(m)) {
+      x <- idx[k, 1]; y <- idx[k, 2]
+      vxy <- vapply(boots, function(P) viol(P, x, y), numeric(1))
+      vyx <- vapply(boots, function(P) viol(P, y, x), numeric(1))
+      x_dom <- stats::quantile(vxy, 1 - a2, names = FALSE) <= eps &&
+               stats::quantile(vyx, a2,     names = FALSE) >  eps
+      y_dom <- stats::quantile(vyx, 1 - a2, names = FALSE) <= eps &&
+               stats::quantile(vxy, a2,     names = FALSE) >  eps
+      if (xor(x_dom, y_dom))
+        pr <- rbind(pr, data.frame(dominant = if (x_dom) x else y,
+                                   dominated = if (x_dom) y else x))
+    }
+    pr
+  }
   out <- list()
   if ("class" %in% sides) {
-    obs <- .class_asym(P0)
-    null <- vapply(seq_len(B), function(b) {
-      Pn <- P0
-      for (j in seq_len(J)) Pn[j, ] <- P0[j, sample.int(C)]
-      sim_refit_count(Pn, .class_asym)
-    }, numeric(1))
-    null <- null[!is.na(null)]
-    pv <- (1 + sum(null >= obs)) / (length(null) + 1)
-    shape <- if (pv <= alpha) "partial" else "antichain"
-    out$class <- list(stat = obs,
-      comparable = sum(.class_dominance_matrix(P0, eps)),
-      total = C * (C - 1L) / 2L, p = pv,
-      null95 = if (length(null)) stats::quantile(null, .95, names = FALSE) else NA,
-      shape = shape,
-      type = if (identical(shape, "partial"))
-        .class_poset_type(.class_dominance_matrix(P0, eps)) else NA_character_)
+    idx <- t(utils::combn(C, 2L))
+    viol <- function(P, x, y) mean(pmax(0, P[, y] - P[, x]))   # V(x >= y)
+    pr <- decide_side(idx, viol)
+    D <- matrix(FALSE, C, C)
+    if (nrow(pr)) D[cbind(pr$dominant, pr$dominated)] <- TRUE
+    shape <- if (nrow(pr) >= 1L) "partial" else "antichain"
+    out$class <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
+      b_eff = b_eff, eps = eps, shape = shape,
+      type = if (identical(shape, "partial")) .class_poset_type(D)
+             else NA_character_)
   }
   if ("item" %in% sides) {
-    obs <- .item_asym(P0)
-    null <- vapply(seq_len(B), function(b) {
-      Pn <- P0
-      for (cc in seq_len(C)) Pn[, cc] <- P0[sample.int(J), cc]
-      sim_refit_count(Pn, .item_asym)
-    }, numeric(1))
-    null <- null[!is.na(null)]
-    pv <- (1 + sum(null >= obs)) / (length(null) + 1)
-    out$item <- list(stat = obs,
-      comparable = .item_dominance_count(P0, eps),
-      total = J * (J - 1L) / 2L, p = pv,
-      null95 = if (length(null)) stats::quantile(null, .95, names = FALSE) else NA,
-      shape = if (pv <= alpha) "partial" else "antichain")
+    idx <- t(utils::combn(J, 2L))
+    viol <- function(P, x, y) mean(pmax(0, P[y, ] - P[x, ]))   # V(x >= y)
+    pr <- decide_side(idx, viol)
+    out$item <- list(comparable = nrow(pr), total = nrow(idx), pairs = pr,
+      b_eff = b_eff, eps = eps,
+      shape = if (nrow(pr) >= 1L) "partial" else "antichain")
   }
   out
 }
-
-
 # --- MON axis --------------------------------------------------------------
 # All orderings of C classes (rows), for the exact "exists an order" read of
 # MON. C is small in the manifest layer (2-4); guard larger C with the
@@ -442,10 +450,16 @@
 #' @param verbose Print progress.
 #' @return A list with `selected`, `interpretation`, `scale`, `n_classes`, the
 #'   two axis results (`iio`, `mon`), `poset` (partial-order refinements of the
-#'   ordinal verdict: `$class` and/or `$item`, each with `shape`, `comparable`,
-#'   `total`, `lo`, and for the C = 3 class side a descriptive isomorphism
-#'   `type` of "single"/"V"/"Lambda"; class+item in the UN cell, class only in
-#'   the IIO cell, item only in the MON cell), and, when DM was
+#'   ordinal verdict: `$class` and/or `$item`, each with `shape` ("partial"
+#'   iff at least one dominance pair is DEMONSTRATED at Bonferroni-corrected
+#'   one-sided levels from an aligned parametric bootstrap of the fitted UN
+#'   table; "antichain" records a failure to demonstrate any pair, not a
+#'   certified absence), `comparable` (demonstrated pair count), `total`,
+#'   `pairs` (the demonstrated dominances), `b_eff` (successful bootstrap
+#'   refits), `eps` (the axis-calibrated tolerance used), and for the C = 3
+#'   class side a descriptive isomorphism `type` of "single"/"V"/"Lambda";
+#'   class+item in the UN cell, class only in the IIO cell, item only in the
+#'   MON cell), and, when DM was
 #'   reached, `quant` holding the quantitative-edge evidence (`supports_quant`,
 #'   `bridge_C`, `lcr_vs_dm`, `rm_vs_lcr`, and the selected `LCR`/`RM` fit).
 #' @seealso [select_model_ll()] for the LR-edge lattice on its own;
@@ -503,15 +517,20 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                      paste(poset_sides, collapse = "+"), ") ...\n")
     poset <- tryCatch(.poset_refine(data, C, B, n_starts,
                use_cpp, mon_eps_N, alpha, s(4000L), sides = poset_sides),
-               error = function(e) NULL)
+               error = function(e) {
+                 warning("poset refinement failed (", conditionMessage(e),
+                         ") - no partial-order verdict is reported")
+                 NULL })
     notes <- character(0)
     if (!is.null(poset$class) && identical(poset$class$shape, "partial"))
       notes <- c(notes, paste0(poset$class$comparable, " of ", poset$class$total,
-        " class pairs comparable, p = ", signif(poset$class$p, 2),
+        " class pairs demonstrated (Bonferroni ", signif(alpha, 2), ", B_eff ",
+        poset$class$b_eff, ")",
         if (!is.na(poset$class$type)) paste0(" (", poset$class$type, ")") else ""))
     if (!is.null(poset$item) && identical(poset$item$shape, "partial"))
       notes <- c(notes, paste0(poset$item$comparable, " of ", poset$item$total,
-        " item pairs comparable, p = ", signif(poset$item$p, 2)))
+        " item pairs demonstrated (Bonferroni ", signif(alpha, 2), ", B_eff ",
+        poset$item$b_eff, ")"))
     if (length(notes))
       interpretation <- paste0(interpretation, " + PARTIAL ORDER [",
         paste(notes, collapse = "; "),
@@ -578,15 +597,15 @@ print.qlselect_hybrid <- function(x, ...) {
   cat(sprintf("MON axis        : stat %.4f, lo %.4f -> %s\n",
               x$mon$stat, x$mon$lo, if (isTRUE(x$mon$holds)) "holds" else "violated"))
   if (!is.null(x$poset$class))
-    cat(sprintf("Class poset     : %d/%d pairs comparable, p %.3f (null95 %g) -> %s%s\n",
-                x$poset$class$comparable, x$poset$class$total, x$poset$class$p,
-                x$poset$class$null95, x$poset$class$shape,
+    cat(sprintf("Class poset     : %d/%d pairs demonstrated (B_eff %d) -> %s%s\n",
+                x$poset$class$comparable, x$poset$class$total,
+                x$poset$class$b_eff, x$poset$class$shape,
                 if (!is.na(x$poset$class$type))
                   paste0(" [", x$poset$class$type, "]") else ""))
   if (!is.null(x$poset$item))
-    cat(sprintf("Item poset      : %d/%d pairs comparable, p %.3f (null95 %g) -> %s\n",
-                x$poset$item$comparable, x$poset$item$total, x$poset$item$p,
-                x$poset$item$null95, x$poset$item$shape))
+    cat(sprintf("Item poset      : %d/%d pairs demonstrated (B_eff %d) -> %s\n",
+                x$poset$item$comparable, x$poset$item$total,
+                x$poset$item$b_eff, x$poset$item$shape))
   if (!is.null(x$quant))
     cat(sprintf("DM vs quant (LR): supports_quant = %s -> %s\n",
                 isTRUE(x$quant$supports_quant),

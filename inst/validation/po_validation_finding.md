@@ -4,8 +4,52 @@ Supersedes the v1 (count/threshold-era) version of this file. The annotation
 scheme it validated was replaced - at the user's challenge that partial order
 must be **tested the way the kinds of ordinality are tested** - by calibrated
 hypothesis tests (commit 6ee0046); raw v1 results remain in
-`po_validation_results/`. This file documents the redesigned machinery and its
-validation grid (`po_validation.R` v2, 192 datasets, B = 49, N = 1500, K = 8).
+`po_validation_results/`. **WITHDRAWN AND REDESIGNED AGAIN (2026-07-29, external review round 4):**
+the v2 "continuous asymmetry" statistic algebraically collapsed to the
+absolute difference of side-average probabilities (|mean(d+)| - |mean(d-)| =
+|mean(d)|) - it measured average-profile alignment, not dominance - and its
+permutation null tested exchangeability, not the antichain hypothesis. A
+constructed crossing-antichain with unequal averages rejected at p = 0.006.
+ALL v2 size/power claims are therefore withdrawn (raw files remain in
+po_validation2_results/). The v2 PO_ITEMS generator also silently delivered
+crossing margins far below request (achieving ~0.003-0.03 against a 0.10
+target), so its populations carried more comparable pairs than specified -
+the v2 item-side "power" numbers validated detection of unrequested
+structure.
+
+## The redesigned test (v3, current)
+
+Per DIRECTED pair, the violation mass V(x >= y) = mean over the opposing side
+of pmax(0, P_y - P_x) is zero iff x weakly dominates y. ONE parametric
+bootstrap from the fitted UN table (B refits, class labels aligned by
+best-permutation profile matching) gives the sampling distribution of every
+directed V. A pair is COMPARABLE iff, at Bonferroni-corrected one-sided
+levels alpha/(2m), the upper bound of one direction's violation is <= eps
+(the axis tolerance) while the lower bound of the reverse exceeds eps.
+"partial" = >= 1 demonstrated pair; "antichain" = none demonstrated (a
+failure to demonstrate, not a certified absence). No permutation null;
+conservative under ANY antichain including crossing profiles with unequal
+averages. Failures: b_eff reported, hard refusal below max(20, B/2).
+
+PO_ITEMS is now constructive for graded posets (band per level; one class
+carries the within-band grid in order, another fully reversed, so every
+within-band pair provably crosses), audits its achieved margin, and ERRORS
+when the requested margin exceeds the geometric ceiling (~slope x band_width
+/ (items_per_level - 1)): the mirror truth is only demonstrable at short
+tests or C > 3, and the validation design reflects that (C = 4 arms at
+feasible margins; the C = 3, J = 24 case is included as a documented
+below-tolerance boundary).
+
+## v3 validation grid results
+
+_[RUNNING - `po_validation.R` v3, 216 datasets: PO margins x nI, PO_INV,
+PO_ITEMS C4/C3 at feasible margins, UN/MON/IIO controls scored against
+population posets, and the crossing-antichain (XANTI) counterexample class.
+Table inserted on completion.]_
+
+## Historical: v2 machinery description (superseded)
+
+
 
 ## The tests (both selectors, identical code)
 

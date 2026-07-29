@@ -93,10 +93,19 @@ Source: `tid_realdata_iio_finding.md`, `tid_hybrid_full.R`,
   **zero false quant claims in every misspecified run**
   (`misspecification_finding.md`).
 
-## 5. Partial order (the seventh structure)
+## 5. Partial order (the seventh structure) [RE-VALIDATION RUNNING]
 
-Source: `po_validation_finding.md` (calibrated era; v1 count-era superseded),
-`po_validation.R` v2 + `po_validation2_results/`, commit 6ee0046.
+**2026-07-29: the v2 test and its results below are WITHDRAWN** (external
+review: the statistic collapsed to average-profile differences; the
+permutation null tested exchangeability, not the antichain hypothesis; the
+PO_ITEMS generator under-delivered its margins). The redesign - direct
+dominance demonstration via aligned bootstrap bounds with Bonferroni control,
+constructive feasibility-checked PO_ITEMS - is in `po_validation_finding.md`;
+grid v3 results replace this section on completion. The routing facts (which
+cells test which sides, both selectors sharing one implementation, `selected`
+never altered) are unaffected.
+
+Source (historical): `po_validation.R` v2 + `po_validation2_results/`.
 
 - Each unordered side gets chain/partial/antichain via two calibrated tests:
   the axis + a NEW antichain test (permutation null of the fitted UN table,
