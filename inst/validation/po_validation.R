@@ -34,23 +34,10 @@ out   <- Sys.getenv("PO_OUT", "po_validation4_out"); dir.create(out, showWarning
 # exists resume check REFUSES to reuse a file whose method/SHA disagree with
 # the current build, so superseded results can never be silently recycled.
 METHOD <- "max-T-studentized-v4"
-# BUILD VERIFICATION (round 8): the row SHA is the INSTALLED package's
-# stamped build SHA, and generation refuses to run when the installed build
-# does not match this checkout's stamp or the expected method version.
-bi <- quantfit_build_info()
-dcf <- tryCatch(trimws(unname(read.dcf("DESCRIPTION",
-                fields = "GitSHA")[1, 1])), error = function(e) NA_character_)
-if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
-  stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
-       "stamp-then-install workflow before generating evidence")
-if (!is.na(dcf) && !identical(dcf, "unstamped") &&
-    !identical(trimws(unname(bi$sha)), dcf))
-  stop("installed QuantFit build (", bi$sha, ") does not match this ",
-       "checkout's stamp (", dcf, "); reinstall before generating evidence")
-if (!identical(bi$po_method, METHOD))
-  stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
-       METHOD, ")")
-SHA <- bi$sha
+source("inst/validation/validation_provenance.R")
+prov <- qf_provenance_check(METHOD)
+SHA <- prov$sha
+HEAD_SHA <- prov$head
 
 
 KX <- as.integer(Sys.getenv("PO_KX", "100"))             # antichain-size reps
@@ -81,11 +68,25 @@ gen <- function(tr, C, m, nI, rep) {
   if (tr %in% c("XANTI", "NEARANTI")) {
     # crossing antichains with unequal averages: increasing / shifted
     # decreasing / alternating logit profiles - zero population dominance.
-    # NEARANTI compresses the profiles so crossing depths sit just above the
-    # tolerance eps = 0.01 (boundary size calibration).
+    # NEARANTI's profile scale is TUNED (bisection, deterministic) so the
+    # MINIMUM pairwise crossing depth sits at ~0.015, genuinely just above
+    # the eps = 0.01 tolerance - boundary size calibration.
     set.seed(sd)
-    sc <- if (tr == "XANTI") 1.6 else 0.5
-    sh <- if (tr == "XANTI") c(0.35, 0.15) else c(0.12, 0.06)
+    if (tr == "XANTI") { sc <- 1.6; sh <- c(0.35, 0.15) } else {
+      depth_at <- function(scl) {
+        b <- seq(-scl, scl, length.out = nI)
+        Pt <- rbind(plogis(b), plogis(rev(b) + 0.24 * scl),
+                    plogis(b * rep_len(c(-1, 1), nI) + 0.12 * scl))
+        m <- Inf
+        for (a in 1:2) for (bb in (a + 1):3)
+          m <- min(m, min(mean(pmax(0, Pt[a, ] - Pt[bb, ])),
+                          mean(pmax(0, Pt[bb, ] - Pt[a, ]))))
+        m
+      }
+      sc <- stats::uniroot(function(x) depth_at(x) - 0.015,
+                           c(0.02, 1.5))$root
+      sh <- c(0.24, 0.12) * sc
+    }
     base <- seq(-sc, sc, length.out = nI)
     P <- rbind(plogis(base), plogis(rev(base) + sh[1]),
                plogis(base * rep_len(c(-1, 1), nI) + sh[2]))
@@ -135,9 +136,7 @@ run <- function(k) {
                               cs$nI, cs$rep))
   if (file.exists(f)) {
     prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
-    if (!is.null(prev) && identical(prev$method, METHOD) &&
-        identical(prev$sha, SHA) && identical(prev$config, CONFIG))
-      return(invisible())
+    if (qf_canary_match(prev, SHA, METHOD, CONFIG)) return(invisible())
     unlink(f)                       # stale schema/method/build: regenerate
   }
   d <- gen(cs$truth, cs$C, cs$margin, cs$nI, cs$rep)
@@ -151,7 +150,8 @@ run <- function(k) {
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   pstr <- function(x) if (is.null(x) || !nrow(x$pairs)) "" else
     paste(sprintf("%d>%d", x$pairs$dominant, x$pairs$dominated), collapse = ";")
-  write.csv(data.frame(method = METHOD, sha = SHA, config = CONFIG,
+  write.csv(data.frame(method = METHOD, sha = SHA, head = HEAD_SHA,
+    config = CONFIG,
     poset_b = if (!is.null(r$poset$class)) g(r$poset$class, "b_eff") else
               g(r$poset$item, "b_eff"),
     truth = cs$truth, C = cs$C, margin = cs$margin,
@@ -173,7 +173,15 @@ run <- function(k) {
     secs = round(proc.time()[3] - t0, 1)), f, row.names = FALSE)
 }
 cat("PO validation v4:", nrow(grid), "datasets (B =", B, ", poset floor 99)\n")
-invisible(parallel::mclapply(seq_len(nrow(grid)),
-  function(k) tryCatch(run(k), error = function(e) NULL),
-  mc.cores = cores, mc.preschedule = FALSE))
+fails <- parallel::mclapply(seq_len(nrow(grid)), function(k)
+  tryCatch({ run(k); NULL }, error = function(e)
+    data.frame(row = k, truth = grid$truth[k], nI = grid$nI[k],
+               rep = grid$rep[k], error = conditionMessage(e))),
+  mc.cores = cores, mc.preschedule = FALSE)
+fails <- do.call(rbind, Filter(Negate(is.null), fails))
+if (!is.null(fails) && nrow(fails)) {
+  write.csv(fails, file.path(out, "FAILURES.csv"), row.names = FALSE)
+  cat("PO V4 FAILED:", nrow(fails), "cells errored - see FAILURES.csv\n")
+  quit(save = "no", status = 1L)
+}
 cat("PO V4 DONE\n")

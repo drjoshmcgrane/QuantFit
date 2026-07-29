@@ -6,23 +6,10 @@ suppressMessages(library(QuantFit))
 `%||%` <- function(a, b) if (is.null(a)) b else a
 out <- Sys.getenv("PODEEP_OUT", "po_deepB_out"); dir.create(out, showWarnings = FALSE)
 METHOD <- "max-T-studentized-v4"
-# BUILD VERIFICATION (round 8): the row SHA is the INSTALLED package's
-# stamped build SHA, and generation refuses to run when the installed build
-# does not match this checkout's stamp or the expected method version.
-bi <- quantfit_build_info()
-dcf <- tryCatch(trimws(unname(read.dcf("DESCRIPTION",
-                fields = "GitSHA")[1, 1])), error = function(e) NA_character_)
-if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
-  stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
-       "stamp-then-install workflow before generating evidence")
-if (!is.na(dcf) && !identical(dcf, "unstamped") &&
-    !identical(trimws(unname(bi$sha)), dcf))
-  stop("installed QuantFit build (", bi$sha, ") does not match this ",
-       "checkout's stamp (", dcf, "); reinstall before generating evidence")
-if (!identical(bi$po_method, METHOD))
-  stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
-       METHOD, ")")
-SHA <- bi$sha
+source("inst/validation/validation_provenance.R")
+prov <- qf_provenance_check(METHOD)
+SHA <- prov$sha
+HEAD_SHA <- prov$head
 anchors <- expand.grid(truth = c("PO", "XANTI", "NEARANTI", "PO_ITEMS"),
                        rep = 1:8, stringsAsFactors = FALSE)
 gen <- function(tr, rep) {
@@ -61,7 +48,9 @@ res <- parallel::mclapply(seq_len(nrow(anchors)), function(k) {
       it_pairs  = pstr(r$poset$item))
   }
   a <- one(99L); b <- one(499L)
-  data.frame(sha = SHA, truth = cs$truth, rep = cs$rep,
+  data.frame(method = "max-T-studentized-v4", sha = SHA, head = HEAD_SHA,
+             config = "B=49;posetB=99v499;N=1500", truth = cs$truth,
+             rep = cs$rep,
              shape99 = a["cls_shape"], shape499 = b["cls_shape"],
              pairs99 = a["cls_pairs"], pairs499 = b["cls_pairs"],
              ishape99 = a["it_shape"], ishape499 = b["it_shape"],

@@ -26,23 +26,10 @@ scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT","audit_out"); dir.create(out, showWarnings=FALSE)
 METHOD <- "max-T-studentized-v4"
-# BUILD VERIFICATION (round 8): the row SHA is the INSTALLED package's
-# stamped build SHA, and generation refuses to run when the installed build
-# does not match this checkout's stamp or the expected method version.
-bi <- quantfit_build_info()
-dcf <- tryCatch(trimws(unname(read.dcf("DESCRIPTION",
-                fields = "GitSHA")[1, 1])), error = function(e) NA_character_)
-if (is.na(bi$sha) || identical(bi$sha, "unstamped"))
-  stop("installed QuantFit build is not stamped (GitSHA); rebuild via the ",
-       "stamp-then-install workflow before generating evidence")
-if (!is.na(dcf) && !identical(dcf, "unstamped") &&
-    !identical(trimws(unname(bi$sha)), dcf))
-  stop("installed QuantFit build (", bi$sha, ") does not match this ",
-       "checkout's stamp (", dcf, "); reinstall before generating evidence")
-if (!identical(bi$po_method, METHOD))
-  stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
-       METHOD, ")")
-SHA <- bi$sha
+source("inst/validation/validation_provenance.R")
+prov <- qf_provenance_check(METHOD)
+SHA <- prov$sha
+HEAD_SHA <- prov$head
 CONFIG <- sprintf("B=%d;K=%d;J=%d;N=1500;alpha=0.05;posetfloor=99",
                   B, K, n_items)
 grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
@@ -51,9 +38,7 @@ run <- function(k) {
   cs <- grid[k,]; f <- file.path(out, sprintf("%s_%s_%03d.csv", SEL, cs$model, cs$rep))
   if (file.exists(f)) {
     prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
-    if (!is.null(prev) && identical(prev$method, METHOD) &&
-        identical(prev$sha, SHA) && identical(prev$config, CONFIG))
-      return(invisible())
+    if (qf_canary_match(prev, SHA, METHOD, CONFIG)) return(invisible())
     unlink(f)                      # stale method/build: regenerate
   }
   d <- if (cs$model == "PO")
@@ -71,7 +56,7 @@ run <- function(k) {
     error=function(e) NULL)
   sel <- if (is.null(r)) NA_character_ else r$selected
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
-  write.csv(data.frame(method=METHOD, sha=SHA, config=CONFIG,
+  write.csv(data.frame(method=METHOD, sha=SHA, head=HEAD_SHA, config=CONFIG,
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
     rep=cs$rep, selected=sel,
     selected_scale=if (is.na(sel)) NA else scale_of[sel],
@@ -81,6 +66,16 @@ run <- function(k) {
     f, row.names=FALSE)
 }
 cat("Audit [", SEL, "]:", nrow(grid), "datasets (J=8, N=1500, K=", K, ", B=", B, ")\n")
-invisible(parallel::mclapply(seq_len(nrow(grid)),
-  function(k) tryCatch(run(k), error=function(e) NULL), mc.cores=cores))
+fails <- parallel::mclapply(seq_len(nrow(grid)), function(k)
+  tryCatch({ run(k); NULL }, error = function(e)
+    data.frame(row = k, model = grid$model[k], rep = grid$rep[k],
+               error = conditionMessage(e))),
+  mc.cores = cores, mc.preschedule = FALSE)
+fails <- do.call(rbind, Filter(Negate(is.null), fails))
+if (!is.null(fails) && nrow(fails)) {
+  write.csv(fails, file.path(out, sprintf("FAILURES_%s.csv", SEL)),
+            row.names = FALSE)
+  cat("AUDIT FAILED:", nrow(fails), "cells errored\n")
+  quit(save = "no", status = 1L)
+}
 cat("AUDIT DONE\n")
