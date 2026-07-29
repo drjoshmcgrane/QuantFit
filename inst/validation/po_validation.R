@@ -51,9 +51,10 @@ if (!identical(bi$po_method, METHOD))
   stop("installed QuantFit poset method (", bi$po_method, ") != expected (",
        METHOD, ")")
 SHA <- bi$sha
-CONFIG <- sprintf("B=%d;N=%d;K=%d;KX=%d;alpha=0.05;posetfloor=99", B, NR, K, KX)
+
 
 KX <- as.integer(Sys.getenv("PO_KX", "100"))             # antichain-size reps
+CONFIG <- sprintf("B=%d;N=%d;K=%d;KX=%d;alpha=0.05;posetfloor=99", B, NR, K, KX)
 grid <- rbind(
   expand.grid(truth = "PO", C = 3L, margin = c(0.05, 0.10, 0.15),
               nI = c(6L, 12L, 24L), rep = seq_len(K), stringsAsFactors = FALSE),
