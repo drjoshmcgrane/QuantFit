@@ -1135,7 +1135,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   # Distinguishes a genuine antichain from a PARTIAL order on whichever side(s)
   # the lattice left unordered: UN -> class + item posets, IIO -> class,
   # MON -> item. Never alters `selected`. Runs at the lattice's own selected C.
-  poset_out <- NULL
+  poset_out <- NULL; attr_msg <- NULL
   if (isTRUE(poset)) {
     ps <- switch(ordinal_selected, UN = c("class", "item"),
                  IIO = "class", MON = "item", NULL)
@@ -1149,6 +1149,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
                      error = function(e) {
                        warning("poset refinement failed (", conditionMessage(e),
                                ") - no partial-order verdict is reported")
+                       attr_msg <<- conditionMessage(e)
                        NULL })
     }
   }
@@ -1302,6 +1303,7 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
       quant_edge_failed = quant_edge_failed,
       rm_stage_failed = rm_stage_failed,
       poset = poset_out,
+      poset_refusal = attr_msg,
       quant_fits = quant_fits,
       severity = severity
     ),
@@ -1340,6 +1342,12 @@ print.qlselect_ll <- function(x, ...) {
                 x$poset$item$shape))
   cat("\n")
 
+  if (isTRUE(x$quant_edge_failed))
+    cat("WARNING: quantitative edge did not complete - the verdict above",
+        "reflects the ordinal lattice only; quantity was NOT assessed\n")
+  if (isTRUE(x$rm_stage_failed))
+    cat("WARNING: RM-vs-LCR comparison unavailable - the discrete/continuous",
+        "label rests on a raw BIC fallback (uncalibrated)\n")
   if (nrow(x$tests) > 0) {
     cat("Decision path (calibrated edge tests):\n")
     for (i in seq_len(nrow(x$tests))) {

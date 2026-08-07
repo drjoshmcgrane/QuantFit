@@ -5,14 +5,16 @@
 suppressMessages(library(QuantFit))
 `%||%` <- function(a, b) if (is.null(a)) b else a
 out <- Sys.getenv("PODEEP_OUT", file.path("..", "qf_evidence", "po_deepB_out"))
-if (startsWith(normalizePath(out, mustWork = FALSE), normalizePath(getwd())))
+if (startsWith(paste0(normalizePath(out, mustWork = FALSE), "/"),
+               paste0(normalizePath(getwd()), "/")))
   stop("PODEEP_OUT must live OUTSIDE the git checkout (dirty-tree provenance)")
 dir.create(out, showWarnings = FALSE, recursive = TRUE)
-# never leave a stale success aggregate beside a fresh failure manifest
-unlink(file.path(out, c("deepB_anchors.csv", "FAILURES.csv")))
 METHOD <- "max-T-studentized-v4"
 source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)
+# artifact deletion only AFTER provenance passes - a stale install must not
+# destroy valid previous evidence before stopping
+unlink(file.path(out, c("deepB_anchors.csv", "FAILURES.csv")))
 SHA <- prov$sha
 HEAD_SHA <- prov$head
 anchors <- expand.grid(truth = c("PO", "XANTI", "NEARANTI", "PO_ITEMS"),

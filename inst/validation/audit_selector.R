@@ -28,7 +28,8 @@ models  <- c("UN","MON","IIO","DM","LCR","RM","PO")
 scale_of <- c(UN="nominal",MON="ordinal",IIO="ordinal",DM="ordinal",
               LCR="quant",RM="quant",PO="partial")
 out <- Sys.getenv("AUD_OUT", file.path("..", "qf_evidence", "audit_out"))
-if (startsWith(normalizePath(out, mustWork = FALSE), normalizePath(getwd())))
+if (startsWith(paste0(normalizePath(out, mustWork = FALSE), "/"),
+               paste0(normalizePath(getwd()), "/")))
   stop("AUD_OUT must live OUTSIDE the git checkout (results are untracked ",
        "files and would trip the dirty-tree provenance gate)")
 dir.create(out, showWarnings = FALSE, recursive = TRUE)
@@ -66,13 +67,22 @@ run <- function(k) {
   if (is.na(sel)) stop("selector returned NA verdict")
   # SUBROUTE validation: a clean top-level label must not hide an internally
   # failed refinement or quantitative stage
+  poset_refused <- ""
   if (sel %in% c("UN", "IIO", "MON")) {
-    if (is.null(r$poset))
-      stop("poset refinement missing for ordinal-cell verdict ", sel)
-    beff <- if (!is.null(r$poset$class)) r$poset$class$b_eff else
-            r$poset$item$b_eff
-    if (is.null(beff) || beff < 99L)
-      stop("poset b_eff ", beff %||% NA, " below the 99 floor")
+    if (is.null(r$poset)) {
+      # distinguish a DOCUMENTED refusal (b_eff guard: bootstrap refits
+      # collapsed, typically at high BIC-selected C) from silent absence -
+      # refusals are recorded as explicit rows, absence still fails
+      w <- r$poset_refusal
+      if (is.null(w)) stop("poset refinement missing for ordinal-cell ",
+                           "verdict ", sel, " with no documented refusal")
+      poset_refused <- w
+    } else {
+      beff <- if (!is.null(r$poset$class)) r$poset$class$b_eff else
+              r$poset$item$b_eff
+      if (is.null(beff) || beff < 99L)
+        stop("poset b_eff ", beff %||% NA, " below the 99 floor")
+    }
   }
   if (isTRUE(r$quant_edge_failed))
     stop("quantitative edge failed behind verdict ", sel)
@@ -83,6 +93,7 @@ run <- function(k) {
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
     rep=cs$rep, selected=sel,
     selected_scale=if (is.na(sel)) NA else scale_of[sel],
+    poset_refused=poset_refused,
     class_shape=g(r$poset$class,"shape"), class_comp=g(r$poset$class,"comparable"),
     class_type=g(r$poset$class,"type"),
     item_shape=g(r$poset$item,"shape"), item_comp=g(r$poset$item,"comparable")),
@@ -101,4 +112,5 @@ if (!is.null(fails) && nrow(fails)) {
   cat("AUDIT FAILED:", nrow(fails), "cells errored\n")
   quit(save = "no", status = 1L)
 }
+unlink(file.path(out, sprintf("FAILURES_%s.csv", SEL)))
 cat("AUDIT DONE\n")

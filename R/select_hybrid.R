@@ -599,7 +599,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   # whichever side(s) the 2x2 left unordered. Never changes `selected`/`scale` -
   # a partial order is not one of TI&D's six models - it is reported as
   # additional structure in `poset` and in the interpretation.
-  poset <- NULL
+  poset <- NULL; poset_refusal <- NULL
   poset_sides <- switch(ordinal, UN = c("class", "item"),
                         IIO = "class", MON = "item", NULL)
   if (!is.null(poset_sides)) {
@@ -611,6 +611,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                error = function(e) {
                  warning("poset refinement failed (", conditionMessage(e),
                          ") - no partial-order verdict is reported")
+                 poset_refusal <<- conditionMessage(e)
                  NULL })
     notes <- character(0)
     nt <- character(0)
@@ -684,6 +685,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                  scale = unname(scale), n_classes = C,
                  iio = iio, mon = mon,
                  quant = if (exists("add", inherits = FALSE)) add else NULL,
+                 poset_refusal = poset_refusal,
                  quant_edge_failed = quant_edge_failed,
                  poset = poset,
                  method = "hybrid-2x2+lr"),

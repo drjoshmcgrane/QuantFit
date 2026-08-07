@@ -291,3 +291,40 @@ test_that("non-normal (bimodal) additive data is still classified quantitative",
   expect_true(sel$selected %in% c("LCR", "RM"))
   expect_match(sel$interpretation, "QUANTITATIVE")
 })
+
+test_that("failed bridge flags quant_edge_failed, never negative evidence", {
+  skip_on_cran()
+  d <- simulate_responses("DM", n_persons = 500, n_items = 6, n_classes = 3,
+                          seed = 71)
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  testthat::local_mocked_bindings(
+    fit_lcr = function(...) stop("forced bridge failure"),
+    .package = "QuantFit")
+  expect_warning(
+    r <- select_model_ll(d, n_classes = 2:3, B = 9, n_starts = 2L,
+                         boot_n_starts = 1L, poset = FALSE, seed = 1,
+                         verbose = FALSE),
+    "quantitative edge did not complete")
+  expect_true(r$quant_edge_failed)
+  expect_false(r$selected %in% c("LCR", "RM"))
+})
+
+test_that("unavailable RM-vs-LCR flags rm_stage_failed on the lattice", {
+  skip_on_cran()
+  d <- simulate_responses("LCR", n_persons = 500, n_items = 6, n_classes = 2,
+                          seed = 72)
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  testthat::local_mocked_bindings(
+    rm_vs_lcr_test = function(...) list(available = FALSE,
+                                        statistic = NA_real_,
+                                        p_value = NA_real_,
+                                        profiled_C = NA_integer_,
+                                        select_lcr = NA),
+    .package = "QuantFit")
+  r <- withCallingHandlers(
+    select_model_ll(d, n_classes = 2:3, B = 9, n_starts = 2L,
+                    boot_n_starts = 1L, poset = FALSE, seed = 1,
+                    verbose = FALSE),
+    warning = function(w) invokeRestart("muffleWarning"))
+  if (r$selected %in% c("LCR", "RM")) expect_true(r$rm_stage_failed)
+})

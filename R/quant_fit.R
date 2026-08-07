@@ -149,9 +149,20 @@ quant_fit <- function(data, n_classes = 1:6, n_bands = 6L,
          supports_quant = sel$selected %in% c("LCR", "RM"),
          method = sel$method, tests = sel$tests,
          lcr_vs_dm = sel$lcr_vs_dm, rm_vs_lcr = sel$rm_vs_lcr,
-         selection = sel)
+         selection = sel,
+         quant_edge_failed = isTRUE(sel$quant_edge_failed),
+         rm_uncalibrated = isTRUE(sel$rm_stage_failed))
   }, error = function(e) list(available = FALSE, msg = conditionMessage(e),
                               supports_quant = NA))
+
+  if (isTRUE(lc$available) && isTRUE(lc$quant_edge_failed)) {
+    # "quantity not assessed" must never count as evidence AGAINST quantity:
+    # the LC route is excluded from the verdict as unavailable
+    lc$available <- FALSE
+    lc$msg <- paste0("quantitative edge did not complete (bridge fits ",
+                     "failed); ordinal verdict '", lc$selected,
+                     "' retained but quantity was NOT assessed")
+  }
 
   # -- CC route: bootstrapped null (Student & Read 2025) on the raw data ---
   # The Rasch-simulated null self-calibrates the sum-score pipeline, so this
@@ -280,6 +291,9 @@ print.quantverdict <- function(x, ...) {
 ",
                 x$lc$selected,
                 if (identical(x$lc$selected, "RM")) "" else sprintf(" (%d classes)", x$lc$n_classes), x$lc$scale, yn(x$lc$supports_quant)))
+    if (isTRUE(x$lc$rm_uncalibrated))
+      cat("       NOTE: discrete-vs-continuous (LCR/RM) label is",
+          "UNCALIBRATED (RM-vs-LCR bootstrap unavailable; BIC fallback)\n")
     ps <- x$lc$selection$poset
     if (!is.null(ps$class) && identical(ps$class$shape, "partial"))
       cat(sprintf("       class partial order: %d/%d pairs demonstrated%s\n",
