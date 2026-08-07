@@ -1,0 +1,2 @@
+"method","sha","head","config","poset_b","truth","C","margin","nI","rep","selected","class_shape","class_comp","class_type","class_pairs","class_transitive","item_shape","item_comp","item_pairs","item_transitive","b_eff","pop_class_pairs","pop_item_pairs","po_achieved","secs"
+"max-T-studentized-v4","1454231","f1da03c","B=49;N=1500;K=8;KX=100;alpha=0.05;posetfloor=99",99,"PO_ITEMS",3,NA,8,7,"MON",NA,NA,NA,"",NA,"partial",14,"1>5;1>6;1>7;2>5;2>6;2>7;2>8;3>5;3>6;3>7;3>8;4>6;4>7;4>8",TRUE,99,3,18,0.0165589038857147,3.6

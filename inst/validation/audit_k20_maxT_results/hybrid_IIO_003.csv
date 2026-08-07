@@ -1,0 +1,2 @@
+"method","sha","head","config","selector","truth","truth_scale","rep","selected","selected_scale","poset_refused","class_shape","class_comp","class_type","item_shape","item_comp"
+"max-T-studentized-v4","5968c1a","b36d6a1","B=49;K=20;J=8;N=1500;alpha=0.05;posetfloor=99","hybrid","IIO","ordinal",3,"IIO","ordinal","","antichain",0,NA,NA,NA

@@ -42,3 +42,10 @@ The shipped default mon_eps = 0.01 is validated: it sits on a four-fold-wide
 accuracy plateau whose failures are boundary cases owned by the data, not the
 threshold. Sensitivity to the choice is nil within [0.0025, 0.02] and the
 failure mode outside the plateau is one-sided and understood.
+
+## Post-fix reproduction (uni Mac, build 8230019, IIO-only axis null)
+
+The rerun reproduces the plateau under the corrected IIO null: 57/60 routing
+at every eps in {0.0025, 0.005, 0.01} (IIO 8/10), decaying exactly as before
+when loosened (54/60 at 0.04 with IIO 4/10; 50/60 at 0.08 with IIO 0/10).
+The default 0.01 verdict is unchanged post-fix.

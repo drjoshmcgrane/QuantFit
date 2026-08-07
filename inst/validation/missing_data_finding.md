@@ -41,6 +41,44 @@ three missingness mechanisms:
 pre-fix transfer would have CONFOUNDED it (it manufactured the same
 dependence under MCAR), so only post-fix results are interpretable.
 
-## Post-fix results
+## Post-fix results (mdv2, 480 runs, uni Mac, build 8230019*)
 
-_[RE-RUN PENDING - table inserted on completion.]_
+*Provenance: produced under build 8230019 (mean-based mask transfer and
+IIO-only axis null included; verdict-path code identical to the stamped
+release for dichotomous masked data). Rows predate the per-row SHA canary;
+the run log and bundle timestamps document the build.*
+
+| mechanism | miss | exact | scale-type | stable vs complete | false quant |
+|-----------|------|-------|------------|--------------------|-------------|
+| MCAR 10% | 10% | 104/120 | 106/120 | 107 | 1 |
+| MCAR 25% | 25% | 102/120 | 108/120 | 101 | 0 |
+| item-dependent (.05-.45) | 25% | 105/120 | 106/120 | 103 | 0 |
+| **MAR-by-ability (anchor-half)** | **13%** | **80/120** | **94/120** | 79 | **0** |
+
+(Complete-data reference: 112/120 exact, 114/120 scale.)
+
+**The headline is the MAR-by-ability row.** At only ~13% missingness, genuine
+score-dependent missingness costs ~27 points of exact accuracy - far more
+than 25% MCAR - and the error anatomy identifies the mechanism precisely:
+every major error cell is an IIO-axis FALSE REJECTION (DM->MON 13/20,
+IIO->UN 9/20, RM->MON 6/20, LCR->MON 8/20; UN/MON nearly untouched).
+Ability-dependent missingness induces apparent item-response crossings; the
+mask-transfer null is supposed to reproduce that artifact, but mean-based
+rank matching ATTENUATES the score-missingness dependence in replicates
+(induced r -0.73 observed vs ~-0.32 transferred - the documented limitation
+of matching on a noisy observed-mean proxy), so the null under-represents
+the artifact and the axis over-rejects.
+
+What holds: **zero false quantitative promotions under every mechanism**
+(0/480, one MCAR-10% exception at 1), and scale-type degradation is
+demotion-shaped. What does not: ordinal-axis calibration under genuine
+MAR-by-ability. Consequence for practice: with score-dependent missingness,
+treat MON/UN verdicts with suspicion of over-demotion; the safe claims are
+the quant/non-quant boundary and demonstrated dominances.
+
+Fix direction (future work, explicitly not attempted here): replace
+rank-transfer with a parametric missingness model - fit P(miss | observed
+anchor score) and REGENERATE masks in each replicate from that model, which
+preserves the full dependence instead of an attenuated copy.
+
+

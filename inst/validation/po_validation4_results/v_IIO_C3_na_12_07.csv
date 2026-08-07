@@ -1,0 +1,2 @@
+"method","sha","head","config","poset_b","truth","C","margin","nI","rep","selected","class_shape","class_comp","class_type","class_pairs","class_transitive","item_shape","item_comp","item_pairs","item_transitive","b_eff","pop_class_pairs","pop_item_pairs","po_achieved","secs"
+"max-T-studentized-v4","1454231","f1da03c","B=49;N=1500;K=8;KX=100;alpha=0.05;posetfloor=99",99,"IIO",3,NA,12,7,"IIO","antichain",0,NA,"",TRUE,NA,NA,"",NA,99,2,66,NA,19.6

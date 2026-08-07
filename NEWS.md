@@ -1,5 +1,14 @@
 # QuantFit 0.3.3
 
+Evidence status at release: the partial-order machinery is validated by the
+canonical v4 grid (size 0/250 false partials incl. the eps-boundary class;
+power 8/8 everywhere incl. polytomous; deep-B shape-stable 32/32), the
+K = 20 audit reproduces all headline comparisons under stamped provenance,
+and the missing-data v2 grid documents the MAR-by-ability limitation
+(IIO-axis over-rejection at ~13% score-dependent missingness; zero false
+quantitative promotions under every mechanism). See
+inst/validation/CONSOLIDATED_RESULTS.md.
+
 Audit-response release (external statistical review, 2026-07-28/29). Three
 correctness fixes that change selector behaviour, honest-reporting
 corrections, and a full redesign of the partial-order refinement:

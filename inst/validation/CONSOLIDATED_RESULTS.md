@@ -110,13 +110,17 @@ Source: `tid_realdata_iio_finding.md`, `tid_hybrid_full.R`,
 
 ## 5. Partial order (the seventh structure) [RE-VALIDATED under v3]
 
-**v3 headline (2026-07-29, dominance-demonstration redesign;
-`po_validation_finding.md`): XANTI counterexample 0/16 false partials; UN
-class-side size 1/24; class power 8/8 in every PO cell including nI = 6;
-item power 8/8 at feasible margins with demonstrated pairs always below the
-population count (Bonferroni never over-demonstrates); routing PO -> UN
-72/72, PO_INV -> IIO 23/24, PO_ITEMS -> MON 32/32; zero failures, b_eff
-49/49.**
+**v4 CANONICAL (2026-08, stamped build 1454231, studentized simultaneous
+max-T, per-row provenance canaries; po_validation4_results/): familywise
+size XANTI 0/200 (K = 100 per length) and NEARANTI 0/50 AT the 0.015
+boundary vs eps 0.01; class power 8/8 in every cell including the
+POLYTOMOUS arm; item power 8/8 with demonstrated pairs always below
+population; deep-B (deepB_results/): shape decisions 32/32 identical at
+B = 99 vs 499, only near-threshold pair wobble. K = 20 audit under max-T
+(build 5968c1a, display-only diff from 1454231;
+audit_k20_maxT_results/): hybrid 111/120 vs lattice 103/120 (McNemar
+11:3, p = 0.057), IIO 18/20 vs 9/20, PO arm 20/20 vs 19/20; 280/280
+rows, all lattice-IIO poset absences structural (BIC picks C = 2).**
 
 **2026-07-29: the v2 test and its results below are WITHDRAWN** (external
 review: the statistic collapsed to average-profile differences; the
@@ -179,13 +183,17 @@ null re-imposes the observed mask rank-matched. MAR assumed throughout.
 - Hybrid: NA-capable 2026-07-28 (pairwise-complete IIO statistic, masked
   poset nulls, `.hyb_item_probs` shape fix). Smoke: MON/IIO/DM/RM verdicts
   identical complete vs 10% MAR.
-- **Deep validation [RE-RUN PENDING]**: the first 240-run MCAR grid predates
-  the audit fixes and two of its claims were misreported (see the corrected
-  `missing_data_finding.md`: errors were NOT confined to the LCR <-> RM
-  boundary, and one UN -> IIO promotion occurred). Its surviving claim: zero
-  false QUANT promotions in 240 masked runs. The v2 grid (fixed code; MCAR +
-  genuine MAR-by-ability + item-dependent rates) replaces it here on
-  completion.
+- **Deep validation [v2 COMPLETE]** (480 runs, uni Mac build 8230019,
+  annotated; missing_data_v2_results/ + missing_data_finding.md): MCAR
+  10%/25% and item-dependent rates are robust (102-105/120 exact vs 112
+  complete). **Genuine MAR-by-ability is NOT: 80/120 exact at only ~13%
+  missing, driven entirely by IIO-axis false rejections** - the mean-based
+  mask transfer attenuates score-missingness dependence in null replicates,
+  so the axis over-rejects. Zero false quant promotions under every
+  mechanism (0-1/480). Under score-dependent missingness the safe claims
+  are the quant/non-quant boundary and demonstrated dominances; the fix
+  direction (parametric missingness model in the null) is documented
+  future work.
 
 ## 9. TI&D graded-180 pre-consensus rater data
 

@@ -40,7 +40,73 @@ tests or C > 3, and the validation design reflects that (C = 4 arms at
 feasible margins; the C = 3, J = 24 case is included as a documented
 below-tolerance boundary).
 
-## v3 validation grid results (216 datasets, B = 49, K = 8; raw in
+## v4 CANONICAL grid results (458 datasets, stamped build 1454231, per-row
+## method/SHA/config canaries; raw in po_validation4_results/)
+
+Inference: STUDENTIZED SIMULTANEOUS MAX-STATISTIC bounds (one calibrated
+(1 - alpha/2) quantile of the studentized max deviation per family;
+per-direction bootstrap scale; poset bootstrap floor 99, b_eff = 99
+everywhere). Zero cell failures; zero non-transitive relations observed.
+
+**Familywise size (class side, alpha = 0.05):**
+
+| antichain class | n | false partials |
+|---|---|---|
+| XANTI nI=8 (deep crossings, unequal means) | 100 | **0** (CI 0-3.6%) |
+| XANTI nI=24 | 100 | **0** (CI 0-3.6%) |
+| **NEARANTI nI=8 (min crossing depth 0.0150 vs eps 0.01 - the boundary)** | 50 | **0** (CI 0-7.1%) |
+| UN control | 24 | 1 (~4%) |
+
+The construction is conservative at and beyond the tolerance boundary - no
+false demonstration in 250 antichain datasets.
+
+**Class-side power: 8/8 in every cell** - PO at margins {.05,.10,.15} x nI
+{6,12,24}, PO_INV (accept-best, achieved ~0.115-0.125) at all nI, and the
+POLYTOMOUS arm (PO 4-category, categorical bootstrap) 8/8 with 8/8 correct V
+types. V-type recovery 8/8 at nI >= 12 (2-6/8 at nI = 6, point-estimate
+readout).
+
+**Item-side power: 8/8 at every accept-best margin** (C=3 J=8 ach .016;
+C=4 J=8 .032; C=4 J=12 .018; C=4 J=24 .008) with demonstrated-pair counts
+always BELOW the population count (e.g. 104.9 vs 182; 5.4 vs 17) -
+under-demonstration, never over-demonstration; per-row pair identities in
+the CSVs make the subset property verifiable.
+
+## Deep-B stability (32 anchors, B = 99 vs 499; deepB_results/)
+
+Every anchor validated (expected side present, b_eff checks, warnings
+escalated). **Shape decisions: 32/32 identical.** 13/32 anchors show
+pair-SET differences of 1-3 near-threshold pairs (predominantly item-side),
+in the conservative direction at deeper B - the expected behaviour of a
+top-order-statistic bound. Verdicts are depth-stable; individual marginal
+pair demonstrations are not, which is why `poset_B = 499` is the documented
+recommendation for final analyses.
+
+## K=20 audit grid under max-T (audit_k20_maxT_results/, build 936a7ac*)
+
+*936a7ac differs from 1454231 only in display/metadata code (quant_fit flag
+propagation, print methods, refusal recording) - `git diff 1454231..936a7ac`
+shows no statistical-path change.*
+
+Six-model: hybrid 111/120 vs lattice 103/120 (McNemar 11:3, p = 0.057);
+IIO 18/20 vs 9/20 - the headline comparison reproduced under single-run
+provenance. **PO arm: hybrid 20/20, lattice 19/20** (18/20 correct V types
+each, mean demonstrated pairs 1.9 vs truth 2). 280/280 rows, zero failures;
+every lattice-IIO poset absence (9/20) is recorded as STRUCTURAL - the
+lattice's BIC selects C = 2 on IIO-truth data, where no class poset exists
+(the hybrid runs at fixed C = 3 and always reports).
+
+Notable structural finding from the first (round-12) run, reproduced here:
+the LATTICE's poset refinement at its BIC-selected class count refuses on a
+large fraction of IIO-truth datasets (round-12: 9/20) - bootstrap UN refits
+collapse at C = 5-6, the b_eff guard triggers, and the refusal is now
+recorded per-row (poset_refused). The hybrid (fixed C = 3) never refuses.
+Poset refinement at high BIC-selected C is fragile by nature of the refit
+bootstrap; the fixed-C hybrid is the reliable carrier of the poset verdict.
+
+
+## Historical: v3 (per-pair Bonferroni era, superseded)
+
 po_validation3_results/)
 
 Zero fit failures; b_eff = 49/49 in every dataset; ~10x cheaper than v2
