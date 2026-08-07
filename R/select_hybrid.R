@@ -602,6 +602,11 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   poset <- NULL; poset_refusal <- NULL
   poset_sides <- switch(ordinal, UN = c("class", "item"),
                         IIO = "class", MON = "item", NULL)
+  if (!is.null(poset_sides) && identical(poset_sides, "class") && C < 3L) {
+    poset_refusal <- sprintf(
+      "class poset not applicable at C = %d (requires C >= 3)", C)
+    poset_sides <- NULL
+  }
   if (!is.null(poset_sides)) {
     if (verbose) cat(ordinal, "cell: poset refinement (",
                      paste(poset_sides, collapse = "+"), ") ...\n")

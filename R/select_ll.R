@@ -1139,6 +1139,14 @@ select_model_ll <- function(data, n_classes, alpha = 0.05, alpha_quant = 0.05,
   if (isTRUE(poset)) {
     ps <- switch(ordinal_selected, UN = c("class", "item"),
                  IIO = "class", MON = "item", NULL)
+    if (!is.null(ps) && identical(ps, "class") && n_classes < 3L) {
+      # STRUCTURAL non-applicability, not a failure: at C = 2 there is
+      # nothing between chain and antichain, so no class poset exists to test
+      attr_msg <- sprintf(
+        "class poset not applicable at selected C = %d (requires C >= 3)",
+        n_classes)
+      ps <- NULL
+    }
     if (!is.null(ps)) {
       if (verbose) cat("Poset refinement (", paste(ps, collapse = "+"), ")...\n")
       poset_out <- tryCatch(.poset_refine(data, n_classes,
