@@ -195,19 +195,16 @@ null re-imposes the observed mask rank-matched. MAR assumed throughout.
   direction (parametric missingness model in the null) is documented
   future work.
 
-## 9. TI&D graded-180 pre-consensus rater data
+## 9. TI&D pre-consensus rater data [DATA RECEIVED 2026-08-11]
 
-**RESERVED.** Awaiting the pre-consensus rater-level dataset from Torres
-Irribarra. Planned analysis, so the section is ready to fill:
-
-- Run both selectors on the rater-level (pre-consensus) gradings; compare
-  against the published consensus verdicts and TI&D's own graphical/human
-  selections (their raters agreed 41% on IIO - the benchmark the IIO ceiling
-  keeps reproducing).
-- Poset refinement on every non-DM verdict: do human pre-consensus gradings
-  carry partial-order structure that the consensus process erases?
-- Missing-data machinery applies directly if rater coverage is incomplete.
-- _Results, table, and reading: TO BE ADDED when data arrive._
+Source: `tid_rater_finding.md` + `tid_rater_merged.csv`. Headlines:
+pre-consensus human recovery 59-62% overall (IIO 2-9%, DM 11-24%);
+inter-rater agreement 95% with uncertainty flags concentrated on IIO/DM/LCR
+(40-47%). Head-to-head on the same 162 clean full-N sets: DTI 67% / RPD 73%
+vs hybrid 88% / lattice 80% - the selectors dominate the ordinal middle
+(IIO 70% vs 4-15%; DM 89% vs 15-37%) while expert judgment wins the quant
+end (RM 100%, LCR 93%). Complementary error profiles: automation supplies
+the calibrated middle distinctions graphical inspection cannot make.
 
 ## 10. Known limits (honest-boundary list)
 
