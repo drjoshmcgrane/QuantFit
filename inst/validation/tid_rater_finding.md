@@ -55,6 +55,38 @@ demonstrably cannot make, while the human strength on quantitative
 structure is matched (not exceeded) at acceptable cost by the calibrated
 edges' false-quant protection (0 false promotions).
 
+## Five-way breakdown (same sets, selectors at full N = 5000)
+
+**CLEAN conditions (162):**
+
+| truth (27 each) | DTI | RPD | min-BIC | hybrid | lattice |
+|---|---|---|---|---|---|
+| UN | 100% | 100% | 100% | 100% | 100% |
+| MON | 93% | 93% | 93% | 96% | 100% |
+| IIO | 4% | 15% | 0% | **70%** | 44% |
+| DM | 15% | 37% | 0% | **89%** | **89%** |
+| LCR | **93%** | **93%** | **93%** | 85% | 81% |
+| RM | **100%** | **100%** | **100%** | 85% | 67% |
+| overall | 67% | 73% | 64% | **88%** | 80% |
+| scale-type | 81% | 81% | 81% | **96%** | **96%** |
+| **false-quant promotions** | **27** | **27** | **27** | **0** | 1 |
+
+The false-quant row is the measurement-theoretic headline: expert graphical
+selection (and min-BIC) claims quantitative structure for 27 of the 162
+clean datasets whose truth is nominal/ordinal (~17%; overwhelmingly the
+IIO/DM sets read as LCR/RM), while the calibrated hybrid makes zero such
+claims at a modest cost on the quant diagonal (85% vs 93-100%).
+
+**MISSPECIFIED conditions (108):** humans score 46-47% against the nominal
+generator labels vs selectors 33/27% - but the composition inverts the
+reading. Human "wins" here are largely RM 72% and LCR 33%: claiming Rasch
+quantitativeness for slope-varying (non-Rasch) data - the same graphical
+leniency that produces the 27 clean false promotions. The selectors demote
+these datasets to ordinal (RM->0%, zero false-quant both arms), which the
+misspecification study established as the DESIGNED behaviour: data that are
+not Rasch should not be certified quantitative. Against the generator
+label it scores as a loss; against the measurement claim it is the point.
+
 Caveats: rater
 selections predate our runs and used their original displays at their
 original N; the 162-set comparison uses our full-N=5000 selector runs vs
