@@ -197,10 +197,12 @@ null re-imposes the observed mask rank-matched. MAR assumed throughout.
 
 ## 9. TI&D pre-consensus rater data [DATA RECEIVED 2026-08-11]
 
-Source: `tid_rater_finding.md` + `tid_rater_merged.csv`. Headlines:
-pre-consensus human recovery 59-62% overall (IIO 2-9%, DM 11-24%);
-inter-rater agreement 95% with uncertainty flags concentrated on IIO/DM/LCR
-(40-47%). Head-to-head on the same 162 clean full-N sets: DTI 67% / RPD 73%
+Source: `tid_rater_finding.md` + `tid_rater_merged.csv` (full 1080-set
+grid, truth from the archive key). Headlines: pre-consensus human recovery
+61-63% overall (IIO 2-10%, DM 9-22%); min-BIC exactly 0/180 on IIO AND DM;
+43% of IIO sets read as quantitative to the expert eye; inter-rater
+agreement 93% with uncertainty flags concentrated on the hard middle
+(IIO 49%, DM 39%). Head-to-head on the same 162 clean full-N sets: DTI 67% / RPD 73%
 vs hybrid 88% / lattice 80% - the selectors dominate the ordinal middle
 (IIO 70% vs 4-15%; DM 89% vs 15-37%) while expert judgment wins the quant
 end (RM 100%, LCR 93%). Complementary error profiles: automation supplies

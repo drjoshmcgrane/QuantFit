@@ -3,34 +3,34 @@
 Received 2026-08-11: DTIresults.csv (Torres Irribarra's per-set selections,
 '*'/'?' uncertainty marks), RPDresults.csv (Diakow's pass, xN codes marking
 disagreement + the alternative model seen), summary table.csv (their
-per-model fit table). 1080 TA sets; truth available for the 270 sets in our
-archive enumeration (balanced 45/model); merged table committed as
-tid_rater_merged.csv.
+per-model fit table). All 1080 TA sets truth-mapped via the archive's generatingModels.csv
+(coding verified against the 270 independently-derived labels: perfect
+diagonal); merged table committed as tid_rater_merged.csv.
 
-## Pre-consensus human recovery (270 sets, all conditions)
+## Pre-consensus human recovery (FULL GRID, 1080 sets, 180/model)
 
-| truth | DTI | RPD | inter-rater agreement |
-|-------|-----|-----|------|
-| UN | 100% | 100% | 100% |
-| MON | 84% | 82% | 98% |
-| **IIO** | **2%** | **9%** | 93% |
-| **DM** | **11%** | **24%** | 80% |
-| LCR | 69% | 69% | 98% |
-| RM | 89% | 89% | 100% |
-| overall | 59.3% | 62.2% | 94.8% |
+| truth | DTI | RPD | min-BIC | inter-rater agreement |
+|-------|-----|-----|---------|------|
+| UN | 99% | 99% | 99% | 100% |
+| MON | 92% | 88% | 88% | 96% |
+| **IIO** | **2%** | **10%** | **0%** | 88% |
+| **DM** | **9%** | **22%** | **0%** | 77% |
+| LCR | 71% | 71% | 71% | 98% |
+| RM | 89% | 89% | 89% | 100% |
+| overall | 60.6% | 63.4% | 58.0% | 93.1% |
 
-Scale-type: ~78% both raters. IIO-truth destinations (DTI): MON 22/45,
-RM 11, UN 7, LCR 4 - humans read invariant item ordering as class
-monotonicity or even quantitative structure, almost never as IIO itself.
-DM-truth: MON 23, LCR 14. The published ~41% IIO figure is a consensus-era
-number; PRE-consensus it is 2-9%.
+Scale-type: ~78% everywhere. Min-BIC scores EXACTLY 0/180 on both IIO and
+DM (the equal-parameter-count failure our simulations predicted); the
+raters beat it only by rescuing a handful. IIO-truth destinations (DTI,
+full grid): MON 78, **RM 52, LCR 26** (43% of IIO sets read as
+QUANTITATIVE to the expert eye), UN 20, IIO 4. The published ~41% IIO
+figure is a consensus-era number; pre-consensus it is 2-10%.
 
-**The raters knew where they were struggling**: uncertainty flags
-concentrate exactly on the identifiability-limited middle (IIO 40%, DM 47%,
-LCR 38% flagged vs UN 0%, MON 9%), and Diakow's alternative-codes on IIO
-sets point at LCR/RM (x4/x5) - IIO data genuinely reads as quantitative to
-expert eyes. Inter-rater agreement drops from 96% (unflagged) to 91%
-(flagged).
+**The raters knew where they were struggling**: uncertainty flags (251/1080
+sets) concentrate exactly on the identifiability-limited middle (IIO 49%,
+DM 39%, LCR 21% flagged vs UN 1%, MON 9%), and Diakow's alternative-codes
+on IIO sets point at LCR/RM (x4/x5) - IIO data genuinely reads as
+quantitative to expert eyes.
 
 ## Head-to-head on the same 162 clean full-N sets
 
@@ -55,7 +55,7 @@ demonstrably cannot make, while the human strength on quantitative
 structure is matched (not exceeded) at acceptable cost by the calibrated
 edges' false-quant protection (0 false promotions).
 
-Caveats: truth is available for 270/1080 sets (archive enumeration); rater
+Caveats: rater
 selections predate our runs and used their original displays at their
 original N; the 162-set comparison uses our full-N=5000 selector runs vs
 rater judgments made on the same underlying response data.
