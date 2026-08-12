@@ -18,6 +18,7 @@ out   <- Sys.getenv("TIDX_OUT", "tid_extend_out")
 B     <- as.integer(Sys.getenv("TIDX_B", "49"))
 cores <- as.integer(Sys.getenv("TIDX_CORES", "8"))
 want  <- strsplit(Sys.getenv("TIDX_MODELS", "IIO,DM"), ",")[[1]]
+nImax <- as.integer(Sys.getenv("TIDX_NIMAX", "24"))
 dir.create(out, showWarnings = FALSE, recursive = TRUE)
 
 bi <- quantfit_build_info()
@@ -41,11 +42,11 @@ sel <- merge(gm[, c("id","genM")], gc_[, c("id","nI","slope","dCor","nId2")],
 done_f <- Sys.getenv("TIDX_DONE", "")
 done <- if (nzchar(done_f) && file.exists(done_f))
   as.integer(readLines(done_f)) else integer(0)
-sel <- sel[sel$genM %in% want & sel$nI <= 24L & !(sel$id %in% done), ]
+sel <- sel[sel$genM %in% want & sel$nI <= nImax & !(sel$id %in% done), ]
 sel$clean <- sel$dCor == 0 & sel$nId2 == 0
 sel <- sel[order(match(sel$genM, c("IIO","DM")), !sel$clean, sel$nI), ]
 cat("TI&D extension:", nrow(sel), "datasets (", paste(want, collapse="+"),
-    ", nI<=24, excluding", length(done), "covered ) | build", SHA, "\n")
+    ", nI<=", nImax, ", excluding", length(done), "covered ) | build", SHA, "\n")
 
 load_d <- function(id) { e <- new.env()
   load(file.path(DD, sprintf("TA%d.Rdata", id)), envir = e)
