@@ -1,0 +1,2 @@
+"method","sha","config","id","truth","nI","clean","N","hybrid","lattice","h_class_shape","h_item_shape","l_class_shape","l_poset_refusal","h_quant_failed","l_quant_failed","secs"
+"max-T-studentized-v4","697bcae","B=49;N=full;hybC=3;latC=2:6;alpha=0.05",174,"UN",24,FALSE,5000,"UN","UN","antichain","partial","antichain","",FALSE,FALSE,151.8

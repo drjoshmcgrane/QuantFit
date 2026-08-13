@@ -77,9 +77,9 @@ clean datasets whose truth is nominal/ordinal (~17%; overwhelmingly the
 IIO/DM sets read as LCR/RM), while the calibrated hybrid makes zero such
 claims at a modest cost on the quant diagonal (85% vs 93-100%).
 
-**MISSPECIFIED conditions (108):** humans score 46-47% against the nominal
-generator labels vs selectors 33/27% - but the composition inverts the
-reading. Human "wins" here are largely RM 72% and LCR 33%: claiming Rasch
+**MISSPECIFIED conditions (FULL COVERAGE, 360):** humans score 44-47%
+against the nominal generator labels vs selectors 33/30% - but the
+composition inverts the reading. Human "wins" here are largely RM 72% and LCR 33%: claiming Rasch
 quantitativeness for slope-varying (non-Rasch) data - the same graphical
 leniency that produces the 27 clean false promotions. The selectors demote
 these datasets to ordinal (RM->0%, zero false-quant both arms), which the
