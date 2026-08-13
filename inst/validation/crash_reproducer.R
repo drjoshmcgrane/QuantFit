@@ -1,13 +1,14 @@
 # DETERMINISTIC SEGFAULT REPRODUCER - known-crasher TA datasets (2026-08-12)
 #
-# TA376 and TA552 (both IIO-truth, nI = 12/24, TI&D archive) crash the
-# selector with SIGSEGV ('invalid permissions', wild address - heap
-# corruption) at the LCR-vs-DM bridge stage of the quantitative edge.
-# Reproduced: forked and non-forked, use_cpp TRUE and FALSE, seeds 1 and 2 -
-# deterministic in the data, engine-independent, which implicates compiled
-# code shared by both paths (constrained-fit optimizers are the prime
-# suspect). Signature matches the long-standing fork-isolated Kara GC
-# segfault (see kara-gc-segfault memory / finding).
+# TA218 (LCR, nI 24) and TA376 (IIO, nI 24) crash the selector with SIGSEGV
+# ('invalid permissions', wild address - heap corruption) at the LCR-vs-DM
+# bridge stage of the quantitative edge. Reproduced forked and non-forked,
+# use_cpp TRUE and FALSE, multiple seeds, on two machines - but INTERMITTENT,
+# not deterministic: TA552, which crashed the same way many times, later
+# completed normally (see known_crashers.md). Implicates compiled code shared
+# by both engines (constrained-fit optimizers are the prime suspect), with
+# manifestation depending on allocation state. Run this script REPEATEDLY;
+# a single clean pass does not mean the bug is gone.
 #
 # Run (expect the R process to DIE, so run in a throwaway process):
 #   Rscript inst/validation/crash_reproducer.R /path/to/tid_data 552
