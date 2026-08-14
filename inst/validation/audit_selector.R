@@ -15,6 +15,12 @@ SEL     <- Sys.getenv("SELECTOR", "lattice")
 if (!SEL %in% c("lattice", "hybrid"))
   stop("SELECTOR must be 'lattice' or 'hybrid'; got '", SEL, "'")
 K       <- as.integer(Sys.getenv("AUDIT_K", "30"))
+# TRUE class count(s) to generate: the routing C is fixed at 3, so a grid
+# that only ever generates 3 classes cannot test whether fixed-C machinery
+# is misspecified for richer data - which is exactly how the v0.3.4
+# IIO-axis null defect escaped every simulation (see
+# iio_axis_null_finding.md). Default now spans 3:5.
+trueCs  <- as.integer(strsplit(Sys.getenv("AUDIT_TRUEC", "3,4,5"), ",")[[1]])
 B       <- as.integer(Sys.getenv("AUDIT_B", "49"))
 cores   <- as.integer(Sys.getenv("AUDIT_CORES", "8"))
 n_items <- 8L
@@ -38,22 +44,26 @@ source("inst/validation/validation_shared.R")
 prov <- qf_provenance_check(METHOD)
 SHA <- prov$sha
 HEAD_SHA <- prov$head
-CONFIG <- sprintf("B=%d;K=%d;J=%d;N=1500;alpha=0.05;posetfloor=99",
-                  B, K, n_items)
-grid <- expand.grid(model=models, rep=seq_len(K), stringsAsFactors=FALSE)
+CONFIG <- sprintf("B=%d;K=%d;J=%d;N=1500;alpha=0.05;posetfloor=99;trueC=%s",
+                  B, K, n_items, paste(trueCs, collapse="+"))
+grid <- expand.grid(model=models, rep=seq_len(K), trueC=trueCs,
+                    stringsAsFactors=FALSE)
 
 run <- function(k) {
-  cs <- grid[k,]; f <- file.path(out, sprintf("%s_%s_%03d.csv", SEL, cs$model, cs$rep))
+  cs <- grid[k,]
+  f <- file.path(out, sprintf("%s_%s_C%d_%03d.csv", SEL, cs$model, cs$trueC, cs$rep))
   if (file.exists(f)) {
     prev <- tryCatch(read.csv(f, nrows = 1), error = function(e) NULL)
     if (qf_canary_match(prev, SHA, METHOD, CONFIG)) return(invisible())
     unlink(f)                      # stale method/build: regenerate
   }
   d <- if (cs$model == "PO")
-    simulate_responses("PO", n_persons=1500, n_items=n_items, n_classes=3,
-                       poset="V", po_margin=0.10, seed=7000*cs$rep + 7L)
+    simulate_responses("PO", n_persons=1500, n_items=n_items,
+                       n_classes=cs$trueC, poset="V", po_margin=0.10,
+                       seed=7000*cs$rep + 7L + 91L*cs$trueC)
   else simulate_responses(cs$model, n_persons=1500, n_items=n_items,
-                          n_classes=3, seed=7000*cs$rep + match(cs$model, models))
+                          n_classes=cs$trueC,
+                          seed=7000*cs$rep + match(cs$model, models) + 91L*cs$trueC)
   d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
   r <- tryCatch(switch(SEL,
       lattice  = select_model_ll(d, n_classes=2:6, B=B, n_starts=5,
@@ -91,7 +101,7 @@ run <- function(k) {
   g <- function(x, fld) if (is.null(x) || is.null(x[[fld]])) NA else x[[fld]]
   write.csv(data.frame(method=METHOD, sha=SHA, head=HEAD_SHA, config=CONFIG,
     selector=SEL, truth=cs$model, truth_scale=scale_of[cs$model],
-    rep=cs$rep, selected=sel,
+    trueC=cs$trueC, rep=cs$rep, selected=sel,
     selected_scale=if (is.na(sel)) NA else scale_of[sel],
     poset_refused=poset_refused,
     class_shape=g(r$poset$class,"shape"), class_comp=g(r$poset$class,"comparable"),

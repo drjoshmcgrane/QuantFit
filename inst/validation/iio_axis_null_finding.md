@@ -65,6 +65,26 @@ BIC picks exactly 4; at J = 6 it stays near 3.
   J = 8). This is why fixed C passed validation at J <= 24 (DM recovery
   97/100/93%) and collapsed at J = 48.
 
+## Why our validation missed it (a design gap, not just a bug)
+
+The K = 20 audit grid, re-run under v0.3.4, shows **zero changed verdicts**
+(overall 111/120, IIO 18/20, DM 20/20 - identical cell by cell). That is
+reassuring about the fix, but the reason it is identical is the finding:
+every simulation grid in this package generates data with
+`n_classes = 3`, which is exactly the hybrid's routing C. The bias
+requires true C > routing C. **The triggering condition was absent from
+the entire simulation battery by construction**, so no amount of
+simulation replication could have found this defect; it took real data
+(TI&D generates 4 classes) at the longest test length, where aggregation
+over 1128 item pairs made the bias decisive.
+
+Remedy adopted: the standard audit grid gains a true-class-count dimension
+(C in {3, 4, 5} against the fixed routing C = 3), so any future
+misspecification of a null with respect to latent richness has a cell in
+which to appear. More generally: when a procedure holds a nuisance
+parameter fixed, the validation must vary the truth of that parameter -
+otherwise the fixed choice is never tested, only assumed.
+
 ## Consequence
 
 Every pre-0.3.4 hybrid verdict was computed with the biased null. The
