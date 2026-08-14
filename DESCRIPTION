@@ -57,4 +57,4 @@ Suggests:
 Config/testthat/edition: 3
 LazyData: true
 VignetteBuilder: knitr
-GitSHA: 5d3f8fc
+GitSHA: b52dded
