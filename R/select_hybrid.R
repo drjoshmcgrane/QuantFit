@@ -65,22 +65,46 @@
   mag / N
 }
 
-.manifest_iio_holds <- function(data, C, B, n_starts, use_cpp, seed) {
+.manifest_iio_holds <- function(data, C, B, n_starts, use_cpp, seed,
+                                null_C_range = 2:6) {
   obs <- .manifest_iio_stat(data)
   # Null simulated under the FITTED IIO model - the hypothesis is IIO alone.
   # (Simulating from DM, as before the 2026-07-28 audit, additionally imposed
   # class monotonicity: a misspecified, overly restrictive composite null for
   # IIO-but-non-MON data.)
-  iio_fit <- tryCatch(refit_model_type("IIO", as.matrix(data), C, n_starts,
-                                       use_cpp), error = function(e) NULL)
-  if (is.null(iio_fit)) return(list(p = NA_real_, holds = NA))
+  #
+  # NULL CLASS COUNT (2026-08-14): the null's class count is selected by BIC
+  # over `null_C_range`, floored at the routing C - it is NOT the 2x2's fixed
+  # C. Evidence: on 4-class DM data at J = 48 the C = 3 null is too tight
+  # (the fitted 3-class IIO model cannot reproduce the data's crossing level,
+  # so simulated statistics sit systematically below the observed one) and
+  # the axis falsely rejects: TA173 p = 0.020 at C = 3 vs 0.260 at C = 4,
+  # TA220 p = 0.020 vs 0.220, with the OBSERVED statistic identical (it is
+  # model-free). The bias exists at every J but only becomes decisive when
+  # the statistic aggregates over many item pairs (1128 at J = 48 vs 28 at
+  # J = 8), which is why fixed C = 3 passed validation at J <= 24 (DM
+  # recovery 97/100/93%) and collapses at J = 48. Routing still uses the
+  # fixed C; only the reference distribution adapts, so the stability
+  # rationale for a small fixed C in the property tests is preserved.
+  fit_at <- function(cc) tryCatch(
+    refit_model_type("IIO", as.matrix(data), cc, n_starts, use_cpp),
+    error = function(e) NULL)
+  cand <- sort(unique(c(C, as.integer(null_C_range))))
+  cand <- cand[cand >= C]
+  fits <- lapply(cand, fit_at)
+  bics <- vapply(fits, function(f) if (is.null(f)) NA_real_ else BIC(f),
+                 numeric(1))
+  usable <- which(is.finite(bics))
+  if (!length(usable)) return(list(p = NA_real_, holds = NA, null_C = NA))
+  pick <- usable[which.min(bics[usable])]
+  iio_fit <- fits[[pick]]; null_C <- cand[pick]
   if (!is.null(seed)) set.seed(seed)
   n <- nrow(data)
   null <- vapply(seq_len(B), function(b)
     .manifest_iio_stat(.impose_mask(simulate_from_qlfit(iio_fit, n), data)),
     numeric(1))
   p <- (1 + sum(null >= obs)) / (B + 1)
-  list(stat = obs, p = p, holds = p > 0.05)
+  list(stat = obs, p = p, holds = p > 0.05, null_C = null_C)
 }
 
 # item_probs comes back as a J x C matrix from the dichotomous engine but as a
@@ -510,6 +534,14 @@
 #' @param alpha Significance level for the quantitative-edge decisions
 #'   (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
 #'   calibrations (`mon_eps` for MON; the IIO axis's bootstrap p at 0.05).
+#' @param iio_null_C_range Class counts considered for the IIO axis's NULL
+#'   model, selected among them by BIC and floored at `n_classes` (default
+#'   `2:6`). The axis statistic is model-free; only its reference
+#'   distribution uses this fit. A null class count below the data's true
+#'   heterogeneity is too tight and inflates false rejections - decisively so
+#'   on long tests, where the statistic aggregates over many item pairs (see
+#'   `tid_ni48_finding.md`). Set to `n_classes` to restore the pre-2026-08-14
+#'   fixed-C behaviour.
 #' @param poset_B Bootstrap replicates for the poset refinement's aligned
 #'   UN bootstrap (default `NULL` = `max(B, 99)`). The 99-replicate floor is
 #'   ENFORCED - explicit smaller values are raised to 99. Raise to 499+ for a
@@ -556,6 +588,7 @@
 #' @export
 select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                 mon_eps = 0.01, alpha = 0.05, min_effect = 1,
+                                iio_null_C_range = 2:6,
                                 poset_B = NULL,
                                 lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                 use_cpp = TRUE,
@@ -571,7 +604,8 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
   s <- function(off) if (is.null(seed)) NULL else seed + off
 
   if (verbose) cat("Manifest ordinal layer: IIO axis...\n")
-  iio <- .manifest_iio_holds(data, C, B, n_starts, use_cpp, s(0L))
+  iio <- .manifest_iio_holds(data, C, B, n_starts, use_cpp, s(0L),
+                             null_C_range = iio_null_C_range)
   if (verbose) cat("Manifest ordinal layer: MON axis...\n")
   # mon_eps is a PER-ITEM tolerance on the perm-min downward-movement q05.
   # N-scale it: the resampling noise floor of the class-probability decrease

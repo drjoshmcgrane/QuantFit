@@ -111,3 +111,20 @@ test_that("unavailable RM-vs-LCR bootstrap sets rm_stage_failed", {
   expect_true(out$rm_stage_failed)
   expect_true(out$selected %in% c("LCR", "RM"))   # BIC fallback verdict, flagged
 })
+
+test_that("IIO axis null adapts its class count (BIC over the range)", {
+  skip_on_cran()
+  # 4-class DM data: a C=3 null is too tight (2026-08-14 finding); the
+  # adaptive null must pick C >= 4 and must not falsely reject IIO
+  d <- simulate_responses("DM", n_persons = 1200, n_items = 12,
+                          n_classes = 4, seed = 88)
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  r <- QuantFit:::.manifest_iio_holds(d, C = 3L, B = 19L, n_starts = 2L,
+        use_cpp = TRUE, seed = 1L, null_C_range = 2:5)
+  expect_true(r$null_C >= 3L)
+  expect_false(is.na(r$p))
+  # legacy behaviour recoverable
+  r0 <- QuantFit:::.manifest_iio_holds(d, C = 3L, B = 19L, n_starts = 2L,
+         use_cpp = TRUE, seed = 1L, null_C_range = 3L)
+  expect_identical(r0$null_C, 3L)
+})

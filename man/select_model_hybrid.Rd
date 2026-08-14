@@ -12,6 +12,7 @@ select_model_hybrid(
   mon_eps = 0.01,
   alpha = 0.05,
   min_effect = 1,
+  iio_null_C_range = 2:6,
   poset_B = NULL,
   lr_boot_n_starts = 2L,
   lr_n_classes = 2:6,
@@ -58,6 +59,15 @@ the null's 95th percentile fall below it - i.e. the effect and its
 reference scale are both negligible. Default 1 (matching
 \code{\link[=select_model_ll]{select_model_ll()}}); set 0 to disable the retention entirely. A
 judgment call, deliberately public.}
+
+\item{iio_null_C_range}{Class counts considered for the IIO axis's NULL
+model, selected among them by BIC and floored at \code{n_classes} (default
+\code{2:6}). The axis statistic is model-free; only its reference
+distribution uses this fit. A null class count below the data's true
+heterogeneity is too tight and inflates false rejections - decisively so
+on long tests, where the statistic aggregates over many item pairs (see
+\code{tid_ni48_finding.md}). Set to \code{n_classes} to restore the pre-2026-08-14
+fixed-C behaviour.}
 
 \item{poset_B}{Bootstrap replicates for the poset refinement's aligned
 UN bootstrap (default \code{NULL} = \code{max(B, 99)}). The 99-replicate floor is

@@ -1,3 +1,19 @@
+# QuantFit 0.3.4 (development)
+
+* **IIO-axis null class count is now BIC-selected** (`iio_null_C_range`,
+  default `2:6`, floored at the routing `n_classes`) instead of inheriting
+  the 2x2's fixed C. A null fitted with fewer classes than the data's true
+  heterogeneity cannot reproduce the observed crossing level, so the axis
+  falsely rejects invariant item ordering. Found on TI&D nI = 48 DM data,
+  where 4 of 4 datasets rejected at C = 3 (p = 0.020) and held at C = 4
+  (p = 0.22-0.96) with the IDENTICAL, model-free statistic. The bias exists
+  at every test length; it becomes decisive when the statistic aggregates
+  over many item pairs (1128 at J = 48 vs 28 at J = 8), which is why fixed
+  C passed validation at J <= 24 and collapsed at J = 48. Routing still
+  uses the fixed C - only the reference distribution adapts. Legacy
+  behaviour: `iio_null_C_range = n_classes`. ALL pre-0.3.4 hybrid results
+  were computed with the biased null and are being regenerated.
+
 # QuantFit 0.3.3
 
 Evidence status at release: the partial-order machinery is validated by the

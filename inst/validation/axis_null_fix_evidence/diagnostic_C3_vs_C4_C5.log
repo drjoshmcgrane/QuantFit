@@ -1,0 +1,10 @@
+
+== TA173 (truth DM, nI=48, true classes=4) ==
+  C=3: stat 3.2632  p 0.020  holds FALSE   (1 min)
+  C=4: stat 3.2632  p 0.260  holds TRUE   (1 min)
+  C=5: stat 3.2632  p 0.240  holds TRUE   (1 min)
+
+== TA220 (truth DM, nI=48, true classes=4) ==
+  C=3: stat 0.5302  p 0.020  holds FALSE   (1 min)
+  C=4: stat 0.5302  p 0.220  holds TRUE   (1 min)
+  C=5: stat 0.5302  p 0.160  holds TRUE   (1 min)
