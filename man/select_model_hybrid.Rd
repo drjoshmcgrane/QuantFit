@@ -13,6 +13,8 @@ select_model_hybrid(
   alpha = 0.05,
   min_effect = 1,
   iio_null_C_range = 2:6,
+  iio_B_refine = 999L,
+  iio_refine_band = c(0.02, 0.15),
   poset_B = NULL,
   lr_boot_n_starts = 2L,
   lr_n_classes = 2:6,
@@ -68,6 +70,17 @@ heterogeneity is too tight and inflates false rejections - decisively so
 on long tests, where the statistic aggregates over many item pairs (see
 \code{tid_ni48_finding.md}). Set to \code{n_classes} to restore the pre-2026-08-14
 fixed-C behaviour.}
+
+\item{iio_B_refine}{Bootstrap draws used to RE-DECIDE an IIO-axis
+p-value that lands in \code{iio_refine_band} around the threshold (default
+999; \code{NULL} disables). A bootstrap p-value near 0.05 has standard error
+~0.031 at B = 49, so borderline decisions are not reproducible across
+seeds - measured on TI&D data, only 2 of 9 borderline datasets gave the
+same verdict over 5 seeds at B = 49 (6 of 9 at B = 199). Decisive
+datasets never pay this cost.}
+
+\item{iio_refine_band}{Indeterminate p-value band triggering the refined
+draw (default \code{c(0.02, 0.15)}).}
 
 \item{poset_B}{Bootstrap replicates for the poset refinement's aligned
 UN bootstrap (default \code{NULL} = \code{max(B, 99)}). The 99-replicate floor is

@@ -66,7 +66,8 @@
 }
 
 .manifest_iio_holds <- function(data, C, B, n_starts, use_cpp, seed,
-                                null_C_range = 2:6) {
+                                null_C_range = 2:6, B_refine = 999L,
+                                refine_band = c(0.02, 0.15)) {
   obs <- .manifest_iio_stat(data)
   # Null simulated under the FITTED IIO model - the hypothesis is IIO alone.
   # (Simulating from DM, as before the 2026-07-28 audit, additionally imposed
@@ -100,11 +101,27 @@
   iio_fit <- fits[[pick]]; null_C <- cand[pick]
   if (!is.null(seed)) set.seed(seed)
   n <- nrow(data)
-  null <- vapply(seq_len(B), function(b)
+  draw <- function(m) vapply(seq_len(m), function(b)
     .manifest_iio_stat(.impose_mask(simulate_from_qlfit(iio_fit, n), data)),
     numeric(1))
-  p <- (1 + sum(null >= obs)) / (B + 1)
-  list(stat = obs, p = p, holds = p > 0.05, null_C = null_C)
+  null <- draw(B)
+  p <- (1 + sum(null >= obs)) / (length(null) + 1)
+  # ADAPTIVE PRECISION (2026-08-15): a bootstrap p-value near the decision
+  # threshold has SE ~ sqrt(p(1-p)/B) = 0.031 at B = 49, so borderline
+  # decisions are not reproducible across seeds (measured: only 2 of 9
+  # borderline TI&D datasets gave the same verdict over 5 seeds at B = 49;
+  # 6 of 9 at B = 199). When p lands in the indeterminate band around alpha,
+  # extend the same null to B_refine draws (SE ~ 0.007 at 999) and decide on
+  # the pooled distribution. Decisive datasets pay nothing.
+  refined <- FALSE
+  if (!is.null(B_refine) && B_refine > B &&
+      p >= refine_band[1] && p <= refine_band[2]) {
+    null <- c(null, draw(B_refine - B))
+    p <- (1 + sum(null >= obs)) / (length(null) + 1)
+    refined <- TRUE
+  }
+  list(stat = obs, p = p, holds = p > 0.05, null_C = null_C,
+       B_eff = length(null), refined = refined)
 }
 
 # item_probs comes back as a J x C matrix from the dichotomous engine but as a
@@ -534,6 +551,15 @@
 #' @param alpha Significance level for the quantitative-edge decisions
 #'   (LCR vs DM and RM vs LCR; default 0.05). The 2x2 axes use their own
 #'   calibrations (`mon_eps` for MON; the IIO axis's bootstrap p at 0.05).
+#' @param iio_B_refine Bootstrap draws used to RE-DECIDE an IIO-axis
+#'   p-value that lands in `iio_refine_band` around the threshold (default
+#'   999; `NULL` disables). A bootstrap p-value near 0.05 has standard error
+#'   ~0.031 at B = 49, so borderline decisions are not reproducible across
+#'   seeds - measured on TI&D data, only 2 of 9 borderline datasets gave the
+#'   same verdict over 5 seeds at B = 49 (6 of 9 at B = 199). Decisive
+#'   datasets never pay this cost.
+#' @param iio_refine_band Indeterminate p-value band triggering the refined
+#'   draw (default `c(0.02, 0.15)`).
 #' @param iio_null_C_range Class counts considered for the IIO axis's NULL
 #'   model, selected among them by BIC and floored at `n_classes` (default
 #'   `2:6`). The axis statistic is model-free; only its reference
@@ -589,6 +615,8 @@
 select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                 mon_eps = 0.01, alpha = 0.05, min_effect = 1,
                                 iio_null_C_range = 2:6,
+                                iio_B_refine = 999L,
+                                iio_refine_band = c(0.02, 0.15),
                                 poset_B = NULL,
                                 lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                 use_cpp = TRUE,
@@ -605,7 +633,9 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
 
   if (verbose) cat("Manifest ordinal layer: IIO axis...\n")
   iio <- .manifest_iio_holds(data, C, B, n_starts, use_cpp, s(0L),
-                             null_C_range = iio_null_C_range)
+                             null_C_range = iio_null_C_range,
+                             B_refine = iio_B_refine,
+                             refine_band = iio_refine_band)
   if (verbose) cat("Manifest ordinal layer: MON axis...\n")
   # mon_eps is a PER-ITEM tolerance on the perm-min downward-movement q05.
   # N-scale it: the resampling noise floor of the class-probability decrease

@@ -128,3 +128,22 @@ test_that("IIO axis null adapts its class count (BIC over the range)", {
          use_cpp = TRUE, seed = 1L, null_C_range = 3L)
   expect_identical(r0$null_C, 3L)
 })
+
+test_that("IIO axis refines B for borderline p-values only", {
+  skip_on_cran()
+  d <- simulate_responses("UN", n_persons = 800, n_items = 8, n_classes = 3,
+                          seed = 5)
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  # UN data: the axis rejects decisively. B must be large enough that the
+  # floor p = 1/(B+1) falls BELOW the refinement band, else refinement is
+  # correct behaviour (at B = 19 the floor is 0.05, inside the band).
+  r <- QuantFit:::.manifest_iio_holds(d, 3L, 99L, 2L, TRUE, 1L,
+        null_C_range = 3L, B_refine = 199L)
+  expect_false(r$refined)
+  expect_identical(r$B_eff, 99L)
+  # forcing the band to include everything triggers refinement
+  r2 <- QuantFit:::.manifest_iio_holds(d, 3L, 19L, 2L, TRUE, 1L,
+         null_C_range = 3L, B_refine = 59L, refine_band = c(0, 1))
+  expect_true(r2$refined)
+  expect_identical(r2$B_eff, 59L)
+})
