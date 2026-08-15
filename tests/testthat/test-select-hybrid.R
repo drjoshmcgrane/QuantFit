@@ -141,11 +141,16 @@ test_that("IIO axis refines B for borderline p-values only", {
         null_C_range = 3L, B_refine = 199L)
   expect_false(r$refined)
   expect_identical(r$B_eff, 99L)
-  # forcing the band to include everything triggers refinement
-  r2 <- QuantFit:::.manifest_iio_holds(d, 3L, 19L, 2L, TRUE, 1L,
-         null_C_range = 3L, B_refine = 59L, refine_band = c(0, 1))
-  expect_true(r2$refined)
-  expect_identical(r2$B_eff, 59L)
+  # a wide band still refines, but the floor guard (1.5/(B+1)) protects the
+  # most decisive p-values, so use a B whose floor is below the observed p
+  r2 <- QuantFit:::.manifest_iio_holds(d, 3L, 99L, 2L, TRUE, 1L,
+         null_C_range = 3L, B_refine = 199L, refine_band = c(0, 1))
+  if (r2$p > 1.5/100) {
+    expect_true(r2$refined)
+    expect_identical(r2$B_eff, 199L)
+  } else {
+    expect_false(r2$refined)   # p at the floor: correctly not refined
+  }
 })
 
 test_that("refinement band excludes the Monte-Carlo floor", {
