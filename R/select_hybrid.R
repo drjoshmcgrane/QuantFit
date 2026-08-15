@@ -67,7 +67,7 @@
 
 .manifest_iio_holds <- function(data, C, B, n_starts, use_cpp, seed,
                                 null_C_range = 2:6, B_refine = 999L,
-                                refine_band = c(0.025, 0.15)) {
+                                refine_band = NULL) {
   obs <- .manifest_iio_stat(data)
   # Null simulated under the FITTED IIO model - the hypothesis is IIO alone.
   # (Simulating from DM, as before the 2026-07-28 audit, additionally imposed
@@ -114,13 +114,16 @@
   # extend the same null to B_refine draws (SE ~ 0.007 at 999) and decide on
   # the pooled distribution. Decisive datasets pay nothing.
   refined <- FALSE
-  # The band must EXCLUDE the Monte-Carlo floor p = 1/(B+1): a p-value at the
-  # floor means no null draw reached the observed statistic, i.e. the most
-  # decisive rejection available, and refining it only burns 20x the draws to
-  # reach the same verdict. Measured on 898 TI&D datasets: 53% sit exactly at
-  # the floor and 32% above 0.3, leaving ~7% genuinely ambiguous - so a band
-  # starting at 0.02 (the floor at B = 49) refined 60% of datasets, while one
-  # starting just above it refines 7%.
+  # ANALYTIC refinement band - no tuned constants. A bootstrap p-value has
+  # SE = sqrt(p(1-p)/B), so decisions are unreliable when p lies within a
+  # few SEs of the threshold. Lower edge: the Monte-Carlo floor guard
+  # (1.5/(B+1)) - a p-value at the floor is the most decisive rejection
+  # available and cannot benefit from more draws. Upper edge:
+  # alpha + 3*SE(alpha, B). Both derive from alpha and B alone.
+  alpha_axis <- 0.05
+  if (is.null(refine_band))
+    refine_band <- c(1.5 / (B + 1),
+                     alpha_axis + 3 * sqrt(alpha_axis * (1 - alpha_axis) / B))
   lo <- max(refine_band[1], 1.5 / (B + 1))
   if (!is.null(B_refine) && B_refine > B &&
       p >= lo && p <= refine_band[2]) {
@@ -567,10 +570,11 @@
 #'   same verdict over 5 seeds at B = 49 (6 of 9 at B = 199). Decisive
 #'   datasets never pay this cost.
 #' @param iio_refine_band Indeterminate p-value band triggering the refined
-#'   draw (default `c(0.025, 0.15)`). The lower edge is additionally floored
-#'   at `1.5/(B + 1)` so a p-value at the Monte-Carlo floor - the most
-#'   decisive rejection possible - is never refined. On TI&D data this keeps
-#'   refinement to ~7% of datasets instead of 60%.
+#'   draw. Default `NULL` = ANALYTIC: lower edge `1.5/(B+1)` (the
+#'   Monte-Carlo floor guard; a floor p-value is the most decisive rejection
+#'   possible), upper edge `alpha + 3*sqrt(alpha(1-alpha)/B)` (three
+#'   binomial standard errors above the threshold). Both derive from alpha
+#'   and B alone - no data-tuned constants.
 #' @param iio_null_C_range Class counts considered for the IIO axis's NULL
 #'   model, selected among them by BIC and floored at `n_classes` (default
 #'   `2:6`). The axis statistic is model-free; only its reference
@@ -627,7 +631,7 @@ select_model_hybrid <- function(data, n_classes = 3L, B = 49L, n_starts = 5L,
                                 mon_eps = 0.01, alpha = 0.05, min_effect = 1,
                                 iio_null_C_range = 2:6,
                                 iio_B_refine = 999L,
-                                iio_refine_band = c(0.025, 0.15),
+                                iio_refine_band = NULL,
                                 poset_B = NULL,
                                 lr_boot_n_starts = 2L, lr_n_classes = 2:6,
                                 use_cpp = TRUE,
