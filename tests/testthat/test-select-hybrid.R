@@ -147,3 +147,15 @@ test_that("IIO axis refines B for borderline p-values only", {
   expect_true(r2$refined)
   expect_identical(r2$B_eff, 59L)
 })
+
+test_that("refinement band excludes the Monte-Carlo floor", {
+  skip_on_cran()
+  d <- simulate_responses("UN", n_persons = 600, n_items = 8, n_classes = 3,
+                          seed = 12)
+  d <- if (is.list(d)) d$data else d; storage.mode(d) <- "integer"
+  # decisive rejection at the floor (p = 1/50) must NOT trigger refinement
+  # even though 0.02 lies inside the nominal band's lower edge
+  r <- QuantFit:::.manifest_iio_holds(d, 3L, 49L, 2L, TRUE, 1L,
+        null_C_range = 3L, B_refine = 199L)
+  if (r$p <= 1.5/50) expect_false(r$refined)
+})

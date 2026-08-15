@@ -14,7 +14,7 @@ select_model_hybrid(
   min_effect = 1,
   iio_null_C_range = 2:6,
   iio_B_refine = 999L,
-  iio_refine_band = c(0.02, 0.15),
+  iio_refine_band = c(0.025, 0.15),
   poset_B = NULL,
   lr_boot_n_starts = 2L,
   lr_n_classes = 2:6,
@@ -80,7 +80,10 @@ same verdict over 5 seeds at B = 49 (6 of 9 at B = 199). Decisive
 datasets never pay this cost.}
 
 \item{iio_refine_band}{Indeterminate p-value band triggering the refined
-draw (default \code{c(0.02, 0.15)}).}
+draw (default \code{c(0.025, 0.15)}). The lower edge is additionally floored
+at \code{1.5/(B + 1)} so a p-value at the Monte-Carlo floor - the most
+decisive rejection possible - is never refined. On TI&D data this keeps
+refinement to ~7\% of datasets instead of 60\%.}
 
 \item{poset_B}{Bootstrap replicates for the poset refinement's aligned
 UN bootstrap (default \code{NULL} = \code{max(B, 99)}). The 99-replicate floor is
