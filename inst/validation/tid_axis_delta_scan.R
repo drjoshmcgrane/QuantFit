@@ -20,12 +20,18 @@ run <- function(k) {
   if (file.exists(f)) return(invisible())
   e <- new.env(); load(file.path(DD, sprintf("TA%d.Rdata", cs$id)), envir = e)
   d <- get(ls(e)[1], e)$obsData; storage.mode(d) <- "integer"
-  old <- QuantFit:::.manifest_iio_holds(d, 3L, B, 5L, TRUE, 1L, null_C_range = 3L)
-  new <- QuantFit:::.manifest_iio_holds(d, 3L, B, 5L, TRUE, 1L, null_C_range = 2:6)
+  # OLD = the configuration that produced the committed tables (fixed null
+  # C, no adaptive precision). NEW = current shipped behaviour (BIC null C +
+  # refinement of borderline p-values), so the flip set is reproducible.
+  old <- QuantFit:::.manifest_iio_holds(d, 3L, B, 5L, TRUE, 1L,
+           null_C_range = 3L, B_refine = NULL)
+  new <- QuantFit:::.manifest_iio_holds(d, 3L, B, 5L, TRUE, 1L,
+           null_C_range = 2:6)
   write.csv(data.frame(sha = as.character(bi$sha), id = cs$id,
     truth = cs$genM, nI = cs$nI, stat = old$stat, p_old = old$p,
     holds_old = old$holds, p_new = new$p, holds_new = new$holds,
-    null_C = new$null_C, flip = !identical(old$holds, new$holds)),
+    null_C = new$null_C, B_eff_new = new$B_eff, refined = new$refined,
+    flip = !identical(old$holds, new$holds)),
     f, row.names = FALSE)
 }
 cat("axis delta scan:", nrow(sel), "TI&D datasets\n")
